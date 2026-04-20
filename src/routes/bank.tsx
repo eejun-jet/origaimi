@@ -9,7 +9,7 @@ import { Search, Library } from "lucide-react";
 
 export const Route = createFileRoute("/bank")({
   component: BankPage,
-  head: () => ({ meta: [{ title: "Question bank · Joy of Assessment" }] }),
+  head: () => ({ meta: [{ title: "Curated Inspiration · Origaimi" }] }),
 });
 
 type Item = {
@@ -47,9 +47,10 @@ function BankPage() {
       <AppHeader />
       <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
         <div>
-          <h1 className="font-paper text-3xl font-semibold tracking-tight">Question bank</h1>
+          <p className="text-xs uppercase tracking-wide text-primary">Curated Inspiration</p>
+          <h1 className="mt-1 font-paper text-3xl font-semibold tracking-tight">Question bank</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Reusable items you've approved. Tag, search, and pull into any assessment.
+            A meticulously tagged repository for instant inspiration when you're setting papers.
           </p>
         </div>
 

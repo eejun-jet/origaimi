@@ -225,7 +225,7 @@ function EditorPage() {
 
           <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start">
             <div className="rounded-xl border border-border bg-card p-5">
-              <h3 className="font-medium">Blueprint compliance</h3>
+              <h3 className="font-medium">TOS Alignment Meter</h3>
               <p className="mt-1 text-xs text-muted-foreground">Marks per Bloom's level</p>
               <div className="mt-3 space-y-2">
                 {BLOOMS.filter((b) => targetByBloom[b]).map((b) => {
@@ -246,9 +246,22 @@ function EditorPage() {
                   );
                 })}
                 {Object.keys(targetByBloom).length === 0 && (
-                  <p className="text-xs text-muted-foreground">No blueprint set.</p>
+                  <p className="text-xs text-muted-foreground">No TOS set.</p>
                 )}
               </div>
+            </div>
+
+            <div className="rounded-xl border border-border bg-card p-5">
+              <div className="flex items-center justify-between">
+                <h3 className="font-medium">Assessment Coach</h3>
+                <span className="rounded-full bg-warm px-2 py-0.5 text-[10px] uppercase tracking-wide text-warm-foreground">
+                  Coming soon
+                </span>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Your embedded Assessment Literacy Coach will evaluate this paper against
+                AO frameworks and surface actionable insights.
+              </p>
             </div>
 
             <div className="rounded-xl border border-border bg-card p-5">

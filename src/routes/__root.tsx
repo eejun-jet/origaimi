@@ -31,17 +31,17 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Joy of Assessment — AI assessment platform for Singapore teachers" },
+      { title: "Origaimi — Unfold the Joy of Assessing" },
       {
         name: "description",
         content:
-          "Blueprint-first AI assessment platform for Singapore teachers. Draft MOE-aligned papers in minutes; refine with your pedagogical expertise.",
+          "Origaimi is the human-in-the-loop AI assessment co-architect for Singapore educators. Set papers faster, better, and aligned to your Assessment Literacy framework.",
       },
-      { name: "author", content: "Joy of Assessment" },
-      { property: "og:title", content: "Joy of Assessment" },
+      { name: "author", content: "Origaimi" },
+      { property: "og:title", content: "Origaimi — Unfold the Joy of Assessing" },
       {
         property: "og:description",
-        content: "Reclaim hours. Build better Singapore-syllabus assessments with an AI co-architect.",
+        content: "AI does the paddling. You set the course.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
