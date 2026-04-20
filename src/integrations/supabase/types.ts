@@ -363,6 +363,59 @@ export type Database = {
         }
         Relationships: []
       }
+      syllabus_papers: {
+        Row: {
+          component_name: string | null
+          created_at: string
+          duration_minutes: number | null
+          id: string
+          marks: number | null
+          paper_code: string | null
+          paper_number: string
+          position: number
+          source_doc_id: string
+          topic_theme: string | null
+          updated_at: string
+          weighting_percent: number | null
+        }
+        Insert: {
+          component_name?: string | null
+          created_at?: string
+          duration_minutes?: number | null
+          id?: string
+          marks?: number | null
+          paper_code?: string | null
+          paper_number: string
+          position?: number
+          source_doc_id: string
+          topic_theme?: string | null
+          updated_at?: string
+          weighting_percent?: number | null
+        }
+        Update: {
+          component_name?: string | null
+          created_at?: string
+          duration_minutes?: number | null
+          id?: string
+          marks?: number | null
+          paper_code?: string | null
+          paper_number?: string
+          position?: number
+          source_doc_id?: string
+          topic_theme?: string | null
+          updated_at?: string
+          weighting_percent?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "syllabus_papers_source_doc_id_fkey"
+            columns: ["source_doc_id"]
+            isOneToOne: false
+            referencedRelation: "syllabus_documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       syllabus_topics: {
         Row: {
           created_at: string
@@ -371,6 +424,7 @@ export type Database = {
           learning_outcome_code: string | null
           learning_outcomes: string[] | null
           level: string | null
+          paper_id: string | null
           parent_code: string | null
           position: number
           source_doc_id: string
@@ -389,6 +443,7 @@ export type Database = {
           learning_outcome_code?: string | null
           learning_outcomes?: string[] | null
           level?: string | null
+          paper_id?: string | null
           parent_code?: string | null
           position?: number
           source_doc_id: string
@@ -407,6 +462,7 @@ export type Database = {
           learning_outcome_code?: string | null
           learning_outcomes?: string[] | null
           level?: string | null
+          paper_id?: string | null
           parent_code?: string | null
           position?: number
           source_doc_id?: string
@@ -419,6 +475,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "syllabus_topics_paper_id_fkey"
+            columns: ["paper_id"]
+            isOneToOne: false
+            referencedRelation: "syllabus_papers"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "syllabus_topics_source_doc_id_fkey"
             columns: ["source_doc_id"]
