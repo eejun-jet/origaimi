@@ -26,17 +26,10 @@ type Item = {
 };
 
 function BankPage() {
-  const { user, loading } = useAuth();
-  const navigate = useNavigate();
   const [items, setItems] = useState<Item[]>([]);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    if (!loading && !user) navigate({ to: "/auth" });
-  }, [user, loading, navigate]);
-
-  useEffect(() => {
-    if (!user) return;
     supabase
       .from("question_bank_items")
       .select("*")

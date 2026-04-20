@@ -24,7 +24,7 @@ export const Route = createFileRoute("/new")({
 type Blueprint = { topic: string; bloom: string; marks: number }[];
 
 function NewAssessment() {
-  const { user, loading } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [busy, setBusy] = useState(false);
@@ -57,10 +57,6 @@ function NewAssessment() {
 
   // Step 5: skipping references upload UI for MVP brevity (placeholder note)
   const [referenceNote, setReferenceNote] = useState("");
-
-  useEffect(() => {
-    if (!loading && !user) navigate({ to: "/auth" });
-  }, [user, loading, navigate]);
 
   const blueprintSum = blueprint.reduce((acc, b) => acc + (b.marks || 0), 0);
 
