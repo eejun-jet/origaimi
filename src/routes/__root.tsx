@@ -1,4 +1,6 @@
 import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
+import { Toaster } from "@/components/ui/sonner";
+import { AuthProvider } from "@/lib/auth-context";
 
 import appCss from "../styles.css?url";
 
@@ -29,21 +31,22 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "Joy of Assessment — AI assessment platform for Singapore teachers" },
+      {
+        name: "description",
+        content:
+          "Blueprint-first AI assessment platform for Singapore teachers. Draft MOE-aligned papers in minutes; refine with your pedagogical expertise.",
+      },
+      { name: "author", content: "Joy of Assessment" },
+      { property: "og:title", content: "Joy of Assessment" },
+      {
+        property: "og:description",
+        content: "Reclaim hours. Build better Singapore-syllabus assessments with an AI co-architect.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
     ],
-    links: [
-      {
-        rel: "stylesheet",
-        href: appCss,
-      },
-    ],
+    links: [{ rel: "stylesheet", href: appCss }],
   }),
   shellComponent: RootShell,
   component: RootComponent,
@@ -65,5 +68,10 @@ function RootShell({ children }: { children: React.ReactNode }) {
 }
 
 function RootComponent() {
-  return <Outlet />;
+  return (
+    <AuthProvider>
+      <Outlet />
+      <Toaster />
+    </AuthProvider>
+  );
 }
