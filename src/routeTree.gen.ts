@@ -9,11 +9,18 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as NewRouteImport } from './routes/new'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as BankRouteImport } from './routes/bank'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AssessmentIdRouteImport } from './routes/assessment.$id'
 
+const NewRoute = NewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -34,18 +41,27 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AssessmentIdRoute = AssessmentIdRouteImport.update({
+  id: '/assessment/$id',
+  path: '/assessment/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/bank': typeof BankRoute
   '/dashboard': typeof DashboardRoute
+  '/new': typeof NewRoute
+  '/assessment/$id': typeof AssessmentIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/bank': typeof BankRoute
   '/dashboard': typeof DashboardRoute
+  '/new': typeof NewRoute
+  '/assessment/$id': typeof AssessmentIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,13 +69,22 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/bank': typeof BankRoute
   '/dashboard': typeof DashboardRoute
+  '/new': typeof NewRoute
+  '/assessment/$id': typeof AssessmentIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/bank' | '/dashboard'
+  fullPaths: '/' | '/auth' | '/bank' | '/dashboard' | '/new' | '/assessment/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/bank' | '/dashboard'
-  id: '__root__' | '/' | '/auth' | '/bank' | '/dashboard'
+  to: '/' | '/auth' | '/bank' | '/dashboard' | '/new' | '/assessment/$id'
+  id:
+    | '__root__'
+    | '/'
+    | '/auth'
+    | '/bank'
+    | '/dashboard'
+    | '/new'
+    | '/assessment/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -67,10 +92,19 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   BankRoute: typeof BankRoute
   DashboardRoute: typeof DashboardRoute
+  NewRoute: typeof NewRoute
+  AssessmentIdRoute: typeof AssessmentIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/new': {
+      id: '/new'
+      path: '/new'
+      fullPath: '/new'
+      preLoaderRoute: typeof NewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dashboard': {
       id: '/dashboard'
       path: '/dashboard'
@@ -99,6 +133,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/assessment/$id': {
+      id: '/assessment/$id'
+      path: '/assessment/$id'
+      fullPath: '/assessment/$id'
+      preLoaderRoute: typeof AssessmentIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -107,6 +148,8 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   BankRoute: BankRoute,
   DashboardRoute: DashboardRoute,
+  NewRoute: NewRoute,
+  AssessmentIdRoute: AssessmentIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
