@@ -1,51 +1,61 @@
 
-# Origaimi — Brand & Product Concept Integration
+# Multi-paper syllabus support
 
-Rebranding from "Joy of Assessment" to **Origaimi** and weaving in the four pillars (Effortless Generation, Intelligent Coaching, Curated Inspiration, Precision Alignment) across the app.
+The 2261 PDF proves a single syllabus document can contain multiple papers (Paper 1 Social Studies + Paper 2 History) under one umbrella code. The current schema and parser collapse them into one bag. Fix that before bulk upload.
 
-## 1. Brand identity
+## Schema changes
 
-- **Name**: Origaimi (everywhere — header, titles, meta, footer, exports)
-- **Tagline**: "Unfold the Joy of Assessing"
-- **Logo**: Save uploaded `IMG_2754.png` as `src/assets/origaimi-logo.png`. Use the full lockup on landing hero + auth, and a compact swan-only mark in `AppHeader`.
-- **Colour direction**: Tune `src/styles.css` tokens to match the logo — deep navy ink (`#1F3A5F`) as foreground, soft teal-blue (`#7BB3C9`) as primary accent, warm paper off-white (`#F7F4EE`) as background. Keep the existing `font-paper` serif for exam previews.
-- **Favicon + meta**: Update `<title>`, OG tags, and favicon to Origaimi.
+**New table `syllabus_papers`** sits between `syllabus_documents` and `syllabus_topics`:
 
-## 2. Landing page (`src/routes/index.tsx`) — full rewrite around the pitch
+```text
+syllabus_papers
+  id                uuid pk
+  source_doc_id     uuid → syllabus_documents
+  paper_number      text   -- "1", "2" (verbatim from doc)
+  paper_code        text   -- "2261/01" (composed: syllabus_code + "/" + zero-padded paper_number)
+  component_name    text   -- "Social Studies", "History"
+  marks             int    -- 50
+  weighting_percent int    -- 50
+  duration_minutes  int    -- 105 (parsed from "1 hr 45 min")
+  topic_theme       text   -- "The Making of the 20th Century Modern World, 1910s–1991" (nullable)
+  position          int
+```
 
-New narrative structure, replacing current generic copy:
+**`syllabus_topics` gets a new column**:
+```text
++ paper_id  uuid → syllabus_papers  (nullable — for single-paper syllabuses)
+```
+`source_doc_id` stays for traceability. `paper_id` is what the wizard filters on.
 
-1. **Hero**: Logo lockup + tagline. Sub-headline: "AI does the paddling. You set the course." CTA: "Start setting" → `/dashboard`.
-2. **The Swan section**: Two-column visual — "What you see" (elegant exam paper) vs "What's underneath" (TOS tables, diagram hunting, AO checks). Frames the problem in the user's words.
-3. **The Philosophy block**: Decode the name — `Orig` · `AI` · `mi` — three cards, each one sentence. Reinforces human-in-the-loop.
-4. **The Four Pillars** (replaces current 6-feature grid):
-   - Effortless Generation — guided prompts → questions with diagrams
-   - Intelligent Coaching — embedded Assessment Literacy Coach using AO frameworks
-   - Curated Inspiration — tagged question repository
-   - Precision Alignment — automated TOS checker
-5. **Closing CTA**: "No time? No problem. Let AI do the paddling."
+## Parser changes (`parse-syllabus` edge function)
 
-## 3. Product surface alignment
+The AI tool schema gains a `papers` array. The system prompt is updated to:
 
-Light touch — wire the pillar language into existing screens so the pitch matches the product:
+1. Detect multi-paper structure by scanning for an examination-format table on the cover/intro (e.g. "Paper No. | Component | Marks | Weighting | Duration").
+2. Emit one entry in `papers[]` per paper found. If the doc is single-paper, emit one entry with `paper_number: "1"`.
+3. For each topic, emit `paper_number` so we can resolve it back to the right `syllabus_papers` row on insert.
+4. Compose `paper_code` server-side: `${syllabus_code}/${paper_number.padStart(2, "0")}` — never let the AI invent it.
 
-- **Dashboard empty state**: "Ready to unfold a new paper?" with the four pillars as quick-start chips.
-- **Blueprint wizard (`/new`)**: Rename Step 3 from "Blueprint" to **"Table of Specifications"** (TOS) — matches the user's vocabulary. Step 5 "References" stays but gets subtitle "Curated inspiration".
-- **Architect editor (`/assessment/$id`)**: Rename "Blueprint Compliance Meter" → **"TOS Alignment Meter"**. Add a placeholder "Coach" tab next to the question list (stub for now — surfaces the pillar in UI even before the AO evaluation engine is built).
-- **Question Bank (`/bank`)**: Page title "Curated Inspiration · Question Bank".
+## UI changes
 
-## 4. Out of scope this round (flag as next)
+**Upload page (`/admin/syllabus`)** — no change. User still uploads one file.
 
-- Actual AO/Assessment Literacy evaluation engine (the Coach is UI stub only)
-- Diagram generation in question output (currently text-only)
-- Tag taxonomy for the bank repository (basic metadata only today)
+**Review page (`/admin/syllabus/$id`)** — gains a paper switcher at the top:
+```
+[ Paper 1 · 2261/01 · Social Studies (50m, 1h45) ]  [ Paper 2 · 2261/02 · History (50m, 1h50) ]
+```
+Clicking a tab filters the topic list to that paper's topics. Editable fields per paper (component name, marks, duration) so the user can correct misparses.
 
-These are real product features from the pitch — worth building next, but each is a meaningful chunk on its own.
+**Down the line** (separate task — flagging not building): the wizard's subject/level picker becomes a syllabus + paper picker. "Combined Humanities 2261 → Paper 2 (History)".
 
-## Technical notes
+## Out of scope this round
 
-- Copy `user-uploads://IMG_2754.png` → `src/assets/origaimi-logo.png`, import as ES module in `AppHeader.tsx` and `index.tsx`.
-- Update colour tokens in `src/styles.css` (`--background`, `--foreground`, `--primary`, `--primary-soft`, `--card`) — keep semantic naming so downstream components inherit automatically.
-- Update `head()` meta in `src/routes/__root.tsx` and `src/routes/index.tsx` (title, description, OG tags).
-- Rename strings in `new.tsx`, `assessment.$id.tsx`, `dashboard.tsx`, `bank.tsx` — no structural changes, no schema changes.
-- Footer year + copyright → "© Origaimi · For Singapore educators".
+- Auto-detecting alternative-paper structures (e.g. core vs extended for IGCSE) — current MOE syllabuses don't use this pattern
+- Cross-paper topic linking (some Math syllabuses share content across Paper 1 and Paper 2) — handle case-by-case if it comes up
+- Bulk upload — still one file at a time
+
+## Migration impact
+
+- New table + new column = additive, no data loss
+- Existing parsed docs (none yet beyond test data) can be re-run through the parser to backfill `paper_id`
+- Topics with `paper_id = null` still work — wizard treats them as "applies to whole syllabus"
