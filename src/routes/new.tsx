@@ -18,7 +18,7 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/new")({
   component: NewAssessment,
-  head: () => ({ meta: [{ title: "Create assessment · Joy of Assessment" }] }),
+  head: () => ({ meta: [{ title: "Create assessment · Origaimi" }] }),
 });
 
 type Blueprint = { topic: string; bloom: string; marks: number }[];
@@ -218,9 +218,9 @@ function NewAssessment() {
 
           {step === 3 && (
             <div className="space-y-5">
-              <h2 className="font-paper text-xl font-semibold">Blueprint</h2>
+              <h2 className="font-paper text-xl font-semibold">Table of Specifications</h2>
               <p className="text-sm text-muted-foreground">
-                Set Bloom's level and marks per topic. Total must equal {totalMarks} marks.
+                Set Bloom's level and marks per topic — your TOS. Total must equal {totalMarks} marks.
               </p>
               <div className="overflow-x-auto rounded-lg border border-border">
                 <table className="w-full text-sm">
@@ -302,6 +302,7 @@ function NewAssessment() {
           {step === 5 && (
             <div className="space-y-4">
               <h2 className="font-paper text-xl font-semibold">References & instructions</h2>
+              <p className="text-xs uppercase tracking-wide text-primary">Curated inspiration</p>
               <p className="text-sm text-muted-foreground">
                 Optional: describe any style cues, past-paper patterns, or special instructions for the AI.
                 Reference uploads coming soon.
@@ -351,7 +352,7 @@ function NewAssessment() {
 }
 
 function Stepper({ step }: { step: number }) {
-  const labels = ["Basics", "Topics", "Blueprint", "Types", "References", "Generate"];
+  const labels = ["Basics", "Topics", "TOS", "Types", "References", "Generate"];
   return (
     <div className="flex items-center gap-2">
       {labels.map((l, i) => {

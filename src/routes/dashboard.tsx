@@ -12,7 +12,7 @@ import { SUBJECTS, LEVELS } from "@/lib/syllabus";
 
 export const Route = createFileRoute("/dashboard")({
   component: Dashboard,
-  head: () => ({ meta: [{ title: "My Assessments · Joy of Assessment" }] }),
+  head: () => ({ meta: [{ title: "My Assessments · Origaimi" }] }),
 });
 
 type Assessment = {
@@ -169,19 +169,35 @@ function EmptyState({ hasAny }: { hasAny: boolean }) {
         <FileText className="h-6 w-6" />
       </div>
       <h3 className="mt-4 font-medium text-foreground">
-        {hasAny ? "No matches" : "Your first assessment is one click away"}
+        {hasAny ? "No matches" : "Ready to unfold a new paper?"}
       </h3>
       <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
         {hasAny
           ? "Try adjusting your search or filters."
-          : "Define a blueprint, let AI draft a paper, then add your expert touches."}
+          : "Define a TOS, let AI draft a paper, then add your expert touches."}
       </p>
       {!hasAny && (
-        <Link to="/new" className="mt-6 inline-block">
-          <Button className="gap-2">
-            <Plus className="h-4 w-4" /> Create new assessment
-          </Button>
-        </Link>
+        <>
+          <div className="mx-auto mt-6 flex max-w-lg flex-wrap justify-center gap-2">
+            <span className="rounded-full border border-border bg-background px-3 py-1 text-xs text-muted-foreground">
+              Effortless Generation
+            </span>
+            <span className="rounded-full border border-border bg-background px-3 py-1 text-xs text-muted-foreground">
+              Intelligent Coaching
+            </span>
+            <span className="rounded-full border border-border bg-background px-3 py-1 text-xs text-muted-foreground">
+              Curated Inspiration
+            </span>
+            <span className="rounded-full border border-border bg-background px-3 py-1 text-xs text-muted-foreground">
+              Precision Alignment
+            </span>
+          </div>
+          <Link to="/new" className="mt-6 inline-block">
+            <Button className="gap-2">
+              <Plus className="h-4 w-4" /> Create new assessment
+            </Button>
+          </Link>
+        </>
       )}
     </div>
   );
