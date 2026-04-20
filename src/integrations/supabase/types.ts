@@ -303,6 +303,131 @@ export type Database = {
         }
         Relationships: []
       }
+      syllabus_documents: {
+        Row: {
+          created_at: string
+          exam_board: string | null
+          file_path: string
+          id: string
+          level: string | null
+          mime_type: string | null
+          notes: string | null
+          paper_code: string | null
+          parse_error: string | null
+          parse_status: string
+          raw_text: string | null
+          subject: string | null
+          syllabus_code: string | null
+          syllabus_year: number | null
+          title: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          exam_board?: string | null
+          file_path: string
+          id?: string
+          level?: string | null
+          mime_type?: string | null
+          notes?: string | null
+          paper_code?: string | null
+          parse_error?: string | null
+          parse_status?: string
+          raw_text?: string | null
+          subject?: string | null
+          syllabus_code?: string | null
+          syllabus_year?: number | null
+          title: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          exam_board?: string | null
+          file_path?: string
+          id?: string
+          level?: string | null
+          mime_type?: string | null
+          notes?: string | null
+          paper_code?: string | null
+          parse_error?: string | null
+          parse_status?: string
+          raw_text?: string | null
+          subject?: string | null
+          syllabus_code?: string | null
+          syllabus_year?: number | null
+          title?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      syllabus_topics: {
+        Row: {
+          created_at: string
+          depth: number
+          id: string
+          learning_outcome_code: string | null
+          learning_outcomes: string[] | null
+          level: string | null
+          parent_code: string | null
+          position: number
+          source_doc_id: string
+          strand: string | null
+          sub_strand: string | null
+          subject: string | null
+          suggested_blooms: string[] | null
+          title: string
+          topic_code: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          depth?: number
+          id?: string
+          learning_outcome_code?: string | null
+          learning_outcomes?: string[] | null
+          level?: string | null
+          parent_code?: string | null
+          position?: number
+          source_doc_id: string
+          strand?: string | null
+          sub_strand?: string | null
+          subject?: string | null
+          suggested_blooms?: string[] | null
+          title: string
+          topic_code?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          depth?: number
+          id?: string
+          learning_outcome_code?: string | null
+          learning_outcomes?: string[] | null
+          level?: string | null
+          parent_code?: string | null
+          position?: number
+          source_doc_id?: string
+          strand?: string | null
+          sub_strand?: string | null
+          subject?: string | null
+          suggested_blooms?: string[] | null
+          title?: string
+          topic_code?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "syllabus_topics_source_doc_id_fkey"
+            columns: ["source_doc_id"]
+            isOneToOne: false
+            referencedRelation: "syllabus_documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

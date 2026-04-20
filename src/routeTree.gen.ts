@@ -15,6 +15,8 @@ import { Route as BankRouteImport } from './routes/bank'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AssessmentIdRouteImport } from './routes/assessment.$id'
+import { Route as AdminSyllabusRouteImport } from './routes/admin.syllabus'
+import { Route as AdminSyllabusIdRouteImport } from './routes/admin.syllabus.$id'
 
 const NewRoute = NewRouteImport.update({
   id: '/new',
@@ -46,6 +48,16 @@ const AssessmentIdRoute = AssessmentIdRouteImport.update({
   path: '/assessment/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminSyllabusRoute = AdminSyllabusRouteImport.update({
+  id: '/admin/syllabus',
+  path: '/admin/syllabus',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminSyllabusIdRoute = AdminSyllabusIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => AdminSyllabusRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -53,7 +65,9 @@ export interface FileRoutesByFullPath {
   '/bank': typeof BankRoute
   '/dashboard': typeof DashboardRoute
   '/new': typeof NewRoute
+  '/admin/syllabus': typeof AdminSyllabusRouteWithChildren
   '/assessment/$id': typeof AssessmentIdRoute
+  '/admin/syllabus/$id': typeof AdminSyllabusIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -61,7 +75,9 @@ export interface FileRoutesByTo {
   '/bank': typeof BankRoute
   '/dashboard': typeof DashboardRoute
   '/new': typeof NewRoute
+  '/admin/syllabus': typeof AdminSyllabusRouteWithChildren
   '/assessment/$id': typeof AssessmentIdRoute
+  '/admin/syllabus/$id': typeof AdminSyllabusIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -70,13 +86,31 @@ export interface FileRoutesById {
   '/bank': typeof BankRoute
   '/dashboard': typeof DashboardRoute
   '/new': typeof NewRoute
+  '/admin/syllabus': typeof AdminSyllabusRouteWithChildren
   '/assessment/$id': typeof AssessmentIdRoute
+  '/admin/syllabus/$id': typeof AdminSyllabusIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/bank' | '/dashboard' | '/new' | '/assessment/$id'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/bank'
+    | '/dashboard'
+    | '/new'
+    | '/admin/syllabus'
+    | '/assessment/$id'
+    | '/admin/syllabus/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/bank' | '/dashboard' | '/new' | '/assessment/$id'
+  to:
+    | '/'
+    | '/auth'
+    | '/bank'
+    | '/dashboard'
+    | '/new'
+    | '/admin/syllabus'
+    | '/assessment/$id'
+    | '/admin/syllabus/$id'
   id:
     | '__root__'
     | '/'
@@ -84,7 +118,9 @@ export interface FileRouteTypes {
     | '/bank'
     | '/dashboard'
     | '/new'
+    | '/admin/syllabus'
     | '/assessment/$id'
+    | '/admin/syllabus/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -93,6 +129,7 @@ export interface RootRouteChildren {
   BankRoute: typeof BankRoute
   DashboardRoute: typeof DashboardRoute
   NewRoute: typeof NewRoute
+  AdminSyllabusRoute: typeof AdminSyllabusRouteWithChildren
   AssessmentIdRoute: typeof AssessmentIdRoute
 }
 
@@ -140,8 +177,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AssessmentIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/syllabus': {
+      id: '/admin/syllabus'
+      path: '/admin/syllabus'
+      fullPath: '/admin/syllabus'
+      preLoaderRoute: typeof AdminSyllabusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/syllabus/$id': {
+      id: '/admin/syllabus/$id'
+      path: '/$id'
+      fullPath: '/admin/syllabus/$id'
+      preLoaderRoute: typeof AdminSyllabusIdRouteImport
+      parentRoute: typeof AdminSyllabusRoute
+    }
   }
 }
+
+interface AdminSyllabusRouteChildren {
+  AdminSyllabusIdRoute: typeof AdminSyllabusIdRoute
+}
+
+const AdminSyllabusRouteChildren: AdminSyllabusRouteChildren = {
+  AdminSyllabusIdRoute: AdminSyllabusIdRoute,
+}
+
+const AdminSyllabusRouteWithChildren = AdminSyllabusRoute._addFileChildren(
+  AdminSyllabusRouteChildren,
+)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -149,6 +212,7 @@ const rootRouteChildren: RootRouteChildren = {
   BankRoute: BankRoute,
   DashboardRoute: DashboardRoute,
   NewRoute: NewRoute,
+  AdminSyllabusRoute: AdminSyllabusRouteWithChildren,
   AssessmentIdRoute: AssessmentIdRoute,
 }
 export const routeTree = rootRouteImport
