@@ -14,7 +14,295 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      assessment_questions: {
+        Row: {
+          answer: string | null
+          assessment_id: string
+          bloom_level: string | null
+          created_at: string
+          difficulty: string | null
+          id: string
+          mark_scheme: string | null
+          marks: number
+          notes: string | null
+          options: Json | null
+          position: number
+          question_type: string
+          stem: string
+          topic: string | null
+          updated_at: string
+          user_id: string
+          working: string | null
+        }
+        Insert: {
+          answer?: string | null
+          assessment_id: string
+          bloom_level?: string | null
+          created_at?: string
+          difficulty?: string | null
+          id?: string
+          mark_scheme?: string | null
+          marks?: number
+          notes?: string | null
+          options?: Json | null
+          position?: number
+          question_type: string
+          stem: string
+          topic?: string | null
+          updated_at?: string
+          user_id: string
+          working?: string | null
+        }
+        Update: {
+          answer?: string | null
+          assessment_id?: string
+          bloom_level?: string | null
+          created_at?: string
+          difficulty?: string | null
+          id?: string
+          mark_scheme?: string | null
+          marks?: number
+          notes?: string | null
+          options?: Json | null
+          position?: number
+          question_type?: string
+          stem?: string
+          topic?: string | null
+          updated_at?: string
+          user_id?: string
+          working?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assessment_questions_assessment_id_fkey"
+            columns: ["assessment_id"]
+            isOneToOne: false
+            referencedRelation: "assessments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      assessment_versions: {
+        Row: {
+          assessment_id: string
+          created_at: string
+          id: string
+          label: string | null
+          snapshot: Json
+          user_id: string
+        }
+        Insert: {
+          assessment_id: string
+          created_at?: string
+          id?: string
+          label?: string | null
+          snapshot: Json
+          user_id: string
+        }
+        Update: {
+          assessment_id?: string
+          created_at?: string
+          id?: string
+          label?: string | null
+          snapshot?: Json
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assessment_versions_assessment_id_fkey"
+            columns: ["assessment_id"]
+            isOneToOne: false
+            referencedRelation: "assessments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      assessments: {
+        Row: {
+          assessment_type: string
+          blueprint: Json | null
+          created_at: string
+          duration_minutes: number
+          id: string
+          instructions: string | null
+          item_sources: Json | null
+          level: string
+          question_types: Json | null
+          status: string
+          subject: string
+          title: string
+          topics: Json | null
+          total_marks: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          assessment_type: string
+          blueprint?: Json | null
+          created_at?: string
+          duration_minutes?: number
+          id?: string
+          instructions?: string | null
+          item_sources?: Json | null
+          level: string
+          question_types?: Json | null
+          status?: string
+          subject: string
+          title: string
+          topics?: Json | null
+          total_marks?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          assessment_type?: string
+          blueprint?: Json | null
+          created_at?: string
+          duration_minutes?: number
+          id?: string
+          instructions?: string | null
+          item_sources?: Json | null
+          level?: string
+          question_types?: Json | null
+          status?: string
+          subject?: string
+          title?: string
+          topics?: Json | null
+          total_marks?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          full_name: string | null
+          id: string
+          levels: string[] | null
+          school: string | null
+          subjects: string[] | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          full_name?: string | null
+          id?: string
+          levels?: string[] | null
+          school?: string | null
+          subjects?: string[] | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          full_name?: string | null
+          id?: string
+          levels?: string[] | null
+          school?: string | null
+          subjects?: string[] | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      question_bank_items: {
+        Row: {
+          answer: string | null
+          bloom_level: string | null
+          created_at: string
+          difficulty: string | null
+          id: string
+          level: string
+          mark_scheme: string | null
+          marks: number
+          options: Json | null
+          question_type: string
+          source: string | null
+          stem: string
+          subject: string
+          tags: string[] | null
+          topic: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          answer?: string | null
+          bloom_level?: string | null
+          created_at?: string
+          difficulty?: string | null
+          id?: string
+          level: string
+          mark_scheme?: string | null
+          marks?: number
+          options?: Json | null
+          question_type: string
+          source?: string | null
+          stem: string
+          subject: string
+          tags?: string[] | null
+          topic?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          answer?: string | null
+          bloom_level?: string | null
+          created_at?: string
+          difficulty?: string | null
+          id?: string
+          level?: string
+          mark_scheme?: string | null
+          marks?: number
+          options?: Json | null
+          question_type?: string
+          source?: string | null
+          stem?: string
+          subject?: string
+          tags?: string[] | null
+          topic?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      reference_materials: {
+        Row: {
+          created_at: string
+          file_path: string
+          id: string
+          level: string | null
+          mime_type: string | null
+          parsed_content: string | null
+          subject: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          file_path: string
+          id?: string
+          level?: string | null
+          mime_type?: string | null
+          parsed_content?: string | null
+          subject?: string | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          file_path?: string
+          id?: string
+          level?: string | null
+          mime_type?: string | null
+          parsed_content?: string | null
+          subject?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
