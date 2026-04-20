@@ -35,7 +35,7 @@ function BankPage() {
       .select("*")
       .order("created_at", { ascending: false })
       .then(({ data }) => setItems((data as Item[]) ?? []));
-  }, [user]);
+  }, []);
 
   const filtered = items.filter((i) =>
     !search || i.stem.toLowerCase().includes(search.toLowerCase()) ||
