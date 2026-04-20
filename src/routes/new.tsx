@@ -107,6 +107,7 @@ function NewAssessment() {
     const { data: gen, error: e2 } = await supabase.functions.invoke("generate-assessment", {
       body: {
         assessmentId: created.id,
+        userId: user.id,
         title, subject, level,
         assessmentType: aType,
         durationMinutes: duration,
