@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -27,8 +27,7 @@ type Assessment = {
 };
 
 function Dashboard() {
-  const { user, loading } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useAuth();
   const [items, setItems] = useState<Assessment[]>([]);
   const [fetching, setFetching] = useState(true);
   const [search, setSearch] = useState("");
@@ -36,11 +35,6 @@ function Dashboard() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
   useEffect(() => {
-    if (!loading && !user) navigate({ to: "/auth" });
-  }, [user, loading, navigate]);
-
-  useEffect(() => {
-    if (!user) return;
     (async () => {
       const { data } = await supabase
         .from("assessments")

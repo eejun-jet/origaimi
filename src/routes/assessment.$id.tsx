@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -43,16 +43,11 @@ type Assessment = {
 
 function EditorPage() {
   const { id } = Route.useParams();
-  const { user, loading } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useAuth();
   const [assessment, setAssessment] = useState<Assessment | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [fetching, setFetching] = useState(true);
   const [regenId, setRegenId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!loading && !user) navigate({ to: "/auth" });
-  }, [user, loading, navigate]);
 
   const loadAll = async () => {
     const { data: a } = await supabase.from("assessments").select("*").eq("id", id).single();
@@ -63,9 +58,9 @@ function EditorPage() {
   };
 
   useEffect(() => {
-    if (user) loadAll();
+    loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, id]);
+  }, [id]);
 
   const updateQ = async (qId: string, patch: Partial<Question>) => {
     setQuestions((qs) => qs.map((q) => (q.id === qId ? { ...q, ...patch } : q)));

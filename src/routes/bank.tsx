@@ -1,7 +1,7 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/lib/auth-context";
+
 import { AppHeader } from "@/components/AppHeader";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -26,23 +26,16 @@ type Item = {
 };
 
 function BankPage() {
-  const { user, loading } = useAuth();
-  const navigate = useNavigate();
   const [items, setItems] = useState<Item[]>([]);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    if (!loading && !user) navigate({ to: "/auth" });
-  }, [user, loading, navigate]);
-
-  useEffect(() => {
-    if (!user) return;
     supabase
       .from("question_bank_items")
       .select("*")
       .order("created_at", { ascending: false })
       .then(({ data }) => setItems((data as Item[]) ?? []));
-  }, [user]);
+  }, []);
 
   const filtered = items.filter((i) =>
     !search || i.stem.toLowerCase().includes(search.toLowerCase()) ||

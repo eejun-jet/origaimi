@@ -24,7 +24,7 @@ export const Route = createFileRoute("/new")({
 type Blueprint = { topic: string; bloom: string; marks: number }[];
 
 function NewAssessment() {
-  const { user, loading } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [busy, setBusy] = useState(false);
@@ -58,10 +58,6 @@ function NewAssessment() {
   // Step 5: skipping references upload UI for MVP brevity (placeholder note)
   const [referenceNote, setReferenceNote] = useState("");
 
-  useEffect(() => {
-    if (!loading && !user) navigate({ to: "/auth" });
-  }, [user, loading, navigate]);
-
   const blueprintSum = blueprint.reduce((acc, b) => acc + (b.marks || 0), 0);
 
   const updateBlueprintRow = (i: number, patch: Partial<Blueprint[number]>) => {
@@ -80,7 +76,6 @@ function NewAssessment() {
   };
 
   const handleGenerate = async () => {
-    if (!user) return;
     setBusy(true);
     // 1. Create assessment row
     const { data: created, error: e1 } = await supabase
@@ -112,6 +107,7 @@ function NewAssessment() {
     const { data: gen, error: e2 } = await supabase.functions.invoke("generate-assessment", {
       body: {
         assessmentId: created.id,
+        userId: user.id,
         title, subject, level,
         assessmentType: aType,
         durationMinutes: duration,

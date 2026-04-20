@@ -38,7 +38,7 @@ function Landing() {
                 you can — your pedagogical expertise. Reclaim hours. Become an assessment architect.
               </p>
               <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-                <Link to="/auth">
+                <Link to="/dashboard">
                   <Button size="lg" className="gap-2">
                     Start creating
                     <ArrowRight className="h-4 w-4" />
@@ -49,7 +49,7 @@ function Landing() {
                 </a>
               </div>
               <p className="mt-6 text-xs text-muted-foreground">
-                MOE-aligned · P1–Sec 4 · All core subjects
+                Free trial · No sign-in required · MOE-aligned · P1–Sec 4
               </p>
             </div>
 
@@ -119,7 +119,7 @@ function Landing() {
               Teaching. Mentoring. Growing. Not formatting tables and counting marks.
             </p>
             <div className="mt-8">
-              <Link to="/auth">
+              <Link to="/dashboard">
                 <Button size="lg" className="gap-2">
                   Create your first assessment
                   <ArrowRight className="h-4 w-4" />
