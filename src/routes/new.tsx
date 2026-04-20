@@ -76,7 +76,6 @@ function NewAssessment() {
   };
 
   const handleGenerate = async () => {
-    if (!user) return;
     setBusy(true);
     // 1. Create assessment row
     const { data: created, error: e1 } = await supabase
