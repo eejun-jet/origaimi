@@ -1,75 +1,66 @@
 
-# Joy of Assessment — MVP Plan
+# Syllabus ingestion — with code preservation
 
-A blueprint-first AI assessment platform for Singapore teachers (Primary + Secondary, all core subjects) that turns hours of manual paper-setting into minutes of expert refinement.
+Adding **syllabus code retention** to the ingestion pipeline so codes like `0001`, `2260/01`, `6091`, `1184/02` follow each topic through the whole app.
 
-## Core experience
+## What changes vs the previous plan
 
-**1. Teacher onboarding & accounts**
-- Email/password sign-up via Lovable Cloud auth
-- Profile: name, school (free text), subjects taught, levels taught
-- Personal workspace — assessments, question bank, uploaded references all private to the teacher
+Same flow (upload → parse → review → publish), with codes treated as first-class data — never re-derived, never inferred by AI on the fly.
 
-**2. Assessment dashboard ("My Assessments")**
-- Grid of draft / in-review / finalised assessments with status, subject, level, last edited
-- Filters by subject, level, status; search by title
-- Primary CTA: **"Create new assessment"**
+## Where codes live
 
-**3. Blueprint-first creation flow**
-The signature workflow. Teacher defines the assessment specification *before* AI generates anything.
+**At three levels**, because MOE uses them at all three:
 
-- **Step 1 — Basics**: title, subject (Math, Science, English, Mother Tongue, Humanities), level (P1–Sec 4), assessment type (formative quiz, topical test, mid-year, prelim, mock paper), total duration, total marks
-- **Step 2 — Topics**: pick from MOE syllabus topic tree for the chosen subject + level (curated for MVP — start with Math P1–P6, Sec E-Math, Sec Science, English Comprehension; expand iteratively)
-- **Step 3 — Blueprint table**: editable matrix of **Topic × Bloom's level (Remember / Understand / Apply / Analyse / Evaluate / Create) × Marks**. Auto-suggested distribution; teacher tweaks. Live total-marks check.
-- **Step 4 — Question types & sources**: pick mix of MCQ, Short Answer, Structured, Long/Essay, Comprehension, Practical, Source-Based. Choose item sources: AI-generate / pull from my Question Bank / adapt from uploaded references.
-- **Step 5 — References (optional)**: upload past papers, worksheets, or textbook pages (PDF/DOCX/images). AI extracts style, difficulty, and item patterns to mimic.
-- **Step 6 — Generate**: AI drafts the full assessment matching the blueprint exactly.
+1. **Document level** — the syllabus paper itself (e.g. `2260/01` = Sec Geography Paper 1, `0001` = General Paper)
+2. **Subject/syllabus level** — the overarching subject code (e.g. `6091` = Pure Physics O-Level)
+3. **Topic / learning outcome level** — sub-codes MOE assigns inside the syllabus (e.g. `1.2.3`, `LO-MA-P5-NUM-3`)
 
-**4. The Assessment Architect editor**
-Where teachers add their pedagogical expertise.
-- Side-by-side: question list ↔ live preview of the paper
-- Per-question controls: **inline edit**, **regenerate** (with optional instruction like "make harder" / "use a Singapore context"), **swap from question bank**, **delete**, **reorder**
-- Difficulty + Bloom's level tag on every question; teacher can override
-- **Mark scheme panel**: AI-generated marking rubric and model answers per question, also editable
-- **Blueprint compliance meter**: visual indicator showing if current questions still match the blueprint (e.g. "Apply-level questions: 8/10 marks ✓")
-- **Version history**: every save creates a snapshot; restore any previous version
-- **Comments / notes** on individual questions for personal review
+## Schema additions
 
-**5. Question Bank**
-- Personal library of approved/reusable items
-- Add to bank from any assessment with one click
-- Tag by topic, level, Bloom's, difficulty, type, source (AI / mine / from upload)
-- Search + filter; insert into any assessment via the editor's "swap" action
+```text
+syllabus_documents
+  + syllabus_code        text   -- e.g. "2260/01", "6091"
+  + paper_code           text   -- e.g. "01", "02" (nullable)
+  + exam_board           text   -- "MOE" | "SEAB" | "Cambridge"
+  + syllabus_year        int    -- e.g. 2021
 
-**6. Reference library**
-- All uploaded past papers / worksheets stored per teacher
-- Reusable across future assessments
-- AI parses and indexes them once on upload
+syllabus_topics
+  + topic_code           text   -- e.g. "1.2.3" or "MA.P5.NUM.3"
+  + parent_code          text   -- for hierarchy (strand → sub-strand → topic)
+  + learning_outcome_code text  -- e.g. "LO-1.2.3a" (nullable)
+  + source_doc_id        uuid   -- FK to syllabus_documents (carries syllabus_code)
+```
 
-**7. Export & share**
-- Export student paper (PDF + DOCX)
-- Export mark scheme (separate PDF + DOCX)
-- Print-ready layout with school header field, instructions, marks per question, answer spaces
+Codes are **stored as text exactly as printed** — preserves leading zeros (`0001`), slashes (`2260/01`), and dots (`1.2.3a`). No normalisation, no integer casting.
 
-## AI behaviour
-- All generation goes through Lovable AI Gateway (Gemini 3 Flash Preview default; Gemini 2.5 Pro for complex generation like full-paper drafts and Source-Based questions)
-- Server functions only — prompts and syllabus context kept on backend
-- Singapore syllabus context (MOE-style phrasing, local examples, SI units, British spelling) baked into system prompts per subject
-- Structured tool-calling output for reliable question schemas (stem, options, answer, working, marks, Bloom's, difficulty)
+## Extraction prompt rules
 
-## Tech & data
-- TanStack Start + Lovable Cloud (Postgres + Auth + Storage)
-- Tables: `profiles`, `assessments`, `assessment_questions`, `question_bank_items`, `reference_materials`, `assessment_versions`
-- RLS: every row scoped to `auth.uid()` — teachers see only their own data
-- Storage buckets: `references` (private), `exports` (private)
-- Server functions for: generate-blueprint-suggestion, generate-assessment, regenerate-question, generate-mark-scheme, parse-reference-upload, export-pdf, export-docx
+The AI parser is instructed to:
+- Pull the syllabus code from the document cover/header **first**, before topics
+- For every topic, capture the printed reference number verbatim (don't generate one if absent)
+- Mark `topic_code = null` rather than guess — teachers can fill in during review
+- Preserve hierarchical codes intact (`1.2.3a` stays `1.2.3a`, not split)
 
-## Design direction
-Clean, calm, professional — closer to Notion/Linear than a flashy edtech app. Generous whitespace, MOE-friendly serif for question previews, sans for UI. Soft blues + warm neutrals. Mobile-aware but desktop-first (teachers work on laptops).
+## Where codes show up in the app
 
-## Out of scope for MVP (note for later)
-- School/department workspaces & sharing
-- Auto-grading of student responses
-- LMS integrations (SLS, Google Classroom)
-- Analytics on student performance
-- Multi-language UI (English-only MVP; Mother Tongue subjects come in v2)
+- **Topic picker (Step 2 of wizard)** — code shown as a muted prefix: `2260/01 · 1.2 · Plate Tectonics`
+- **Blueprint table** — code column alongside topic name
+- **Generated assessment header** — auto-fills "Based on syllabus 2260/01 (2021)"
+- **Each question** — stores `syllabus_code` + `topic_code` so exports can cite the source
+- **Mark scheme PDF** — footer reference: `Aligned to MOE 6091 §1.2.3`
+- **Question Bank filter** — search/filter by syllabus code
+
+## Review UI additions
+
+The admin review screen gets two extra fields per row:
+- Editable `topic_code` input (auto-filled from extraction, manually correctable)
+- Document-level code shown as a sticky header so reviewer never loses context
+
+## Out of scope
+
+- Auto-mapping codes between syllabus revisions (e.g. 2013 `2236` → 2021 `2260`) — manual link if needed
+- Cross-board code reconciliation (Cambridge vs SEAB numbering) — kept separate per `exam_board`
+
+---
+
+**This plan extends the previous syllabus-ingestion plan, not replaces it.** When you're ready to upload the PDFs, I'll build the upload page + parser + review UI in one pass, with code retention wired through from day one.
