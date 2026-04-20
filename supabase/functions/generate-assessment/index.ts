@@ -97,24 +97,20 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) return new Response("Unauthorized", { status: 401, headers: corsHeaders });
-
+    // Free-trial mode: no auth required. Use the service role to bypass RLS
+    // and accept the trial user id from the request body.
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } },
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
-
-    const { data: userRes } = await supabase.auth.getUser();
-    if (!userRes?.user) return new Response("Unauthorized", { status: 401, headers: corsHeaders });
-    const userId = userRes.user.id;
 
     const body = await req.json();
     const {
       assessmentId, title, subject, level, assessmentType, durationMinutes,
       totalMarks, blueprint, questionTypes, itemSources, instructions,
+      userId: bodyUserId,
     } = body;
+    const userId = bodyUserId ?? "00000000-0000-0000-0000-000000000001";
 
     const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
