@@ -1,1 +1,7 @@
 project_id = "bsfwuueujkhptnfifyef"
+
+[functions.generate-assessment]
+verify_jwt = false
+
+[functions.regenerate-question]
+verify_jwt = false
