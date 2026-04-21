@@ -13,7 +13,7 @@ import { ArrowLeft, Save, Trash2, Plus, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/admin/syllabus/$id")({
   component: SyllabusReview,
-  head: () => ({ meta: [{ title: "Review syllabus · Origaimi" }] }),
+  head: () => ({ meta: [{ title: "Review syllabus · origAImi" }] }),
 });
 
 type Doc = {

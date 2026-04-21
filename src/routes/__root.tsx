@@ -31,14 +31,14 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Origaimi — Unfold the Joy of Assessing" },
+      { title: "origAImi — Unfold the Joy of Assessing" },
       {
         name: "description",
         content:
-          "Origaimi is the human-in-the-loop AI assessment co-architect for Singapore educators. Set papers faster, better, and aligned to your Assessment Literacy framework.",
+          "origAImi is the human-in-the-loop AI assessment co-architect for Singapore educators. Set papers faster, better, and aligned to your Assessment Literacy framework.",
       },
-      { name: "author", content: "Origaimi" },
-      { property: "og:title", content: "Origaimi — Unfold the Joy of Assessing" },
+      { name: "author", content: "origAImi" },
+      { property: "og:title", content: "origAImi — Unfold the Joy of Assessing" },
       {
         property: "og:description",
         content: "AI does the paddling. You set the course.",

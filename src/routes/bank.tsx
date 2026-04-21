@@ -9,7 +9,7 @@ import { Search, Library } from "lucide-react";
 
 export const Route = createFileRoute("/bank")({
   component: BankPage,
-  head: () => ({ meta: [{ title: "Curated Inspiration · Origaimi" }] }),
+  head: () => ({ meta: [{ title: "Curated Inspiration · origAImi" }] }),
 });
 
 type Item = {

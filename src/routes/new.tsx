@@ -23,7 +23,7 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/new")({
   component: NewAssessment,
-  head: () => ({ meta: [{ title: "Create assessment · Origaimi" }] }),
+  head: () => ({ meta: [{ title: "Create assessment · origAImi" }] }),
 });
 
 type BlueprintRow = {
