@@ -1049,6 +1049,129 @@ function CoverageStrips({ blueprint, aos }: { blueprint: Blueprint; aos: Assessm
   );
 }
 
+type SectionCardProps = {
+  section: Section;
+  isFirst: boolean;
+  isLast: boolean;
+  masterPool: SectionTopic[];
+  visibleQuestionTypes: { id: string; label: string }[];
+  subject: string;
+  onUpdate: (patch: Partial<Section>) => void;
+  onRemove: () => void;
+  onMove: (dir: -1 | 1) => void;
+};
+
+function SectionCard({
+  section, isFirst, isLast, masterPool, visibleQuestionTypes, onUpdate, onRemove, onMove,
+}: SectionCardProps) {
+  const pickedKeys = new Set(section.topic_pool.map((t) => `${t.topic_code ?? ""}::${t.topic}`));
+  const toggleTopic = (t: SectionTopic) => {
+    const key = `${t.topic_code ?? ""}::${t.topic}`;
+    const next = pickedKeys.has(key)
+      ? section.topic_pool.filter((p) => `${p.topic_code ?? ""}::${p.topic}` !== key)
+      : [...section.topic_pool, t];
+    onUpdate({ topic_pool: next });
+  };
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Badge variant="default" className="text-base">Section {section.letter}</Badge>
+          <Input
+            className="h-8 w-56"
+            placeholder="Section name (optional)"
+            value={section.name ?? ""}
+            onChange={(e) => onUpdate({ name: e.target.value })}
+          />
+        </div>
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon" disabled={isFirst} onClick={() => onMove(-1)}>
+            <ChevronUp className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" disabled={isLast} onClick={() => onMove(1)}>
+            <ChevronDown className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={onRemove}>
+            <Trash2 className="h-4 w-4 text-destructive" />
+          </Button>
+        </div>
+      </div>
+
+      <div className="mt-3 grid gap-3 sm:grid-cols-4">
+        <div>
+          <Label className="text-xs">Question type</Label>
+          <Select value={section.question_type} onValueChange={(v) => onUpdate({ question_type: v })}>
+            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {visibleQuestionTypes.map((q) => (
+                <SelectItem key={q.id} value={q.id}>{q.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className="text-xs">Bloom's level</Label>
+          <Select value={section.bloom ?? "Apply"} onValueChange={(v) => onUpdate({ bloom: v })}>
+            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {BLOOMS.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className="text-xs"># Questions</Label>
+          <Input type="number" min={1} className="h-9"
+            value={section.num_questions}
+            onChange={(e) => onUpdate({ num_questions: Math.max(1, parseInt(e.target.value || "1", 10)) })}
+          />
+        </div>
+        <div>
+          <Label className="text-xs">Total marks</Label>
+          <Input type="number" min={1} className="h-9"
+            value={section.marks}
+            onChange={(e) => onUpdate({ marks: Math.max(1, parseInt(e.target.value || "1", 10)) })}
+          />
+        </div>
+      </div>
+
+      <div className="mt-3">
+        <Label className="text-xs">Topic pool ({section.topic_pool.length} selected)</Label>
+        {masterPool.length === 0 ? (
+          <p className="mt-1 text-xs text-muted-foreground">Pick topics in Step 2 first.</p>
+        ) : (
+          <div className="mt-1 grid max-h-48 gap-1 overflow-auto rounded-md border border-border p-2 sm:grid-cols-2">
+            {masterPool.map((t) => {
+              const key = `${t.topic_code ?? ""}::${t.topic}`;
+              const checked = pickedKeys.has(key);
+              return (
+                <label key={key} className={`flex cursor-pointer items-start gap-2 rounded p-1.5 text-xs ${checked ? "bg-primary-soft/40" : "hover:bg-muted/40"}`}>
+                  <Checkbox checked={checked} onCheckedChange={() => toggleTopic(t)} />
+                  <span>
+                    {t.topic_code && <span className="font-mono text-muted-foreground mr-1">{t.topic_code}</span>}
+                    {t.topic}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-3">
+        <Label className="text-xs">Section instructions (optional)</Label>
+        <Textarea
+          rows={2}
+          className="text-sm"
+          value={section.instructions ?? ""}
+          onChange={(e) => onUpdate({ instructions: e.target.value })}
+          placeholder="e.g. Answer all questions in this section."
+        />
+      </div>
+    </div>
+  );
+}
+
 function Bar({ segments, total }: { segments: { label: string; value: number; color: string }[]; total: number }) {
   if (total === 0) return null;
   return (
