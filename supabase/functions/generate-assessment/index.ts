@@ -484,14 +484,18 @@ Deno.serve(async (req) => {
 
       // Determine sources per question. SBQ skills like comparison/assertion need
       // multiple sources packed INTO a single question stem (Source A, B, C…).
-      const sbqSkill = section.sbq_skill ? SBQ_SKILLS[section.sbq_skill] : null;
-      const sourcesPerQ = sbqSkill ? Math.max(1, sbqSkill.minSources) : 1;
+      // With multi-skill support, each question can have its own minSources.
+      const effectiveSkillIds = resolveEffectiveSkills(section);
+      const effectiveSkillDefs = effectiveSkillIds.map((id) => SBQ_SKILLS[id]).filter(Boolean);
+      const perQSkillsForFetch = assignSkillsToQuestions(effectiveSkillDefs, section.num_questions);
 
       // Pre-fetch grounded sources. Outer index = question slot, inner = source slot.
       const sourcesForSection: (GroundedSource | null)[][] = [];
       if (needsSourcePerQ && subjectKind) {
         for (let qi = 0; qi < section.num_questions; qi++) {
           const t = pickTopic(section, qi);
+          const qSkill = perQSkillsForFetch[qi];
+          const sourcesPerQ = qSkill ? Math.max(1, qSkill.minSources) : 1;
           const slot: (GroundedSource | null)[] = [];
           if (!t) {
             for (let i = 0; i < sourcesPerQ; i++) slot.push(null);
