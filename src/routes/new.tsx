@@ -76,7 +76,10 @@ function NewAssessment() {
   const [duration, setDuration] = useState(60);
   const [totalMarks, setTotalMarks] = useState(50);
 
-  // When the selected paper changes, load its topics + prefill metadata
+  // When the selected paper changes, load its topics + prefill metadata.
+  // For multi-track MCQ papers (e.g. 5086/01) topics live on sibling
+  // track-specific papers — fall back to loading all doc topics, which
+  // the section sub-selector then narrows down.
   useEffect(() => {
     if (!selected) {
       setPaperTopics([]);
@@ -89,7 +92,14 @@ function NewAssessment() {
     if (paper.marks) setTotalMarks(paper.marks);
     setTopicsLoading(true);
     loadPaperTopics(paper.id)
-      .then((t) => setPaperTopics(t))
+      .then(async (t) => {
+        if (t.length === 0 && (paper.trackTags?.length ?? 0) > 1) {
+          const sibling = await loadDocTopics(doc.id);
+          setPaperTopics(sibling);
+        } else {
+          setPaperTopics(t);
+        }
+      })
       .catch((e) => toast.error(e.message ?? "Could not load topics"))
       .finally(() => setTopicsLoading(false));
   }, [selected]);
