@@ -15,9 +15,20 @@ export const SBQ_SKILLS = [
 
 export type SbqSkill = typeof SBQ_SKILLS[number]["id"];
 
+export const MAX_SBQ_SKILLS = 5;
+
 export function getSbqSkill(id: string | undefined | null) {
   if (!id) return null;
   return SBQ_SKILLS.find((s) => s.id === id) ?? null;
+}
+
+/** Returns the effective skill array for a section, migrating legacy single-skill on the fly. */
+export function getSectionSkills(section: { sbq_skills?: SbqSkill[] | null; sbq_skill?: SbqSkill | null }): SbqSkill[] {
+  if (Array.isArray(section.sbq_skills) && section.sbq_skills.length > 0) {
+    return section.sbq_skills.slice(0, MAX_SBQ_SKILLS);
+  }
+  if (section.sbq_skill) return [section.sbq_skill];
+  return [];
 }
 
 export function isHumanitiesSubject(subject: string | null | undefined): boolean {
