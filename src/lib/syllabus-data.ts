@@ -91,7 +91,40 @@ export async function loadPaperTopics(paperId: string): Promise<PaperTopic[]> {
     .eq("paper_id", paperId)
     .order("position", { ascending: true });
   if (error) throw error;
-  return (data ?? []).map((t) => ({
+  return (data ?? []).map(mapTopicRow);
+}
+
+/**
+ * Load all topics for a syllabus document across every sibling paper.
+ * Used when a multi-track paper (e.g. Combined Sci 5086 MCQ Paper 1) carries
+ * no topics of its own — the discipline content actually lives on the
+ * track-specific Papers 2/3/4. Caller filters by `section` to scope to the
+ * active discipline (Physics / Chemistry / Biology).
+ */
+export async function loadDocTopics(docId: string): Promise<PaperTopic[]> {
+  const { data, error } = await supabase
+    .from("syllabus_topics")
+    .select("id, topic_code, parent_code, title, depth, position, strand, sub_strand, learning_outcomes, suggested_blooms, section")
+    .eq("source_doc_id", docId)
+    .order("position", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map(mapTopicRow);
+}
+
+function mapTopicRow(t: {
+  id: string;
+  topic_code: string | null;
+  parent_code: string | null;
+  title: string;
+  depth: number;
+  position: number;
+  strand: string | null;
+  sub_strand: string | null;
+  learning_outcomes: string[] | null;
+  suggested_blooms: string[] | null;
+  section: string | null;
+}): PaperTopic {
+  return {
     id: t.id,
     topicCode: t.topic_code,
     parentCode: t.parent_code,
@@ -103,5 +136,5 @@ export async function loadPaperTopics(paperId: string): Promise<PaperTopic[]> {
     learningOutcomes: t.learning_outcomes ?? [],
     suggestedBlooms: t.suggested_blooms ?? [],
     section: t.section,
-  }));
+  };
 }
