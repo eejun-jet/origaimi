@@ -160,7 +160,10 @@ function extractKeywords(text: string, max: number): string[] {
   return out;
 }
 
-/** Build a list of progressively broader queries to try. Earlier = more specific. */
+/** Build a list of progressively broader queries to try. Earlier = more specific.
+ *  For humanities we issue alternating primary-source / historian-perspective
+ *  queries so the search engine returns rich, analysable passages rather than
+ *  thin tertiary blurbs. */
 export function buildQueryChain(
   subjectKind: Exclude<SubjectKind, null>,
   topic: string,
@@ -168,21 +171,29 @@ export function buildQueryChain(
 ): string[] {
   const topicKw = extractKeywords(topic, 5);
   const loKw = extractKeywords((learningOutcomes[0] ?? ""), 4);
-  const suffix = subjectKind === "english" ? "short prose excerpt" : "primary source";
   const chain: string[] = [];
-  // 1) topic + LO context (most specific)
-  if (topicKw.length > 0 && loKw.length > 0) {
-    chain.push(`${[...topicKw, ...loKw].join(" ")} ${suffix}`);
+  if (subjectKind === "english") {
+    const suffix = "short prose excerpt";
+    if (topicKw.length > 0 && loKw.length > 0) chain.push(`${[...topicKw, ...loKw].join(" ")} ${suffix}`);
+    if (topicKw.length > 0) chain.push(`${topicKw.join(" ")} ${suffix}`);
+    if (topicKw.length >= 2) chain.push(`${topicKw.slice(0, 2).join(" ")} ${suffix}`);
+  } else {
+    // Humanities: alternate primary-source and historian-perspective queries.
+    const base = topicKw.join(" ");
+    const baseWithLo = [...topicKw, ...loKw].join(" ");
+    if (topicKw.length > 0 && loKw.length > 0) {
+      chain.push(`${baseWithLo} primary source document archive`);
+      chain.push(`${baseWithLo} historian analysis`);
+    }
+    if (topicKw.length > 0) {
+      chain.push(`${base} primary source document`);
+      chain.push(`${base} historian perspective scholarly`);
+      chain.push(`${base} contemporary account`);
+    }
+    if (topicKw.length >= 2) {
+      chain.push(`${topicKw.slice(0, 2).join(" ")} primary source`);
+    }
   }
-  // 2) topic only
-  if (topicKw.length > 0) {
-    chain.push(`${topicKw.join(" ")} ${suffix}`);
-  }
-  // 3) two most distinctive topic words + suffix (shortest fallback)
-  if (topicKw.length >= 2) {
-    chain.push(`${topicKw.slice(0, 2).join(" ")} ${suffix}`);
-  }
-  // Dedupe while keeping order.
   return Array.from(new Set(chain));
 }
 
