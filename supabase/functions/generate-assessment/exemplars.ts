@@ -34,19 +34,27 @@ export async function fetchExemplars(
 
   const { data, error } = await supabase
     .from("past_papers")
-    .select("id, title, year, paper_number, exam_board, style_summary, questions_json")
+    .select("id, title, year, paper_number, exam_board, style_summary, questions_json, notes")
     .eq("subject", subject)
     .eq("level", level)
     .eq("parse_status", "ready")
     .not("questions_json", "is", null)
     .order("year", { ascending: false, nullsFirst: false })
-    .limit(MAX_PAPERS);
+    .limit(MAX_PAPERS * 3); // overfetch so we can prioritise specimen papers
 
   if (error || !data || data.length === 0) {
     return { block: "", paperCount: 0, questionCount: 0 };
   }
 
-  const papers = data as ExemplarPaper[];
+  // Prefer specimen / sample papers (these are the canonical format reference).
+  const isSpecimen = (p: { title: string; notes?: string | null; paper_number?: string | null }) => {
+    const hay = `${p.title} ${p.notes ?? ""} ${p.paper_number ?? ""}`.toLowerCase();
+    return /(specimen|sample|exemplar)/i.test(hay);
+  };
+  const all = data as (ExemplarPaper & { notes?: string | null })[];
+  const specimens = all.filter(isSpecimen);
+  const others = all.filter((p) => !isSpecimen(p));
+  const papers = [...specimens, ...others].slice(0, MAX_PAPERS);
   let totalQ = 0;
   const sections: string[] = [];
 
