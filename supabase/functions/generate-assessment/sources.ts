@@ -239,6 +239,23 @@ const JUNK_PATTERNS: RegExp[] = [
   /\bfollow us\b/i, /\bdownload the app\b/i, /\bpaywall\b/i,
   /\bsupport (our|independent) journalism\b/i, /\bbecome a (member|supporter)\b/i,
   /\bcopyright\b|©/i, /\ball rights reserved\b/i,
+  // Browser/tech warnings (catches "Your browser is out of date…", "Please consider updating your browser", "Image Lightbox", "View this term in the glossary").
+  /\bbrowser is out of date\b/i, /\bupdate(ing)? your browser\b/i, /\bplease consider updating\b/i,
+  /\bmay not support some of the features\b/i, /\bimage lightbox\b/i,
+  /\bview (this )?(term )?in the glossary\b/i, /\bclose\s+image\b/i,
+  /\benable javascript\b/i, /\bjavascript is (disabled|required)\b/i,
+  // Archive listing / catalogue captions (catches FSA-style "…Office of War Information Black-and-White Negatives" listings).
+  /\bblack[- ]?and[- ]?white negatives?\b/i, /\bcolor (slides?|photographs?|negatives?)\b/i,
+  /\bcatalog(ue)? record\b/i, /\bfinding aid\b/i, /\bcollection (overview|guide|finding aid)\b/i,
+  /\bview (the )?(full )?(record|item|object)\b/i, /\bdownload (image|pdf|document)\b/i,
+  /\b(prints? (and|&) photographs? division)\b/i, /\b(call number|shelfmark|accession number)\b/i,
+  /\b(digital id|reproduction number|repository)\s*[:#]/i,
+  /\b(timeline overview|primary source timeline)\b/i,
+  // Navigation / breadcrumbs / "back to top".
+  /\bback to (top|search|results)\b/i, /\bskip to (main )?content\b/i,
+  /\b(home|search|menu|browse)\s*[›»>]\s*/i,
+  // Pagination / "page x of y".
+  /\bpage \d+ of \d+\b/i, /\bnext\s+page\b/i, /\bprevious\s+page\b/i,
 ];
 
 function isJunkSentence(s: string): boolean {
@@ -246,7 +263,27 @@ function isJunkSentence(s: string): boolean {
   if (!t) return true;
   // Very short fragments are usually nav/headers, not prose.
   if (countWords(t) < 4) return true;
+  // Reject sentences with too many capitalised "Title Case Phrase Words" — a
+  // signature of catalogue listings ("Wife of a Migratory Laborer, 1938 Farm
+  // Security Administration/Office of War Information Black-and-White Negatives").
+  const caps = (t.match(/\b[A-Z][a-z]+/g) ?? []).length;
+  const words = countWords(t);
+  if (words >= 8 && caps / words > 0.55) return true;
   return JUNK_PATTERNS.some((re) => re.test(t));
+}
+
+/** Compute simple keyword-overlap relevance between an excerpt and the syllabus
+ *  topic + learning outcomes. Used to drop scrapes that have nothing to do with
+ *  the topic the teacher actually selected. */
+function relevanceScore(excerpt: string, topicKeywords: string[]): number {
+  if (topicKeywords.length === 0) return 1;
+  const lc = excerpt.toLowerCase();
+  let hits = 0;
+  for (const kw of topicKeywords) {
+    if (kw.length < 3) continue;
+    if (lc.includes(kw)) hits++;
+  }
+  return hits / Math.max(1, topicKeywords.length);
 }
 
 /** Extract a sentence-bounded contiguous excerpt of 100–180 word from markdown. */
