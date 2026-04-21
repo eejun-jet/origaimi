@@ -35,6 +35,22 @@ CRITICAL RULES on assessment_mode:
 - For each paper, classify the mode of assessment as one of: "written" (default), "oral" (spoken response), "listening" (audio comprehension), "practical" (lab / hands-on).
 - English Language papers typically have a Paper 3 Listening + Paper 4 Oral. Combined Science Paper 5 is Practical.
 
+CRITICAL RULES on Assessment Objectives (AOs):
+- Locate the section labelled "Assessment Objectives" (also: "Aims of Assessment", "Scheme of Assessment", or appearing as a table titled AO1/AO2/AO3).
+- Capture each AO VERBATIM — code (e.g. "AO1"), title (e.g. "Knowledge with Understanding"), and full descriptor.
+- If the syllabus publishes a per-paper weighting table (rows = AOs, columns = papers, values = % marks), emit one assessment_objectives entry per paper × AO with the right weighting_percent and paper_number.
+- If the AO weighting is global (one set of % across the whole syllabus), emit one entry per AO with paper_number = null.
+- If the syllabus has NO Assessment Objectives section (some Foundation / Primary syllabuses don't), return an empty assessment_objectives array — do not invent.
+
+CRITICAL RULES on outcome categorisation (per topic):
+- For each topic, classify its learning outcomes into one or more categories: "knowledge", "skills", "values", "attitudes".
+  • knowledge: recall / state / define / list / describe / identify / name / understand
+  • skills: apply / calculate / draw / construct / analyse / evaluate / interpret / solve / measure / classify
+  • values: appreciate / value / respect / care for / cherish
+  • attitudes: show interest / be willing to / commit to / take responsibility for
+- Set outcome_categories to the union across all learning outcomes in the topic. If unclear, default to ["knowledge"].
+- For each topic, also map ao_codes — which Assessment Objectives this topic primarily addresses (e.g. ["AO1", "AO2"]). If no AOs were extracted for the document, return an empty array.
+
 You will be given the raw text of a syllabus document. Build a flat list of topics where each topic carries:
 - topic_code (verbatim, or null)
 - parent_code (the code of its parent in the hierarchy, or null for top-level)
@@ -43,6 +59,8 @@ You will be given the raw text of a syllabus document. Build a flat list of topi
 - title (short readable name)
 - learning_outcomes (array of "students should be able to..." statements, verbatim where possible)
 - suggested_blooms (subset of: Remember, Understand, Apply, Analyse, Evaluate, Create)
+- outcome_categories (subset of: knowledge, skills, values, attitudes)
+- ao_codes (array of AO codes this topic addresses)
 - depth (0 = strand, 1 = sub-strand, 2 = topic, 3 = sub-topic)
 - paper_number (which paper this topic belongs to, or null)
 - section (discipline section the topic belongs to in multi-track syllabuses, or null)
@@ -53,7 +71,7 @@ const TOOL = {
   type: "function",
   function: {
     name: "save_syllabus",
-    description: "Save the extracted syllabus structure including any sub-papers.",
+    description: "Save the extracted syllabus structure including any sub-papers and assessment objectives.",
     parameters: {
       type: "object",
       properties: {
@@ -91,6 +109,22 @@ const TOOL = {
             additionalProperties: false,
           },
         },
+        assessment_objectives: {
+          type: "array",
+          description: "Verbatim Assessment Objectives. Empty array if syllabus does not publish AOs.",
+          items: {
+            type: "object",
+            properties: {
+              paper_number: { type: ["string", "null"], description: "Paper this weighting applies to, or null if global across all papers." },
+              code: { type: "string", description: "e.g. 'AO1', 'AO2', 'AO3'." },
+              title: { type: ["string", "null"], description: "Short title, e.g. 'Knowledge with Understanding'." },
+              description: { type: ["string", "null"], description: "Full descriptor verbatim from the syllabus." },
+              weighting_percent: { type: ["integer", "null"], description: "Percentage of marks if published." },
+            },
+            required: ["paper_number", "code", "title", "description", "weighting_percent"],
+            additionalProperties: false,
+          },
+        },
         topics: {
           type: "array",
           items: {
@@ -104,16 +138,18 @@ const TOOL = {
               title: { type: "string" },
               learning_outcomes: { type: "array", items: { type: "string" } },
               suggested_blooms: { type: "array", items: { type: "string", enum: ["Remember", "Understand", "Apply", "Analyse", "Evaluate", "Create"] } },
+              outcome_categories: { type: "array", items: { type: "string", enum: ["knowledge", "skills", "values", "attitudes"] }, description: "Default ['knowledge'] if unclear." },
+              ao_codes: { type: "array", items: { type: "string" }, description: "AO codes this topic addresses, e.g. ['AO1','AO2']. Empty if no AOs in syllabus." },
               depth: { type: "integer", minimum: 0, maximum: 5 },
               paper_number: { type: ["string", "null"], description: "Which paper this topic belongs to (matches papers[].paper_number), or null if it applies to all." },
               section: { type: ["string", "null"], description: "Discipline section heading (Physics/Chemistry/Biology), or null." },
             },
-            required: ["topic_code", "parent_code", "title", "learning_outcomes", "suggested_blooms", "depth", "paper_number", "section"],
+            required: ["topic_code", "parent_code", "title", "learning_outcomes", "suggested_blooms", "outcome_categories", "ao_codes", "depth", "paper_number", "section"],
             additionalProperties: false,
           },
         },
       },
-      required: ["document", "papers", "topics"],
+      required: ["document", "papers", "assessment_objectives", "topics"],
       additionalProperties: false,
     },
   },
@@ -134,7 +170,6 @@ async function fileToText(supabase: any, filePath: string, mimeType: string): Pr
 
 function composePaperCode(syllabusCode: string | null, paperNumber: string | null): string | null {
   if (!syllabusCode || !paperNumber) return null;
-  // Pad numeric paper numbers to 2 digits; preserve non-numeric verbatim.
   const padded = /^\d+$/.test(paperNumber) ? paperNumber.padStart(2, "0") : paperNumber;
   return `${syllabusCode}/${padded}`;
 }
@@ -170,14 +205,14 @@ Deno.serve(async (req) => {
       userMessage = {
         role: "user",
         content: [
-          { type: "text", text: `Extract the full syllabus structure from this document, including ALL papers if multi-paper, and tag papers/topics with discipline section + assessment mode where applicable. Title hint: "${doc.title}". Subject hint: ${doc.subject ?? "unknown"}. Level hint: ${doc.level ?? "unknown"}.` },
+          { type: "text", text: `Extract the full syllabus structure from this document, including ALL papers if multi-paper, the Assessment Objectives section if present, and tag papers/topics with discipline section + assessment mode where applicable. For each topic, classify outcome categories (knowledge/skills/values/attitudes) and map AO codes. Title hint: "${doc.title}". Subject hint: ${doc.subject ?? "unknown"}. Level hint: ${doc.level ?? "unknown"}.` },
           { type: "image_url", image_url: { url: `data:${mime};base64,${b64}` } },
         ],
       };
     } else {
       userMessage = {
         role: "user",
-        content: `Extract the full syllabus structure from this document, including ALL papers if multi-paper, and tag papers/topics with discipline section + assessment mode where applicable.\n\nTitle hint: "${doc.title}"\nSubject hint: ${doc.subject ?? "unknown"}\nLevel hint: ${doc.level ?? "unknown"}\n\n--- DOCUMENT TEXT ---\n${content.slice(0, 200000)}`,
+        content: `Extract the full syllabus structure from this document, including ALL papers if multi-paper, the Assessment Objectives section if present, and tag papers/topics with discipline section + assessment mode where applicable. For each topic, classify outcome categories (knowledge/skills/values/attitudes) and map AO codes.\n\nTitle hint: "${doc.title}"\nSubject hint: ${doc.subject ?? "unknown"}\nLevel hint: ${doc.level ?? "unknown"}\n\n--- DOCUMENT TEXT ---\n${content.slice(0, 200000)}`,
       };
     }
 
@@ -217,11 +252,10 @@ Deno.serve(async (req) => {
     const docMeta = args.document ?? {};
     const papers: any[] = args.papers ?? [];
     const topics: any[] = args.topics ?? [];
+    const aos: any[] = args.assessment_objectives ?? [];
 
-    // Resolve final syllabus_code (user-supplied takes precedence).
     const finalSyllabusCode = doc.syllabus_code ?? docMeta.syllabus_code ?? null;
 
-    // Update document metadata
     await supabase.from("syllabus_documents").update({
       syllabus_code: finalSyllabusCode,
       paper_code: doc.paper_code ?? docMeta.paper_code ?? null,
@@ -232,11 +266,11 @@ Deno.serve(async (req) => {
       parse_status: "parsed",
     }).eq("id", documentId);
 
-    // Replace existing papers + topics for this doc
+    // Wipe existing children
+    await supabase.from("syllabus_assessment_objectives").delete().eq("source_doc_id", documentId);
     await supabase.from("syllabus_topics").delete().eq("source_doc_id", documentId);
     await supabase.from("syllabus_papers").delete().eq("source_doc_id", documentId);
 
-    // Ensure at least one paper exists (defensive — schema requires it)
     const safePapers = papers.length > 0
       ? papers
       : [{ paper_number: "1", component_name: null, marks: null, weighting_percent: null, duration_minutes: null, topic_theme: null, section: null, track_tags: [], is_optional: false, assessment_mode: "written" }];
@@ -267,7 +301,6 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: papErr.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Build paper_number -> id map
     const paperIdByNumber = new Map<string, string>();
     for (const p of insertedPapers ?? []) paperIdByNumber.set(String(p.paper_number), p.id);
     const fallbackPaperId = insertedPapers?.[0]?.id ?? null;
@@ -276,6 +309,9 @@ Deno.serve(async (req) => {
       const rows = topics.map((t, i) => {
         const num = t.paper_number != null ? String(t.paper_number) : null;
         const paper_id = num ? (paperIdByNumber.get(num) ?? fallbackPaperId) : fallbackPaperId;
+        const cats = Array.isArray(t.outcome_categories) && t.outcome_categories.length > 0
+          ? t.outcome_categories
+          : ["knowledge"];
         return {
           source_doc_id: documentId,
           paper_id,
@@ -287,6 +323,8 @@ Deno.serve(async (req) => {
           title: t.title,
           learning_outcomes: t.learning_outcomes ?? [],
           suggested_blooms: t.suggested_blooms ?? [],
+          outcome_categories: cats,
+          ao_codes: Array.isArray(t.ao_codes) ? t.ao_codes : [],
           depth: t.depth ?? 0,
           position: i,
           subject: doc.subject ?? docMeta.subject ?? null,
@@ -302,7 +340,28 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ ok: true, topicCount: topics.length, paperCount: paperRows.length, document: docMeta }), {
+    if (aos.length > 0) {
+      const aoRows = aos.map((a, i) => {
+        const num = a.paper_number != null ? String(a.paper_number) : null;
+        const paper_id = num ? (paperIdByNumber.get(num) ?? null) : null;
+        return {
+          source_doc_id: documentId,
+          paper_id,
+          code: String(a.code ?? `AO${i + 1}`),
+          title: a.title ?? null,
+          description: a.description ?? null,
+          weighting_percent: a.weighting_percent ?? null,
+          position: i,
+        };
+      });
+      const { error: aoErr } = await supabase.from("syllabus_assessment_objectives").insert(aoRows);
+      if (aoErr) {
+        console.error("Insert AOs error", aoErr);
+        // Don't fail the whole parse — AOs are best-effort
+      }
+    }
+
+    return new Response(JSON.stringify({ ok: true, topicCount: topics.length, paperCount: paperRows.length, aoCount: aos.length, document: docMeta }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

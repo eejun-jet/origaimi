@@ -55,9 +55,21 @@ type Topic = {
   title: string;
   learning_outcomes: string[];
   suggested_blooms: string[];
+  outcome_categories: string[];
+  ao_codes: string[];
   depth: number;
   position: number;
   section: string | null;
+};
+
+type AO = {
+  id: string;
+  paper_id: string | null;
+  code: string;
+  title: string | null;
+  description: string | null;
+  weighting_percent: number | null;
+  position: number;
 };
 
 const ALL_PAPERS = "__all__";
@@ -77,20 +89,23 @@ function SyllabusReview() {
   const [doc, setDoc] = useState<Doc | null>(null);
   const [papers, setPapers] = useState<Paper[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
+  const [aos, setAos] = useState<AO[]>([]);
   const [activePaperId, setActivePaperId] = useState<string>(ALL_PAPERS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
     setLoading(true);
-    const [{ data: d }, { data: ps }, { data: ts }] = await Promise.all([
+    const [{ data: d }, { data: ps }, { data: ts }, { data: aoData }] = await Promise.all([
       supabase.from("syllabus_documents").select("*").eq("id", id).single(),
       supabase.from("syllabus_papers").select("*").eq("source_doc_id", id).order("position", { ascending: true }),
       supabase.from("syllabus_topics").select("*").eq("source_doc_id", id).order("position", { ascending: true }),
+      supabase.from("syllabus_assessment_objectives").select("*").eq("source_doc_id", id).order("position", { ascending: true }),
     ]);
     setDoc(d as Doc);
     setPapers((ps as Paper[]) ?? []);
     setTopics((ts as Topic[]) ?? []);
+    setAos((aoData as AO[]) ?? []);
     setLoading(false);
   };
 
@@ -120,6 +135,7 @@ function SyllabusReview() {
         topic_code: null, parent_code: null, learning_outcome_code: null,
         strand: null, sub_strand: null, title: "New topic",
         learning_outcomes: [], suggested_blooms: [],
+        outcome_categories: ["knowledge"], ao_codes: [],
         depth: 2, position: prev.length,
         section: null,
       },
@@ -179,6 +195,8 @@ function SyllabusReview() {
           title: t.title,
           learning_outcomes: t.learning_outcomes,
           suggested_blooms: t.suggested_blooms,
+          outcome_categories: t.outcome_categories ?? [],
+          ao_codes: t.ao_codes ?? [],
           depth: t.depth,
           position: i,
           subject: doc.subject,
@@ -187,6 +205,23 @@ function SyllabusReview() {
         }));
         const { error: insErr } = await supabase.from("syllabus_topics").insert(rows);
         if (insErr) throw insErr;
+      }
+
+      // Replace AOs (similar approach)
+      const { error: aoDelErr } = await supabase.from("syllabus_assessment_objectives").delete().eq("source_doc_id", id);
+      if (aoDelErr) throw aoDelErr;
+      if (aos.length > 0) {
+        const aoRows = aos.map((a, i) => ({
+          source_doc_id: id,
+          paper_id: a.paper_id,
+          code: a.code,
+          title: a.title,
+          description: a.description,
+          weighting_percent: a.weighting_percent,
+          position: i,
+        }));
+        const { error: aoInsErr } = await supabase.from("syllabus_assessment_objectives").insert(aoRows);
+        if (aoInsErr) throw aoInsErr;
       }
 
       toast.success("Saved");
@@ -416,6 +451,72 @@ function SyllabusReview() {
           </Card>
         )}
 
+        {/* Assessment Objectives panel */}
+        <Card className="mb-4 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-medium">Assessment Objectives</h2>
+              <p className="text-xs text-muted-foreground">Construct validity reference. Empty = syllabus does not publish AOs.</p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setAos((prev) => [
+                  ...prev,
+                  {
+                    id: crypto.randomUUID(),
+                    paper_id: activePaperId !== ALL_PAPERS && activePaperId !== UNASSIGNED ? activePaperId : null,
+                    code: `AO${prev.length + 1}`,
+                    title: null,
+                    description: null,
+                    weighting_percent: null,
+                    position: prev.length,
+                  },
+                ])
+              }
+            >
+              <Plus className="mr-2 h-4 w-4" /> Add AO
+            </Button>
+          </div>
+          {aos.length === 0 ? (
+            <p className="text-xs italic text-muted-foreground">No AOs extracted. Add manually if your syllabus publishes them.</p>
+          ) : (
+            <div className="space-y-2">
+              {aos
+                .filter((a) => activePaperId === ALL_PAPERS || !a.paper_id || a.paper_id === activePaperId)
+                .map((a) => {
+                  const idx = aos.findIndex((x) => x.id === a.id);
+                  return (
+                    <div key={a.id} className="grid grid-cols-1 gap-2 rounded-md border border-border p-2 sm:grid-cols-12">
+                      <div className="sm:col-span-2">
+                        <Label className="text-xs">Code</Label>
+                        <Input className="font-mono" value={a.code} onChange={(e) => setAos((prev) => prev.map((x, i) => i === idx ? { ...x, code: e.target.value } : x))} />
+                      </div>
+                      <div className="sm:col-span-3">
+                        <Label className="text-xs">Title</Label>
+                        <Input value={a.title ?? ""} onChange={(e) => setAos((prev) => prev.map((x, i) => i === idx ? { ...x, title: e.target.value || null } : x))} placeholder="Knowledge with Understanding" />
+                      </div>
+                      <div className="sm:col-span-5">
+                        <Label className="text-xs">Description</Label>
+                        <Input value={a.description ?? ""} onChange={(e) => setAos((prev) => prev.map((x, i) => i === idx ? { ...x, description: e.target.value || null } : x))} />
+                      </div>
+                      <div className="sm:col-span-1">
+                        <Label className="text-xs">% wt</Label>
+                        <Input type="number" value={a.weighting_percent ?? ""} onChange={(e) => setAos((prev) => prev.map((x, i) => i === idx ? { ...x, weighting_percent: e.target.value ? parseInt(e.target.value, 10) : null } : x))} />
+                      </div>
+                      <div className="flex items-end justify-end sm:col-span-1">
+                        <Button variant="ghost" size="sm" onClick={() => setAos((prev) => prev.filter((x) => x.id !== a.id))}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+        </Card>
+
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-medium">
             Extracted topics ({filteredTopics.length}{filteredTopics.length !== topics.length ? ` of ${topics.length}` : ""})
@@ -519,10 +620,16 @@ function SyllabusReview() {
                       </ul>
                     </div>
                   )}
-                  {(t.suggested_blooms?.length ?? 0) > 0 && (
+                  {((t.suggested_blooms?.length ?? 0) > 0 || (t.outcome_categories?.length ?? 0) > 0 || (t.ao_codes?.length ?? 0) > 0) && (
                     <div className="flex flex-wrap gap-1 sm:col-span-12">
-                      {t.suggested_blooms.map((b) => (
-                        <Badge key={b} variant="outline" className="text-xs">{b}</Badge>
+                      {(t.suggested_blooms ?? []).map((b) => (
+                        <Badge key={`b-${b}`} variant="outline" className="text-xs">{b}</Badge>
+                      ))}
+                      {(t.outcome_categories ?? []).map((c) => (
+                        <Badge key={`c-${c}`} variant="secondary" className="text-xs capitalize">{c}</Badge>
+                      ))}
+                      {(t.ao_codes ?? []).map((a) => (
+                        <Badge key={`a-${a}`} className="bg-primary/15 text-xs font-mono text-primary hover:bg-primary/20">{a}</Badge>
                       ))}
                     </div>
                   )}

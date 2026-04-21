@@ -81,13 +81,15 @@ export type PaperTopic = {
   subStrand: string | null;
   learningOutcomes: string[];
   suggestedBlooms: string[];
+  outcomeCategories: string[];
+  aoCodes: string[];
   section: string | null;
 };
 
 export async function loadPaperTopics(paperId: string): Promise<PaperTopic[]> {
   const { data, error } = await supabase
     .from("syllabus_topics")
-    .select("id, topic_code, parent_code, title, depth, position, strand, sub_strand, learning_outcomes, suggested_blooms, section")
+    .select("id, topic_code, parent_code, title, depth, position, strand, sub_strand, learning_outcomes, suggested_blooms, outcome_categories, ao_codes, section")
     .eq("paper_id", paperId)
     .order("position", { ascending: true });
   if (error) throw error;
@@ -104,7 +106,7 @@ export async function loadPaperTopics(paperId: string): Promise<PaperTopic[]> {
 export async function loadDocTopics(docId: string): Promise<PaperTopic[]> {
   const { data, error } = await supabase
     .from("syllabus_topics")
-    .select("id, topic_code, parent_code, title, depth, position, strand, sub_strand, learning_outcomes, suggested_blooms, section")
+    .select("id, topic_code, parent_code, title, depth, position, strand, sub_strand, learning_outcomes, suggested_blooms, outcome_categories, ao_codes, section")
     .eq("source_doc_id", docId)
     .order("position", { ascending: true });
   if (error) throw error;
@@ -122,6 +124,8 @@ function mapTopicRow(t: {
   sub_strand: string | null;
   learning_outcomes: string[] | null;
   suggested_blooms: string[] | null;
+  outcome_categories: string[] | null;
+  ao_codes: string[] | null;
   section: string | null;
 }): PaperTopic {
   return {
@@ -135,6 +139,36 @@ function mapTopicRow(t: {
     subStrand: t.sub_strand,
     learningOutcomes: t.learning_outcomes ?? [],
     suggestedBlooms: t.suggested_blooms ?? [],
+    outcomeCategories: (t.outcome_categories ?? []) as string[],
+    aoCodes: (t.ao_codes ?? []) as string[],
     section: t.section,
   };
+}
+
+export type AssessmentObjective = {
+  id: string;
+  paperId: string | null;
+  code: string;
+  title: string | null;
+  description: string | null;
+  weightingPercent: number | null;
+  position: number;
+};
+
+export async function loadDocAssessmentObjectives(docId: string): Promise<AssessmentObjective[]> {
+  const { data, error } = await supabase
+    .from("syllabus_assessment_objectives")
+    .select("id, paper_id, code, title, description, weighting_percent, position")
+    .eq("source_doc_id", docId)
+    .order("position", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map((a) => ({
+    id: a.id,
+    paperId: a.paper_id,
+    code: a.code,
+    title: a.title,
+    description: a.description,
+    weightingPercent: a.weighting_percent,
+    position: a.position,
+  }));
 }

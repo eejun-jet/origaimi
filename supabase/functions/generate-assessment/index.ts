@@ -14,6 +14,8 @@ interface BlueprintRow {
   marks: number;
   topic_code?: string | null;
   learning_outcomes?: string[];
+  ao_codes?: string[];
+  outcome_categories?: string[];
 }
 
 const QUESTION_TYPE_LABELS: Record<string, string> = {
@@ -54,7 +56,13 @@ function buildUserPrompt(opts: {
       const los = r.learning_outcomes && r.learning_outcomes.length > 0
         ? `\n   Learning outcomes: ${r.learning_outcomes.slice(0, 4).map((lo) => `• ${lo}`).join(" ")}`
         : "";
-      return `${i + 1}. Topic${code}: "${r.topic}" — Bloom: ${r.bloom} — ${r.marks} marks${los}`;
+      const aos = r.ao_codes && r.ao_codes.length > 0
+        ? `\n   Assessment Objectives to address: ${r.ao_codes.join(", ")}`
+        : "";
+      const cats = r.outcome_categories && r.outcome_categories.length > 0
+        ? `\n   Outcome category: ${r.outcome_categories.join(" / ")}`
+        : "";
+      return `${i + 1}. Topic${code}: "${r.topic}" — Bloom: ${r.bloom} — ${r.marks} marks${los}${aos}${cats}`;
     })
     .join("\n");
 

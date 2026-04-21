@@ -14,8 +14,8 @@ import {
   SUBJECTS, LEVELS, ASSESSMENT_TYPES, QUESTION_TYPES, QUESTION_TYPES_BY_MODE, ITEM_SOURCES, BLOOMS, topicsFor,
 } from "@/lib/syllabus";
 import {
-  loadSyllabusLibrary, loadPaperTopics, loadDocTopics,
-  type SyllabusLibraryDoc, type SyllabusLibraryPaper, type PaperTopic,
+  loadSyllabusLibrary, loadPaperTopics, loadDocTopics, loadDocAssessmentObjectives,
+  type SyllabusLibraryDoc, type SyllabusLibraryPaper, type PaperTopic, type AssessmentObjective,
 } from "@/lib/syllabus-data";
 import { ChevronLeft, ChevronRight, Sparkles, Loader2, BookOpen, Upload } from "lucide-react";
 import { Link } from "@tanstack/react-router";
@@ -32,6 +32,8 @@ type BlueprintRow = {
   marks: number;
   topic_code?: string | null;
   learning_outcomes?: string[];
+  ao_codes?: string[];
+  outcome_categories?: string[];
 };
 type Blueprint = BlueprintRow[];
 
@@ -46,6 +48,7 @@ function NewAssessment() {
   const [libLoading, setLibLoading] = useState(true);
   const [selectedPaperKey, setSelectedPaperKey] = useState<string>(""); // `${docId}:${paperId}`
   const [paperTopics, setPaperTopics] = useState<PaperTopic[]>([]);
+  const [docAOs, setDocAOs] = useState<AssessmentObjective[]>([]);
   const [topicsLoading, setTopicsLoading] = useState(false);
 
   useEffect(() => {
@@ -83,6 +86,7 @@ function NewAssessment() {
   useEffect(() => {
     if (!selected) {
       setPaperTopics([]);
+      setDocAOs([]);
       return;
     }
     const { doc, paper } = selected;
@@ -91,14 +95,18 @@ function NewAssessment() {
     if (paper.durationMinutes) setDuration(paper.durationMinutes);
     if (paper.marks) setTotalMarks(paper.marks);
     setTopicsLoading(true);
-    loadPaperTopics(paper.id)
-      .then(async (t) => {
+    Promise.all([
+      loadPaperTopics(paper.id).then(async (t) => {
         if (t.length === 0 && (paper.trackTags?.length ?? 0) > 1) {
-          const sibling = await loadDocTopics(doc.id);
-          setPaperTopics(sibling);
-        } else {
-          setPaperTopics(t);
+          return loadDocTopics(doc.id);
         }
+        return t;
+      }),
+      loadDocAssessmentObjectives(doc.id),
+    ])
+      .then(([t, aos]) => {
+        setPaperTopics(t);
+        setDocAOs(aos);
       })
       .catch((e) => toast.error(e.message ?? "Could not load topics"))
       .finally(() => setTopicsLoading(false));
@@ -151,6 +159,8 @@ function NewAssessment() {
         marks: per,
         topic_code: t.topicCode,
         learning_outcomes: t.learningOutcomes,
+        ao_codes: t.aoCodes,
+        outcome_categories: t.outcomeCategories,
       })));
     } else {
       if (topics.length === 0) { setBlueprint([]); return; }
@@ -538,6 +548,7 @@ function NewAssessment() {
                   </tfoot>
                 </table>
               </div>
+              <CoverageStrips blueprint={blueprint} aos={docAOs.filter((a) => !a.paperId || a.paperId === selected?.paper.id)} />
             </div>
           )}
 
@@ -672,6 +683,137 @@ function Stepper({ step }: { step: number }) {
             <span className={`hidden text-xs sm:inline ${active ? "text-foreground font-medium" : "text-muted-foreground"}`}>{l}</span>
             {n < labels.length && <div className="h-px flex-1 bg-border" />}
           </div>
+        );
+      })}
+    </div>
+  );
+}
+
+const AO_COLORS: Record<string, string> = {
+  AO1: "bg-chart-1",
+  AO2: "bg-chart-2",
+  AO3: "bg-chart-3",
+  AO4: "bg-chart-4",
+  AO5: "bg-chart-5",
+  Unmapped: "bg-muted-foreground/40",
+};
+const CAT_COLORS: Record<string, string> = {
+  knowledge: "bg-chart-1",
+  skills: "bg-chart-2",
+  values: "bg-chart-3",
+  attitudes: "bg-chart-4",
+  Unmapped: "bg-muted-foreground/40",
+};
+
+function CoverageStrips({ blueprint, aos }: { blueprint: Blueprint; aos: AssessmentObjective[] }) {
+  const aoMarks: Record<string, number> = {};
+  const catMarks: Record<string, number> = {};
+  let totalMarks = 0;
+  for (const row of blueprint) {
+    const m = row.marks || 0;
+    totalMarks += m;
+    const codes = row.ao_codes && row.ao_codes.length > 0 ? row.ao_codes : ["Unmapped"];
+    const share = m / codes.length;
+    for (const c of codes) aoMarks[c] = (aoMarks[c] ?? 0) + share;
+    const cats = row.outcome_categories && row.outcome_categories.length > 0 ? row.outcome_categories : ["Unmapped"];
+    const catShare = m / cats.length;
+    for (const k of cats) catMarks[k] = (catMarks[k] ?? 0) + catShare;
+  }
+
+  const hasAOs = aos.length > 0;
+  const publishedAOs = Array.from(new Set(aos.map((a) => a.code)));
+  const missingAOs = hasAOs ? publishedAOs.filter((c) => !aoMarks[c] || aoMarks[c] === 0) : [];
+
+  const warnings: string[] = [];
+  if (hasAOs && totalMarks > 0) {
+    for (const code of publishedAOs) {
+      const published = aos.find((a) => a.code === code)?.weightingPercent;
+      if (published == null) continue;
+      const actualPct = ((aoMarks[code] ?? 0) / totalMarks) * 100;
+      const diff = Math.abs(actualPct - published);
+      if (diff > 15) {
+        warnings.push(`${code}: ${actualPct.toFixed(0)}% vs published ${published}% (off by ${diff.toFixed(0)}%)`);
+      }
+    }
+  }
+  if (missingAOs.length > 0) warnings.push(`Not addressed: ${missingAOs.join(", ")}`);
+
+  if (totalMarks === 0) return null;
+
+  return (
+    <div className="space-y-4 rounded-lg border border-border bg-muted/30 p-4">
+      <div>
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="text-sm font-medium">Assessment Objective coverage</h3>
+          {!hasAOs && <span className="text-xs text-muted-foreground">No AOs published for this syllabus</span>}
+        </div>
+        <Bar segments={Object.entries(aoMarks).map(([code, m]) => ({
+          label: code,
+          value: m,
+          color: AO_COLORS[code] ?? "bg-chart-5",
+        }))} total={totalMarks} />
+        {hasAOs && (
+          <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+            {aos.map((a) => {
+              const actualPct = totalMarks > 0 ? ((aoMarks[a.code] ?? 0) / totalMarks) * 100 : 0;
+              return (
+                <div key={a.id} className="flex items-baseline gap-2">
+                  <span className="font-mono font-medium text-foreground">{a.code}</span>
+                  {a.title && <span className="truncate">{a.title}</span>}
+                  <span className="ml-auto shrink-0 tabular-nums">
+                    {actualPct.toFixed(0)}%{a.weightingPercent != null ? ` / target ${a.weightingPercent}%` : ""}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h3 className="mb-2 text-sm font-medium">Knowledge / Skills / Values coverage</h3>
+        <Bar segments={Object.entries(catMarks).map(([k, m]) => ({
+          label: k,
+          value: m,
+          color: CAT_COLORS[k] ?? "bg-chart-5",
+        }))} total={totalMarks} />
+        <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
+          {Object.entries(catMarks).map(([k, m]) => (
+            <span key={k} className="flex items-center gap-1.5">
+              <span className={`h-2 w-2 rounded-sm ${CAT_COLORS[k] ?? "bg-chart-5"}`} />
+              <span className="capitalize">{k}</span>
+              <span className="tabular-nums">{((m / totalMarks) * 100).toFixed(0)}%</span>
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {warnings.length > 0 && (
+        <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive">
+          <p className="font-medium">Construct validity check</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-4">
+            {warnings.map((w, i) => <li key={i}>{w}</li>)}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Bar({ segments, total }: { segments: { label: string; value: number; color: string }[]; total: number }) {
+  if (total === 0) return null;
+  return (
+    <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted">
+      {segments.map((s, i) => {
+        const pct = (s.value / total) * 100;
+        if (pct <= 0) return null;
+        return (
+          <div
+            key={i}
+            className={`${s.color} h-full transition-all`}
+            style={{ width: `${pct}%` }}
+            title={`${s.label}: ${pct.toFixed(0)}%`}
+          />
         );
       })}
     </div>
