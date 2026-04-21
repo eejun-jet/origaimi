@@ -1,81 +1,77 @@
 
-# Wire the wizard to your real syllabuses
 
-Right now the assessment wizard reads from a hardcoded topic map. Once you've parsed even one syllabus (like 2261), those rich, code-tagged topics sit unused. This change makes the wizard **syllabus-first** — teachers pick a real uploaded syllabus, then a paper, then topics flow in automatically with their MOE codes intact.
+# Multi-track syllabus support + smarter parsing
 
-## The new wizard flow
+The 5 new syllabuses surface one real new challenge (multi-track papers in 5086) and a few smaller refinements. Plan covers both.
 
-**Step 1 — Pick your syllabus paper** (replaces "Subject + Level" dropdowns)
+## 1. Multi-track papers (5086 Combined Science)
 
-A grouped picker showing every parsed syllabus in your library:
+Combined Science 5086 has 5 paper components, but a candidate only sits 4 — which 4 depends on their subject combination (Phy/Chem, Phy/Bio, Chem/Bio).
+
+**Schema additions** to `syllabus_papers`:
 ```text
-2261 Combined Humanities (2026)
-  ├─ Paper 1 · 2261/01 · Social Studies (50m, 1h45)
-  └─ Paper 2 · 2261/02 · History (50m, 1h50)
-
-6091 Physics (2025)
-  └─ Paper 1 · 6091/01 (40m, 1h15)
++ section          text   -- "Physics" | "Chemistry" | "Biology" | null
++ track_tags       text[] -- ["physics", "chemistry"] for cross-section papers
++ is_optional      bool   -- false (most) | true (rare alternative papers)
 ```
-Selecting a paper auto-fills subject, level, and prefills duration + total marks from the syllabus metadata. Teacher can override.
 
-**Step 2 — Assessment type & basics**
-Title, assessment type (Topical / Mid-year / Prelim / Weighted Assessment / Alternative Assessment), duration, total marks. New types added to match what you mentioned:
-- `weighted_assessment` — WA1, WA2, WA3
-- `alternative_assessment` — performance task, project, oral, practical
-- `end_of_year` — EYE
-- (existing) Formative, Topical, Mid-year, Prelim, Mock
-
-**Step 3 — Topics from the syllabus**
-Shows the actual parsed topic tree for the selected paper, with codes as muted prefixes:
+`syllabus_topics` already has `paper_id`. Add:
 ```text
-☐ 1.1 · Living in a Diverse Society
-☐ 1.2 · Working for the Good of Society
-☐ 2.1 · Bonding Singapore
++ section          text   -- denormalised from paper for fast filtering
 ```
-Hierarchy preserved — parent topics expand to show sub-strands. Multi-select.
 
-**Step 4 — TOS (Table of Specifications)**
-Auto-generated from selected topics, same as today. Each row now also stores `topic_code` so it flows through to questions and exports.
-
-**Step 5 — Question types & sources** — unchanged.
-
-**Step 6 — References & instructions** — unchanged.
-
-**Step 7 — Generate** — unchanged, but the AI prompt now receives the syllabus code, paper code, and learning outcome codes per topic for tighter grounding.
-
-## Schema additions
-
-`assessments` table gets three nullable columns (additive, no breakage):
+This lets us model:
 ```text
-+ syllabus_doc_id   uuid  -- which syllabus document
-+ syllabus_paper_id uuid  -- which paper within it
-+ syllabus_code     text  -- denormalised for fast display ("2261/02")
+5086 Paper 1 (MCQ) → section: null, track_tags: ["physics","chemistry","biology"]
+5086 Paper 2       → section: "Physics"
+5086 Paper 3       → section: "Chemistry"
+5086 Paper 4       → section: "Biology"
+5086 Paper 5       → section: null, track_tags: ["physics","chemistry","biology"] (Practical)
 ```
-Existing draft assessments without these stay valid — the wizard just treats them as legacy.
 
-`assessments.blueprint` JSON gains an optional `topic_code` field per row. Old rows without it still render.
+**Wizard impact**: when a teacher picks a Combined Science paper, they additionally pick a *section* (Physics/Chemistry/Biology). Topics filter to that section. For single-section papers (Paper 2/3/4) the section is auto-locked.
 
-## Fallback behaviour
+## 2. Parser improvements
 
-If the user has **zero parsed syllabuses**, the wizard falls back to the current hardcoded `SUBJECTS / LEVELS / topicsFor()` flow with a banner: *"Upload a syllabus to unlock code-tagged topics."* This keeps the app usable while your library grows.
+Update `parse-syllabus` system prompt to:
 
-## What this unlocks immediately
+- Detect the **scheme of assessment table** more robustly — already works for 2261/4052/1184, needs to handle the multi-row 5086 layout where one paper draws from multiple sections.
+- Recognise **section headings** like "Paper 1 Social Studies" / "Paper 2 Geography" / "PHYSICS SECTION" and tag downstream topics with `section`.
+- For combined-subject syllabuses (2260, 2262, 2261), set `paper.component_name` from the section heading verbatim ("Social Studies", "Geography", "Literature in English").
+- For oral/listening/practical papers (English P3/P4, Sci P5), set a new `paper.assessment_mode` field: `"written" | "oral" | "listening" | "practical"`. Stored as a column on `syllabus_papers`.
 
-- **Real MOE alignment** — topics, codes, and learning outcomes from the actual document
-- **Multi-paper aware** — pick Paper 2 of 2261 and only get History topics, not Social Studies
-- **Better AI generation** — prompt includes `Aligned to MOE 2261/02 §1.2` so questions cite the right reference
-- **Coach-ready** — TOS Alignment Meter can later compare generated questions against the exact learning outcomes from the syllabus
+## 3. Wizard polish
 
-## Out of scope this round
+- **Step 1 paper picker** gains a section sub-selector when the chosen paper has multiple `track_tags`. Default to first section.
+- **Assessment mode badge** on the picker — "Oral", "Practical", "Listening" — so teachers know what they're building.
+- For **oral/listening** papers, the question-types step pre-selects appropriate types (e.g. "Spoken Response", "Listening MCQ") and hides irrelevant ones (Essay, Structured).
 
-- Cross-paper assessments (e.g. a mock that pulls from both Paper 1 and Paper 2 of the same syllabus) — currently one paper per assessment
-- Auto-suggesting marks distribution based on the syllabus's own weighting table — manual for now, easy follow-up
-- Past-paper question pulling from the bank filtered by syllabus code — separate feature
+New question types to add to `src/lib/syllabus.ts`:
+```text
++ { id: "spoken_response", label: "Spoken response" }
++ { id: "listening_mcq",   label: "Listening MCQ" }
++ { id: "note_taking",     label: "Note-taking" }
++ { id: "summary",         label: "Summary writing" }
+```
 
-## Technical notes
+## 4. Out of scope (flagging only)
 
-- New file `src/lib/syllabus-data.ts` with helpers: `loadSyllabusLibrary()`, `loadPaperTopics(paperId)` — both query Supabase directly from the client (RLS already open in trial mode).
-- `src/routes/new.tsx` — Step 1 becomes the syllabus picker; `availableTopics` derived from `loadPaperTopics` instead of `topicsFor()`. Hardcoded fallback kept.
-- `src/lib/syllabus.ts` — keep as fallback, add new `EXTENDED_ASSESSMENT_TYPES` with WA / Alternative / EYE.
-- `supabase/functions/generate-assessment/index.ts` — accept new optional fields (`syllabusCode`, `paperCode`, blueprint rows with `topic_code`, `learning_outcomes`); inject them into the prompt as grounding context.
-- Migration: add three nullable columns to `assessments`.
+- **Shared components across syllabuses**: Paper 1 Social Studies is identical across 2260, 2261, 2262. Today we parse it 3 times. A future "shared component library" could dedupe this; not worth building yet — costs are low.
+- **Subject-combo presets**: e.g. picking "Physics + Chemistry" once and having the wizard always restrict to those tracks. Defer until a teacher asks.
+
+## 5. Migration impact
+
+- Additive only. New columns: `syllabus_papers.section`, `syllabus_papers.track_tags`, `syllabus_papers.is_optional`, `syllabus_papers.assessment_mode`, `syllabus_topics.section`.
+- Existing parsed docs (2261) have all `section = null`, all `track_tags = null` — they continue to work as today.
+- New uploads (4052, 1184, 2260, 2262 are all simple) will mostly leave these new fields null too. Only 5086 exercises the multi-track logic.
+
+## Files touched
+
+- `supabase/migrations/...` — add 5 columns
+- `supabase/functions/parse-syllabus/index.ts` — extended tool schema, updated system prompt, server-side paper_code composition already in place
+- `src/integrations/supabase/types.ts` — auto-regenerates
+- `src/lib/syllabus-data.ts` — surface `section`, `trackTags`, `assessmentMode` in the typed objects
+- `src/routes/admin.syllabus.$id.tsx` — show section + mode badges in the paper-switcher tabs; section editor per topic
+- `src/routes/new.tsx` — section sub-selector when multi-track; mode-aware question-type defaults
+- `src/lib/syllabus.ts` — add 4 new question types
+
