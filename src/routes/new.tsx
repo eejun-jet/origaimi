@@ -149,8 +149,21 @@ function NewAssessment() {
     }
   }, [useSyllabus, selectedTopicIds, topics, totalMarks, selectableSyllabusTopics]);
 
-  // Step 4
+  // Step 4 — question types & sources (mode-aware defaults)
+  const assessmentMode = selected?.paper.assessmentMode ?? "written";
+  const visibleQuestionTypes = useMemo(() => {
+    const allowedIds = QUESTION_TYPES_BY_MODE[assessmentMode] ?? QUESTION_TYPES_BY_MODE.written;
+    // For written mode show everything except oral/listening-only types; for non-written hide written-only.
+    if (assessmentMode === "written") {
+      return QUESTION_TYPES.filter((t) => !["spoken_response", "listening_mcq", "note_taking"].includes(t.id));
+    }
+    return QUESTION_TYPES.filter((t) => allowedIds.includes(t.id));
+  }, [assessmentMode]);
   const [qTypes, setQTypes] = useState<string[]>(["mcq", "short_answer", "structured"]);
+  useEffect(() => {
+    const defaults = QUESTION_TYPES_BY_MODE[assessmentMode] ?? ["mcq", "short_answer", "structured"];
+    setQTypes(defaults);
+  }, [assessmentMode]);
   const [sources, setSources] = useState<string[]>(["ai"]);
 
   // Step 5
