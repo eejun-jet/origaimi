@@ -264,20 +264,30 @@ function buildSectionUserPrompt(opts: {
       .join("\\n\\n");
     sbqSectionPreamble = `
 
-THIS IS A SOURCE-BASED QUESTION (SBQ) SECTION — SEAB FORMAT:
-  - The ENTIRE section is anchored on ONE single KEY INQUIRY QUESTION about "${sectionTopic}".
-  - You MUST write a clear inquiry question (a debatable, analytical line of inquiry — e.g. "How significant was X in causing Y?", "To what extent did X contribute to Y?", "Why did X happen?") and place it as the FIRST line of question 1's stem, followed by a blank line, then the sub-question.
-  - All ${section.num_questions} sub-questions investigate this SAME inquiry question using the SAME shared Sources ${labelList} below.
-  - Number sub-questions (a), (b), (c)… in order. Each sub-question's stem must explicitly name which source(s) it uses (e.g. "Study Source A.", "Compare Sources A and B.", "Use Sources A, B, and C.").
+THIS IS A SOURCE-BASED QUESTION (SBQ) SECTION — SEAB / MOE FORMAT:
+
+STRUCTURE — READ CAREFULLY:
+  - The ENTIRE section is ONE single source-based question, structured around ONE KEY LINE OF INQUIRY about "${sectionTopic}".
+  - That single question has up to ${section.num_questions} parts: (a), (b), (c), (d), (e) — all investigating the SAME line of inquiry.
+  - You MUST open the FIRST part's stem with a clear KEY INQUIRY QUESTION (a debatable, analytical line of inquiry — e.g. "How far was X responsible for Y?", "To what extent did X cause Y?", "Why did X happen?"), then a blank line, then the (a) sub-question.
+  - Sub-parts (b), (c), (d), (e) do NOT repeat the inquiry question; they are simply further parts of the same investigation.
+
+SOURCE-BINDING RULES (CRITICAL):
+  - Each sub-part is built on ONE specific source from Sources ${labelList} below — NOT a free choice.
+  - The ONLY exceptions:
+      • COMPARISON sub-parts may reference EXACTLY TWO sources (e.g. "Compare Sources A and B").
+      • ASSERTION (hypothesis) sub-parts must use ALL ${labels.length} sources (Sources ${labelList}).
+  - Every sub-part's stem MUST begin with an explicit instruction naming the source(s) it uses, e.g. "Study Source A.", "Study Sources A and B.", "Study Sources ${labelList}."
+  - Across the section, DIFFERENT sub-parts should be anchored on DIFFERENT sources where possible (e.g. (a) → Source A, (b) → Source B, (c) → Source C, comparison → A & B, assertion → all). Do NOT bind two different sub-parts to the same single source.
   - DO NOT invent new sources. DO NOT paraphrase or modify the source text.
-  - For EVERY question in this section, set source_excerpt to the FULL concatenated pool below (so the editor renders all sources). Set source_url to Source A's URL.
+  - For EVERY part in this section, set source_excerpt to the FULL concatenated pool below (so the editor shows all sources to the student). Set source_url to Source A's URL.
 
 SHARED SOURCES FOR THIS SECTION (Sources ${labelList}):
 ${blocks}
 
-  source_excerpt value to use for EVERY question in this section:
+  source_excerpt value to use for EVERY part in this section:
   "${concatenatedExcerpt}"
-  source_url value to use for EVERY question in this section: ${pool[0].source_url}`;
+  source_url value to use for EVERY part in this section: ${pool[0].source_url}`;
   } else {
     sourceBlocks = opts.groundedSources.map((slot, qi) => {
       const valid = slot.filter((s): s is GroundedSource => !!s);
@@ -322,24 +332,30 @@ ${blocks}
         : ` — must be worth one of: ${s.marks.join(", ")} marks`;
       let srcNote: string;
       if (isHumanitiesSBQ) {
-        if (s.id === "assertion") srcNote = ` (uses ALL Sources ${poolLabelList} from the shared pool)`;
-        else if (s.minSources >= 2) srcNote = ` (uses any ${s.minSources} sources from the shared pool, e.g. Sources A and B)`;
-        else srcNote = ` (uses ONE source from the shared pool — name it explicitly, e.g. Source A or Source B)`;
+        const partLetter = String.fromCharCode(97 + i); // a, b, c...
+        const boundSource = String.fromCharCode(65 + (i % Math.max(1, poolLabels.length))); // A, B, C...
+        if (s.id === "assertion") srcNote = ` — uses ALL Sources ${poolLabelList} from the shared pool. Stem MUST start with "Study Sources ${poolLabelList}."`;
+        else if (s.minSources >= 2) {
+          const second = String.fromCharCode(65 + ((i + 1) % Math.max(1, poolLabels.length)));
+          srcNote = ` — uses EXACTLY TWO sources: Sources ${boundSource} and ${second}. Stem MUST start with "Study Sources ${boundSource} and ${second}."`;
+        } else {
+          srcNote = ` — uses ONLY Source ${boundSource} (one source). Stem MUST start with "Study Source ${boundSource}." Part (${partLetter}).`;
+        }
       } else {
         srcNote = s.minSources >= 2 ? ` (uses at least ${s.minSources} sources labelled Source A, B${s.minSources >= 3 ? ", C" : ""}…)` : ` (uses Source A)`;
       }
-      return `  - Question ${i + 1}: ${s.label}${lockedNote}${srcNote}`;
+      return `  - Question ${i + 1} (part ${String.fromCharCode(97 + i)}): ${s.label}${lockedNote}${srcNote}`;
     }).join("\n");
 
     skillBlock = `
 
-SBQ SKILL ASSIGNMENTS (apply each skill's format and mark scheme to the assigned question):
+SBQ SKILL ASSIGNMENTS (apply each skill's format and mark scheme to the assigned part):
 ${skillSummaries}
 
-PER-QUESTION SKILL MAPPING (you MUST follow this exact mapping):
+PER-PART SKILL & SOURCE-BINDING MAPPING (you MUST follow this exact mapping — DO NOT swap sources between parts):
 ${assignments}
 
-IMPORTANT: For Assertion questions, the hypothesis MUST be testable against ALL sources (each should plausibly support OR challenge it). For single-source skills, name the chosen source explicitly in the stem. Do NOT mix skill formats across questions.`;
+IMPORTANT: For Assertion parts, the hypothesis MUST be testable against ALL sources (each should plausibly support OR challenge it). For single-source parts, the bound source is FIXED above — name it explicitly in the stem. Do NOT mix skill formats across parts. Do NOT bind two different single-source parts to the same source.`;
   }
 
   return `${grounding}You are drafting ${sectionLabel} of "${opts.title}" (${opts.level} ${opts.subject}, ${opts.assessmentType}, ${opts.durationMinutes} min, ${opts.totalMarks} total marks across ${opts.totalSections} sections).
