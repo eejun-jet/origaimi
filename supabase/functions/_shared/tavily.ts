@@ -38,6 +38,13 @@ export async function tavilySearch(
   } = {},
 ): Promise<TavilySearchResponse> {
   if (!TAVILY_API_KEY) return { results: [], images: [] };
+  // Tavily enforces a 400-char query limit; truncate at a word boundary.
+  let safeQuery = query.trim();
+  if (safeQuery.length > 380) {
+    safeQuery = safeQuery.slice(0, 380);
+    const lastSpace = safeQuery.lastIndexOf(" ");
+    if (lastSpace > 200) safeQuery = safeQuery.slice(0, lastSpace);
+  }
   try {
     const resp = await fetch("https://api.tavily.com/search", {
       method: "POST",
@@ -46,7 +53,7 @@ export async function tavilySearch(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        query,
+        query: safeQuery,
         max_results: opts.maxResults ?? 10,
         include_domains: opts.includeDomains ?? undefined,
         exclude_domains: opts.excludeDomains ?? undefined,
