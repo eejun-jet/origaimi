@@ -376,9 +376,10 @@ function QuestionCard({
                       href={q.source_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="break-all text-primary underline hover:text-primary/80"
+                      className="break-all font-medium text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary"
                     >
                       {(() => { try { return new URL(q.source_url).hostname.replace(/^www\./, ""); } catch { return q.source_url; } })()}
+                      <span aria-hidden="true"> ↗</span>
                     </a>
                   </p>
                 )}
