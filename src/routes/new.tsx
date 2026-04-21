@@ -1141,7 +1141,6 @@ function SectionCard({
         <div>
           <Label className="text-xs"># Questions</Label>
           <Input type="number" min={1} className="h-9"
-            disabled={skillLocked}
             value={section.num_questions}
             onChange={(e) => onUpdate({ num_questions: Math.max(1, parseInt(e.target.value || "1", 10)) })}
           />
@@ -1149,7 +1148,6 @@ function SectionCard({
         <div>
           <Label className="text-xs">Total marks</Label>
           <Input type="number" min={1} className="h-9"
-            disabled={skillLocked}
             value={section.marks}
             onChange={(e) => onUpdate({ marks: Math.max(1, parseInt(e.target.value || "1", 10)) })}
           />
