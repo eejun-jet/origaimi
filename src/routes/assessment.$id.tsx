@@ -28,6 +28,9 @@ type Question = {
   options: string[] | null;
   answer: string | null;
   mark_scheme: string | null;
+  source_excerpt: string | null;
+  source_url: string | null;
+  notes: string | null;
 };
 
 type Assessment = {
@@ -356,6 +359,34 @@ function QuestionCard({
           </div>
         ) : (
           <>
+            {q.source_excerpt && (
+              <div className="mb-4 rounded-lg border-l-4 border-primary bg-muted/40 p-4">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">Source A</div>
+                <p className="mt-2 font-paper text-sm italic leading-relaxed text-foreground whitespace-pre-wrap">
+                  {q.source_excerpt}
+                </p>
+                {q.source_url && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Source:{" "}
+                    <a
+                      href={q.source_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="break-all text-primary underline hover:text-primary/80"
+                    >
+                      {(() => { try { return new URL(q.source_url).hostname.replace(/^www\./, ""); } catch { return q.source_url; } })()}
+                    </a>
+                    {" — "}
+                    <span className="break-all">{q.source_url}</span>
+                  </p>
+                )}
+              </div>
+            )}
+            {q.notes && q.question_type === "source_based" && !q.source_excerpt && (
+              <div className="mb-4 rounded-lg border border-warm bg-warm/20 p-3 text-xs text-warm-foreground">
+                ⚠ {q.notes}
+              </div>
+            )}
             <p className="font-paper text-base leading-relaxed text-foreground whitespace-pre-wrap">{q.stem}</p>
             {q.options && Array.isArray(q.options) && q.options.length > 0 && (
               <ol className="mt-3 list-inside list-[upper-alpha] space-y-1 font-paper text-sm">
