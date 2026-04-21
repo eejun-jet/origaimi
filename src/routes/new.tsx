@@ -79,6 +79,14 @@ function NewAssessment() {
   const [step, setStep] = useState(1);
   const [busy, setBusy] = useState(false);
 
+  // Step 1 / basics — auto-filled when a syllabus paper is selected
+  const [title, setTitle] = useState("");
+  const [subject, setSubject] = useState<string>(SUBJECTS[0]);
+  const [level, setLevel] = useState<string>("P5");
+  const [aType, setAType] = useState<string>("topical");
+  const [duration, setDuration] = useState(60);
+  const [totalMarks, setTotalMarks] = useState(50);
+
   // Syllabus library
   const [library, setLibrary] = useState<SyllabusLibraryDoc[]>([]);
   const [libLoading, setLibLoading] = useState(true);
@@ -86,8 +94,7 @@ function NewAssessment() {
   const [paperTopics, setPaperTopics] = useState<PaperTopic[]>([]);
   const [docAOs, setDocAOs] = useState<AssessmentObjective[]>([]);
   const [topicsLoading, setTopicsLoading] = useState(false);
-  const [bandFilter, setBandFilter] = useState<"primary" | "secondary">("primary");
-  const [streamFilter, setStreamFilter] = useState<"standard" | "foundation" | "g3" | "g2">("standard");
+  const [streamFilter, setStreamFilter] = useState<Stream>("standard");
 
   useEffect(() => {
     let cancelled = false;
@@ -98,10 +105,31 @@ function NewAssessment() {
     return () => { cancelled = true; };
   }, []);
 
-  const filteredLibrary = useMemo(
-    () => library.filter((d) => matchesBandStream(d.level, bandFilter, streamFilter)),
-    [library, bandFilter, streamFilter],
-  );
+  // Derived band from the chosen Level (P* → primary, Sec/S* → secondary).
+  const userBand: Band = useMemo(() => classifyLevel(level)?.band ?? "primary", [level]);
+
+  // When the level's band changes, snap the stream to a valid choice for that band.
+  useEffect(() => {
+    const valid = STREAMS_FOR_BAND[userBand].map((s) => s.id);
+    if (!valid.includes(streamFilter)) setStreamFilter(STREAMS_FOR_BAND[userBand][0].id);
+  }, [userBand, streamFilter]);
+
+  // Filter the syllabus library by subject + level-band + stream.
+  const filteredLibrary = useMemo(() => {
+    return library.filter((d) => {
+      if (!d.level) return false;
+      const c = classifyLevel(d.level);
+      if (!c) return false;
+      if (c.band !== userBand) return false;
+      if (c.stream !== streamFilter) return false;
+      if (subject && d.subject) {
+        const a = d.subject.toLowerCase();
+        const b = subject.toLowerCase();
+        if (!a.includes(b) && !b.includes(a)) return false;
+      }
+      return true;
+    });
+  }, [library, subject, userBand, streamFilter]);
 
   // If the current selection no longer matches the active filter, clear it.
   useEffect(() => {
@@ -120,15 +148,6 @@ function NewAssessment() {
   }, [selectedPaperKey, library]);
 
   const useSyllabus = !!selected;
-
-
-  // Step 1 / basics — auto-filled when a syllabus paper is selected
-  const [title, setTitle] = useState("");
-  const [subject, setSubject] = useState<string>(SUBJECTS[0]);
-  const [level, setLevel] = useState<string>("P5");
-  const [aType, setAType] = useState<string>("topical");
-  const [duration, setDuration] = useState(60);
-  const [totalMarks, setTotalMarks] = useState(50);
 
   // When the selected paper changes, load its topics + prefill metadata.
   // For multi-track MCQ papers (e.g. 5086/01) topics live on sibling
@@ -340,7 +359,45 @@ function NewAssessment() {
             <div className="space-y-5">
               <h2 className="font-paper text-xl font-semibold">Basics</h2>
 
-              {/* Syllabus picker */}
+              {/* 1. Subject + Level — these scope the syllabus picker below */}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Subject</Label>
+                  <Select value={subject} onValueChange={setSubject}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {SUBJECTS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                      {selected?.doc.subject && !SUBJECTS.includes(selected.doc.subject as typeof SUBJECTS[number]) && (
+                        <SelectItem value={selected.doc.subject}>{selected.doc.subject}</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Level</Label>
+                  <Select value={level} onValueChange={setLevel}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {LEVELS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                      {selected?.doc.level && !LEVELS.includes(selected.doc.level as typeof LEVELS[number]) && (
+                        <SelectItem value={selected.doc.level}>{selected.doc.level}</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* 2. Stream — narrows within the band derived from Level */}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border bg-muted/20 p-2.5">
+                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Stream</span>
+                <SegmentedFilter
+                  options={STREAMS_FOR_BAND[userBand]}
+                  value={streamFilter}
+                  onChange={(v) => setStreamFilter(v as Stream)}
+                />
+              </div>
+
+              {/* 3. Syllabus paper picker (filtered by subject + level-band + stream) */}
               {libLoading ? (
                 <div className="flex items-center gap-2 rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" /> Loading your syllabus library…
@@ -352,7 +409,7 @@ function NewAssessment() {
                     <div className="flex-1 text-sm">
                       <p className="font-medium">Upload a syllabus to unlock code-tagged topics.</p>
                       <p className="mt-1 text-muted-foreground">
-                        For now we'll use the curated MOE topic map. Pick subject and level below.
+                        For now we'll use the curated MOE topic map. Your subject and level above will guide the draft.
                       </p>
                       <Button asChild variant="outline" size="sm" className="mt-3">
                         <Link to="/admin/syllabus">Go to syllabus library</Link>
@@ -361,36 +418,10 @@ function NewAssessment() {
                   </div>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-2">
                   <Label className="flex items-center gap-2">
                     <BookOpen className="h-3.5 w-3.5" /> Syllabus paper
                   </Label>
-
-                  {/* Band + Stream filter */}
-                  <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-2.5">
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                      <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Band</span>
-                      <SegmentedFilter
-                        options={[{ id: "primary", label: "Primary" }, { id: "secondary", label: "Secondary" }]}
-                        value={bandFilter}
-                        onChange={(v) => {
-                          const b = v as Band;
-                          setBandFilter(b);
-                          // Reset stream to first available for the new band.
-                          setStreamFilter(STREAMS_FOR_BAND[b][0].id);
-                        }}
-                      />
-                    </div>
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                      <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Stream</span>
-                      <SegmentedFilter
-                        options={STREAMS_FOR_BAND[bandFilter]}
-                        value={streamFilter}
-                        onChange={(v) => setStreamFilter(v as Stream)}
-                      />
-                    </div>
-                  </div>
-
                   <Select value={selectedPaperKey} onValueChange={setSelectedPaperKey}>
                     <SelectTrigger>
                       <SelectValue placeholder="Pick the syllabus + paper to align to…" />
@@ -398,7 +429,7 @@ function NewAssessment() {
                     <SelectContent>
                       {filteredLibrary.length === 0 ? (
                         <div className="px-3 py-2 text-xs italic text-muted-foreground">
-                          No syllabuses uploaded for this band/stream yet.
+                          No syllabuses uploaded for this subject + level + stream yet.
                         </div>
                       ) : filteredLibrary.map((doc) => (
                         <div key={doc.id}>
@@ -436,6 +467,7 @@ function NewAssessment() {
                 </div>
               )}
 
+              {/* 4. Title + assessment metadata */}
               <div className="space-y-2">
                 <Label htmlFor="title">Title</Label>
                 <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)}
@@ -443,30 +475,6 @@ function NewAssessment() {
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Subject</Label>
-                  <Select value={subject} onValueChange={setSubject}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {SUBJECTS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                      {selected?.doc.subject && !SUBJECTS.includes(selected.doc.subject as typeof SUBJECTS[number]) && (
-                        <SelectItem value={selected.doc.subject}>{selected.doc.subject}</SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Level</Label>
-                  <Select value={level} onValueChange={setLevel}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {LEVELS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-                      {selected?.doc.level && !LEVELS.includes(selected.doc.level as typeof LEVELS[number]) && (
-                        <SelectItem value={selected.doc.level}>{selected.doc.level}</SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
                 <div className="space-y-2">
                   <Label>Assessment type</Label>
                   <Select value={aType} onValueChange={setAType}>
