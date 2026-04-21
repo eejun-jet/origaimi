@@ -30,6 +30,7 @@ type Section = {
   num_questions: number;
   bloom?: string;
   sbq_skill?: string;
+  sbq_skills?: string[];
   topic_pool: SectionTopic[];
   instructions?: string;
 };
