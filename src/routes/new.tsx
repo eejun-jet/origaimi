@@ -1087,7 +1087,7 @@ function SectionCard({
     if (skill.locked) {
       patch.num_questions = 1;
       patch.marks = skill.default;
-    } else if (!allowedMarks || !allowedMarks.includes(Math.floor(section.marks / Math.max(1, section.num_questions)))) {
+    } else if (!allowedMarks || !(allowedMarks as readonly number[]).includes(Math.floor(section.marks / Math.max(1, section.num_questions)))) {
       // If per-question marks fall outside the new skill's allowed range, snap to default.
       patch.marks = skill.default * Math.max(1, section.num_questions);
     }
