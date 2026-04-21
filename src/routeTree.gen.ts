@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as PapersRouteImport } from './routes/papers'
 import { Route as NewRouteImport } from './routes/new'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as BankRouteImport } from './routes/bank'
@@ -18,6 +19,11 @@ import { Route as AssessmentIdRouteImport } from './routes/assessment.$id'
 import { Route as AdminSyllabusRouteImport } from './routes/admin.syllabus'
 import { Route as AdminSyllabusIdRouteImport } from './routes/admin.syllabus.$id'
 
+const PapersRoute = PapersRouteImport.update({
+  id: '/papers',
+  path: '/papers',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const NewRoute = NewRouteImport.update({
   id: '/new',
   path: '/new',
@@ -65,6 +71,7 @@ export interface FileRoutesByFullPath {
   '/bank': typeof BankRoute
   '/dashboard': typeof DashboardRoute
   '/new': typeof NewRoute
+  '/papers': typeof PapersRoute
   '/admin/syllabus': typeof AdminSyllabusRouteWithChildren
   '/assessment/$id': typeof AssessmentIdRoute
   '/admin/syllabus/$id': typeof AdminSyllabusIdRoute
@@ -75,6 +82,7 @@ export interface FileRoutesByTo {
   '/bank': typeof BankRoute
   '/dashboard': typeof DashboardRoute
   '/new': typeof NewRoute
+  '/papers': typeof PapersRoute
   '/admin/syllabus': typeof AdminSyllabusRouteWithChildren
   '/assessment/$id': typeof AssessmentIdRoute
   '/admin/syllabus/$id': typeof AdminSyllabusIdRoute
@@ -86,6 +94,7 @@ export interface FileRoutesById {
   '/bank': typeof BankRoute
   '/dashboard': typeof DashboardRoute
   '/new': typeof NewRoute
+  '/papers': typeof PapersRoute
   '/admin/syllabus': typeof AdminSyllabusRouteWithChildren
   '/assessment/$id': typeof AssessmentIdRoute
   '/admin/syllabus/$id': typeof AdminSyllabusIdRoute
@@ -98,6 +107,7 @@ export interface FileRouteTypes {
     | '/bank'
     | '/dashboard'
     | '/new'
+    | '/papers'
     | '/admin/syllabus'
     | '/assessment/$id'
     | '/admin/syllabus/$id'
@@ -108,6 +118,7 @@ export interface FileRouteTypes {
     | '/bank'
     | '/dashboard'
     | '/new'
+    | '/papers'
     | '/admin/syllabus'
     | '/assessment/$id'
     | '/admin/syllabus/$id'
@@ -118,6 +129,7 @@ export interface FileRouteTypes {
     | '/bank'
     | '/dashboard'
     | '/new'
+    | '/papers'
     | '/admin/syllabus'
     | '/assessment/$id'
     | '/admin/syllabus/$id'
@@ -129,12 +141,20 @@ export interface RootRouteChildren {
   BankRoute: typeof BankRoute
   DashboardRoute: typeof DashboardRoute
   NewRoute: typeof NewRoute
+  PapersRoute: typeof PapersRoute
   AdminSyllabusRoute: typeof AdminSyllabusRouteWithChildren
   AssessmentIdRoute: typeof AssessmentIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/papers': {
+      id: '/papers'
+      path: '/papers'
+      fullPath: '/papers'
+      preLoaderRoute: typeof PapersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/new': {
       id: '/new'
       path: '/new'
@@ -212,6 +232,7 @@ const rootRouteChildren: RootRouteChildren = {
   BankRoute: BankRoute,
   DashboardRoute: DashboardRoute,
   NewRoute: NewRoute,
+  PapersRoute: PapersRoute,
   AdminSyllabusRoute: AdminSyllabusRouteWithChildren,
   AssessmentIdRoute: AssessmentIdRoute,
 }
