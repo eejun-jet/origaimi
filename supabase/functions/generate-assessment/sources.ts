@@ -18,8 +18,10 @@ const ALLOW_DOMAINS_HUMANITIES = [
   "straitstimes.com", "channelnewsasia.com", "todayonline.com",
   // International news / reference
   "bbc.co.uk", "reuters.com", "apnews.com", "britannica.com",
+  "history.com", "historytoday.com",
   // International archives / museums
   "bl.uk", "iwm.org.uk", "nationalarchives.gov.uk", "loc.gov", "un.org",
+  "archives.gov", "awm.gov.au", "ushmm.org",
 ];
 
 // Allow-list for English (literary / journalistic / public-domain prose & non-fiction).
