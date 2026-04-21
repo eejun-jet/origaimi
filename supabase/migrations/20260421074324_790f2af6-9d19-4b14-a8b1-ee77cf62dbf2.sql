@@ -1,0 +1,4 @@
+ALTER TABLE public.assessment_questions DROP CONSTRAINT IF EXISTS assessment_questions_user_id_fkey;
+ALTER TABLE public.assessment_versions DROP CONSTRAINT IF EXISTS assessment_versions_user_id_fkey;
+ALTER TABLE public.question_bank_items DROP CONSTRAINT IF EXISTS question_bank_items_user_id_fkey;
+ALTER TABLE public.reference_materials DROP CONSTRAINT IF EXISTS reference_materials_user_id_fkey;
