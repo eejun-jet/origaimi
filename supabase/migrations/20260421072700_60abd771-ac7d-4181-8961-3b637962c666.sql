@@ -1,0 +1,1 @@
+ALTER TABLE public.assessments DROP CONSTRAINT IF EXISTS assessments_user_id_fkey;
