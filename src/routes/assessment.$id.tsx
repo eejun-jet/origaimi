@@ -380,8 +380,6 @@ function QuestionCard({
                     >
                       {(() => { try { return new URL(q.source_url).hostname.replace(/^www\./, ""); } catch { return q.source_url; } })()}
                     </a>
-                    {" — "}
-                    <span className="break-all">{q.source_url}</span>
                   </p>
                 )}
               </div>
