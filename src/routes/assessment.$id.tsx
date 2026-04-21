@@ -455,7 +455,7 @@ function EditorPage() {
                               Refer to these sources when answering Section {sec.letter}.
                             </p>
                             <div className="mt-4 space-y-4">
-                              {sectionSources.map((src) => (
+                              {sectionSources.map((src: { label: string; text: string }) => (
                                 <div
                                   key={src.label}
                                   className="rounded-lg border-l-4 border-primary bg-muted/40 p-4"
@@ -588,8 +588,17 @@ function EditorPage() {
   );
 }
 
+/** Parse the generator's concatenated SBQ pool string ("Source A: …\n\nSource B: …")
+ *  back into discrete labelled sources. Falls back to a single "A" entry when the
+ *  excerpt does not match the multi-source pattern (e.g. legacy single-source rows). */
+function parseSharedSourcePool(excerpt: string): Array<{ label: string; text: string }> {
+  const matches = [...excerpt.matchAll(/Source\s+([A-E])\s*:\s*([\s\S]*?)(?=\n\s*Source\s+[A-E]\s*:|$)/g)];
+  if (matches.length === 0) return [{ label: "A", text: excerpt.trim() }];
+  return matches.map((m) => ({ label: m[1], text: m[2].trim() }));
+}
+
 function QuestionCard({
-  q, index, isFirst, isLast, isRegen, selected, onToggleSelect, onUpdate, onDelete, onMove, onRegenerate, onBank,
+  q, index, isFirst, isLast, isRegen, selected, onToggleSelect, onUpdate, onDelete, onMove, onRegenerate, onBank, hideSourceBlock,
 }: {
   q: Question; index: number; isFirst: boolean; isLast: boolean; isRegen: boolean;
   selected: boolean;
@@ -599,6 +608,7 @@ function QuestionCard({
   onMove: (dir: -1 | 1) => void;
   onRegenerate: (instruction: string) => void;
   onBank: () => void;
+  hideSourceBlock?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [stem, setStem] = useState(q.stem);
