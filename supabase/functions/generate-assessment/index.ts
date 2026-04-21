@@ -565,8 +565,9 @@ Deno.serve(async (req) => {
             continue;
           }
           // For multi-source SBQ skills (comparison/assertion), enforce that we got enough.
-          if (sbqSkill && validSources.length < sbqSkill.minSources) {
-            console.warn(`[generate] section ${section.letter} q${qi + 1}: ${sbqSkill.label} needs ${sbqSkill.minSources} sources, got ${validSources.length} — dropping`);
+          const qSkillForCheck = perQSkillsForFetch[qi];
+          if (qSkillForCheck && validSources.length < qSkillForCheck.minSources) {
+            console.warn(`[generate] section ${section.letter} q${qi + 1}: ${qSkillForCheck.label} needs ${qSkillForCheck.minSources} sources, got ${validSources.length} — dropping`);
             droppedNoSource++;
             continue;
           }
