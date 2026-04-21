@@ -41,10 +41,10 @@ ${alignLine}
 Each question must include a clear stem, a precise answer, and a marking scheme that breaks down marks where appropriate.
 Use Bloom's taxonomy levels rigorously.
 When a "GROUNDED SOURCE" block is provided for a question, you MUST:
-  - Place the verbatim source text inside the question stem under a "Source A" heading.
+  - Place the verbatim source text inside the question stem under a "Source A" heading (or "Passage" for English comprehension).
   - NOT paraphrase, summarise, translate, or alter the source text in any way.
   - Add a citation line directly under the source: \`Source: {publisher} — {url}\`.
-  - Write your sub-questions to refer to "Source A".
+  - Write your sub-questions to refer to the passage / Source A.
   - NEVER fabricate sources, attributions, or URLs of your own.`;
 }
 
