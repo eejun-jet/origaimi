@@ -1,73 +1,121 @@
+## Diagrams for Science & Math questions — hybrid sourcing + paper repository
 
+This plan adds **diagram sourcing for Science and Mathematics** questions using all four strategies in a single pipeline, plus a **past-paper repository** with tagging that the generator can use as a reference (without trying to copy questions verbatim).
 
-## Source-grounded passages for History & Social Studies questions
+### Part 1 — Hybrid diagram pipeline (all 4 strategies)
 
-### What this adds
-For History and Social Studies (Combined Humanities) papers — especially Source-Based Question (SBQ) and source-stimulus questions — the generator will pull a **real, attributable 100–180 word excerpt** from a credible site, cite it with the source URL, and feed it to the AI as the question stimulus. The AI will write the question stem, sub-parts, and mark scheme **around** that real source instead of inventing a fake one.
-
-### Why we need a real web-search tool
-Models hallucinate quotations and URLs unless you give them actual retrieved text. To get real, attributable passages we need a search-and-scrape API. I recommend **Firecrawl** because it does both `search` (returns ranked URLs + snippets) and `scrape` (returns clean markdown of the page), in one connector — perfect for "find a source, then pull a clean excerpt".
-
-Perplexity is an alternative (it returns answers + citations), but it summarises rather than giving raw passage text from one site, which makes attribution fuzzier. Firecrawl is the better fit for SBQ passages.
-
-You'll be asked to link the **Firecrawl** connector. Lovable injects the API key into the server runtime — no key handling on your side.
-
-### Allow-list of legitimate sources
-The search will be restricted via Firecrawl's `search_domain_filter` so the AI never sees Wikipedia, blogs, or random content farms. Default allow-list (editable later in code):
-
-- `nas.gov.sg`, `nlb.gov.sg`, `roots.gov.sg`, `eresources.nlb.gov.sg` (National Archives / NLB / heritage)
-- `mindef.gov.sg`, `gov.sg`, `straitstimes.com`, `channelnewsasia.com`, `todayonline.com` (Singapore primary/news)
-- `bbc.co.uk/news`, `bbc.co.uk/history`, `reuters.com`, `apnews.com`, `britannica.com`
-- `bl.uk` (British Library), `iwm.org.uk` (Imperial War Museums), `nationalarchives.gov.uk`, `loc.gov`, `un.org`
-- Explicit excludes: `wikipedia.org`, `wikiwand.com`, `quora.com`, `reddit.com`, `medium.com`, `*.blogspot.com`, `*.wordpress.com`
-
-### How it plugs into the flow
+For every Science / Math question that needs a diagram, the generator runs this cascade in order, stopping at the first success:
 
 ```text
-User clicks Generate (History / Social Studies, source_based selected)
+Question needs diagram?
    │
-   ▼
-generate-assessment edge function
+   ├─ 1. Past-paper repository (your uploads)
+   │     → search tagged papers for matching topic + diagram type
+   │     → if a tagged figure exists, embed it with attribution
    │
-   ├─ For each blueprint row that is source_based:
-   │     1. Build a query from topic + learning outcome
-   │        e.g. "Singapore separation from Malaysia 1965 primary source"
-   │     2. Firecrawl /search with allow-list → top 3 results
-   │     3. Firecrawl /scrape on best result → clean markdown
-   │     4. Extract a 100–180 word contiguous excerpt
-   │        (sentence-bounded; reject if <100 or >180 words)
-   │     5. If extraction fails → try next result; after 3 fails skip stimulus
+   ├─ 2. Crawl & reuse (Firecrawl)
+   │     → search approved sites (SEAB, MOE, Khan Academy,
+   │       NRICH, OpenStax, CK-12, PhET) for a labelled figure
+   │     → embed original image + visible citation
    │
-   ├─ Pass {excerpt, source_url, source_title, publisher} into the AI prompt
-   │   as "Source A" — instruct the model to write the SBQ around it,
-   │   NOT to alter the passage text, and to cite it under the stem.
+   ├─ 3. AI-generate (Nano Banana Pro)
+   │     → strict exam-style prompt: monochrome line art,
+   │       labelled axes/components, no shading, MOE conventions
+   │     → save to Supabase Storage, embed
    │
-   └─ Save question with stem containing the verbatim source block + citation
+   └─ 4. Skip + flag
+         → if all 3 fail, save question with notes:
+           "Diagram could not be sourced — please draw / attach manually."
 ```
 
-### Anti-hallucination guards
-1. The passage is retrieved **before** the AI runs — the AI is told "use this exact text, do not paraphrase, do not invent attribution".
-2. The `save_assessment` tool gets two new fields per question: `source_excerpt` and `source_url`. The function rejects any question where the saved excerpt isn't byte-equal to what we retrieved.
-3. If retrieval fails for a row, the function falls back to a regular non-source question for that row and logs a note in `assessment_questions.notes` ("Source retrieval failed for this row — please attach a source manually.") so you see it on the review page.
-4. Subject gate: this whole pipeline only runs when subject matches `history`, `social studies`, or `combined humanities`, AND the question type is `source_based`. Other subjects/types are unaffected.
+**Per-question diagram metadata** (new columns on `assessment_questions`):
+
+- `diagram_url` — public URL of the embedded image
+- `diagram_source` — `'past_paper' | 'web' | 'ai_generated' | null`
+- `diagram_citation` — publisher + URL when sourced from web/past paper
+- `diagram_caption` — e.g. "Figure 1: Series circuit with two resistors"
+
+**Display style**: numbered "Figure N" block with caption underneath the question stem (MOE convention), and the citation line beneath the figure when applicable.
+
+**Subject + question-type gating**: only triggers for `subject ∈ {Mathematics, Science, Physics, Chemistry, Biology}` AND when the question type implies a diagram (structured, source_based, or AI infers a diagram is helpful). Pure word problems are skipped.
+
+**Allow-list for web crawl**:
+
+- `seab.gov.sg`, `moe.gov.sg` (SG official)
+- `khanacademy.org`, `openstax.org`, `ck12.org`, `phet.colorado.edu` (CC-licensed)
+- `nrich.maths.org`, `mathsisfun.com` (math)
+- `bbc.co.uk/bitesize` (general)
+- allow crawling for all math and science related websites
+- Deny: same Wikipedia / blog / Reddit list as before
+
+### Part 2 — Past-paper repository
+
+A tagged library of past papers you upload, that the generator can search and reference.
+
+**Upload UI** (new page `/papers`):
+
+- Drag-and-drop PDF upload (uses existing `references` storage bucket pattern)
+- Required tags per upload: **subject**, **level**, **year**, **paper number**, **exam board** (e.g. MOE, Cambridge)
+- Optional tags: **topic** (free text), **question types present** (multi-select)
+- After upload: background parse via existing `parse-syllabus` infrastructure (extracts text + page screenshots)
+
+**How AI uses the repository** (this is the realistic part — your concern is valid):
+
+The AI **does not** try to copy or paraphrase past questions. Instead, it uses papers as:
+
+1. **Style reference**: when generating, we pass 2–3 page screenshots of matching tagged papers as image inputs to the LLM with the instruction *"Match this paper's tone, vocabulary, mark scheme format, and difficulty — but write entirely new questions."*
+2. **Diagram source**: the parser extracts diagrams + their captions during upload, indexed by topic tag. The diagram pipeline (step 1 above) searches this index first.
+3. **Topic coverage check**: the generator can see which topics have already been covered in your tagged papers and bias toward (or away from) those, your choice in TOS settings.
+
+**What we explicitly do NOT do** (because you're right that it's fragile):
+
+- Try to extract individual questions and rewrite them — too error-prone.
+- Match question structure 1:1 — too rigid.
+- Use papers as ground truth for content — they're a *style* reference only.
+
+**Repository UI** (`/papers`):
+
+- Grid of uploaded papers with tags, page count, parse status
+- Click a paper → preview pages, edit tags, delete
+- Search/filter by subject, level, year, topic
+- A small badge per paper: "12 diagrams indexed" / "Parsing…" / "Failed"
+
+### Database changes
+
+
+| Table                         | Change                                                                                                                                                                              |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `assessment_questions`        | Add `diagram_url text`, `diagram_source text`, `diagram_citation text`, `diagram_caption text` (all nullable)                                                                       |
+| `past_papers` (new)           | `id`, `user_id`, `title`, `subject`, `level`, `year`, `paper_number`, `exam_board`, `file_path`, `parse_status`, `page_count`, `topics text[]`, `question_types text[]`, timestamps |
+| `past_paper_diagrams` (new)   | `id`, `paper_id`, `page_number`, `image_path`, `caption`, `topic_tags text[]`, `bbox jsonb` (where on the page)                                                                     |
+| Storage bucket `papers` (new) | Private, RLS open per current trial-mode policy. Stores uploaded PDFs and extracted diagram crops.                                                                                  |
+
+
+### Edge function changes
+
+
+| File                                                       | Change                                                                                                                                                                                                       |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `supabase/functions/generate-assessment/diagrams.ts` (new) | `fetchDiagram(question)` runs the 4-step cascade and returns `{url, source, citation, caption}                                                                                                               |
+| `supabase/functions/generate-assessment/index.ts`          | After question generation, for science/math questions, call `fetchDiagram` and attach result to the saved row. Pass past-paper screenshots as multimodal style references when matching tagged papers exist. |
+| `supabase/functions/parse-paper/index.ts` (new)            | On past-paper upload: parse PDF via Gemini multimodal, extract text per page, detect figures + captions, save crops to storage, write to `past_paper_diagrams`.                                              |
+| `supabase/functions/generate-diagram/index.ts` (new)       | Wraps Nano Banana Pro (`google/gemini-3-pro-image-preview` via Lovable AI) with a strict exam-style system prompt. Returns image URL after uploading to storage.                                             |
+
 
 ### UI changes
-- **Assessment review page** (`src/routes/assessment.$id.tsx`): for source-based questions, render the excerpt in a bordered "Source A" block with a clickable citation line (`Source: {publisher} — {url}`).
-- **TOS builder** (`src/routes/new.tsx`): add a small note under the question-type checkbox for History/Social Studies that says "Source-based questions will be grounded in real, cited passages from approved sites (no Wikipedia, no AI-fabricated sources)."
 
-### Technical changes (for reference)
 
-| File | Change |
-|---|---|
-| `supabase/functions/generate-assessment/index.ts` | Add `fetchGroundedSource(query, allowlist)` helper using Firecrawl gateway. Branch in main loop: if `subject ∈ {History, Social Studies, Combined Humanities}` and row implies `source_based`, retrieve excerpt first, then prompt the model with it. Add `source_excerpt` + `source_url` to tool schema. Validate excerpt is byte-equal post-generation. |
-| `supabase/functions/generate-assessment/sources.ts` (new) | Allow-list, deny-list, query builder, excerpt extractor (sentence-bounded 100–180 words). |
-| `src/routes/assessment.$id.tsx` | Render source block + citation for `source_based` questions. |
-| `src/routes/new.tsx` | Subject-conditional helper text under the question-type selector. |
-| Database | Add nullable `source_excerpt text` and `source_url text` columns to `assessment_questions` so the citation persists with the question. Migration only — no data backfill. |
+| File                            | Change                                                                                                                                                   |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/routes/papers.tsx` (new)   | Upload + library grid + tag editor                                                                                                                       |
+| `src/routes/assessment.$id.tsx` | Render `Figure N` block with caption + citation when `diagram_url` is present                                                                            |
+| `src/routes/new.tsx`            | Subject-conditional info block for Math/Science explaining the 4-tier diagram cascade. Optional toggle: "Bias toward topics covered in my tagged papers" |
+| `src/components/AppHeader.tsx`  | Add "Papers" nav link                                                                                                                                    |
+
 
 ### What you need to do
-1. Approve the plan.
-2. When prompted, link the **Firecrawl** connector (one click — no API key to paste).
 
-Once those are done I'll wire everything up and we can test by generating a Combined Humanities (History) Paper 1 SBQ and checking that each question carries a real, clickable source citation.
+1. Approve this plan.
+2. The plan reuses **Firecrawl** (already linked) and **Lovable AI Gateway** (no key needed for Nano Banana Pro). No new connectors to link.
 
+Once approved I'll wire it all up. We can test by uploading one past O-Level Physics paper, tagging it with topic "Electricity", then generating a Physics paper on the same topic — you should see (a) figures from your tagged paper reused where they fit, (b) Khan Academy / OpenStax circuit diagrams as the next fallback, and (c) AI-generated MOE-style diagrams for anything left over.
