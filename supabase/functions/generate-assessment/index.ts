@@ -217,6 +217,7 @@ function buildSectionUserPrompt(opts: {
   section: Section; sectionIndex: number; totalSections: number;
   syllabusCode?: string | null; paperCode?: string | null;
   groundedSources: (GroundedSource | null)[][]; // [questionIdx][sourceIdx]
+  subjectKind?: "humanities" | "english" | null;
   instructions?: string;
 }) {
   const { section } = opts;
@@ -232,6 +233,12 @@ function buildSectionUserPrompt(opts: {
       : "";
     return `  ${i + 1}. ${t.topic}${code}${los}${aos}`;
   }).join("\n");
+
+  // Humanities-specific: tell the model these are primary or historian-perspective
+  // sources and the question must require analysis, not paraphrase.
+  const humanitiesSourceGuidance = opts.subjectKind === "humanities"
+    ? `\nSOURCE NATURE: All grounded sources for this section are PRIMARY SOURCES (archives, government records, contemporary newspaper reportage, speeches, treaties, museum-held documents) or SECONDARY SOURCES presenting a HISTORIAN'S PERSPECTIVE (scholarly analysis, edited reference works). Treat each source as analysable evidence, not as a textbook summary. Sub-questions MUST require students to interrogate the source — its content, provenance, tone, purpose, reliability, or utility — not merely paraphrase it. For Assertion questions, frame the hypothesis so students can test it against ALL provided sources, weighing how each one supports or challenges it.\n`
+    : "";
 
   const sourceBlocks = opts.groundedSources.map((slot, qi) => {
     const valid = slot.filter((s): s is GroundedSource => !!s);
@@ -296,7 +303,7 @@ THIS SECTION:
   - Bloom's level focus: ${section.bloom ?? "Apply"} (use other levels only if the topic clearly demands it)
   ${section.instructions ? `- Section instructions for the rubric: ${section.instructions}` : ""}
 ${skillBlock}
-
+${humanitiesSourceGuidance}
 ALLOWED TOPICS (pick from these only — DO NOT invent topics outside this pool):
 ${topicLines}
 ${sourceBlocks}
@@ -526,7 +533,7 @@ Deno.serve(async (req) => {
         content: buildSectionUserPrompt({
           title, subject, level, assessmentType, totalMarks, durationMinutes,
           section, sectionIndex: si, totalSections: sections.length,
-          syllabusCode, paperCode, groundedSources: sourcesForSection, instructions,
+          syllabusCode, paperCode, groundedSources: sourcesForSection, subjectKind, instructions,
         }),
       });
 

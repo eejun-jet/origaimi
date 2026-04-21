@@ -9,19 +9,37 @@ import { tavilySearch, hasTavily } from "../_shared/tavily.ts";
 
 const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY") ?? "";
 
-// Allow-list for History / Social Studies (primary / news / heritage).
+// Allow-list for History / Social Studies. Strongly biased toward PRIMARY
+// SOURCES (archives, government records, museum collections, contemporary
+// news reportage, speeches, treaties, official documents) and SECONDARY
+// SOURCES that present a HISTORIAN'S PERSPECTIVE (academic essays, scholarly
+// articles, edited reference works). General journalism and tertiary
+// reference sites are kept only as a last-resort fallback.
 const ALLOW_DOMAINS_HUMANITIES = [
-  // Singapore primary / heritage
-  "nas.gov.sg", "nlb.gov.sg", "roots.gov.sg", "eresources.nlb.gov.sg",
-  "mindef.gov.sg", "gov.sg",
-  // Singapore news
+  // --- PRIMARY SOURCES: Singapore archives & heritage ---
+  "nas.gov.sg",                 // National Archives of Singapore
+  "eresources.nlb.gov.sg",      // NLB digitised newspapers, oral history
+  "nlb.gov.sg",                 // National Library Board (Infopedia, BiblioAsia)
+  "roots.gov.sg",               // National Heritage Board collections
+  "mindef.gov.sg", "gov.sg",    // Singapore government statements / records
+  // --- PRIMARY SOURCES: International archives, museums, official records ---
+  "nationalarchives.gov.uk", "bl.uk",         // UK National Archives, British Library
+  "archives.gov", "loc.gov",                  // US National Archives, Library of Congress
+  "iwm.org.uk", "awm.gov.au", "ushmm.org",    // Imperial War Museum, AWM, USHMM
+  "un.org",                                    // UN treaties, resolutions, speeches
+  "avalon.law.yale.edu",                       // Avalon Project — primary documents
+  "founders.archives.gov",                     // Founding-era US documents
+  "fordham.edu",                               // Internet History Sourcebooks (primary docs)
+  "wilsoncenter.org",                          // Cold War International History Project (declassified docs)
+  // --- SECONDARY SOURCES: historians' perspectives, scholarly analysis ---
+  "jstor.org",                  // peer-reviewed historical scholarship
+  "historytoday.com",           // historian-authored essays
+  "historyextra.com",           // BBC History Magazine, historian commentary
+  "oxfordre.com",               // Oxford Research Encyclopedias
+  "britannica.com",             // edited reference, often historian-authored
+  // --- Contemporary news reportage (treated as primary for recent events) ---
   "straitstimes.com", "channelnewsasia.com", "todayonline.com",
-  // International news / reference
-  "bbc.co.uk", "reuters.com", "apnews.com", "britannica.com",
-  "history.com", "historytoday.com",
-  // International archives / museums
-  "bl.uk", "iwm.org.uk", "nationalarchives.gov.uk", "loc.gov", "un.org",
-  "archives.gov", "awm.gov.au", "ushmm.org",
+  "bbc.co.uk", "reuters.com", "apnews.com",
 ];
 
 // Allow-list for English (literary / journalistic / public-domain prose & non-fiction).
@@ -47,8 +65,35 @@ const DENY_DOMAINS = [
   "tumblr.com", "pinterest.com",
 ];
 
-const MIN_WORDS = 100;
-const MAX_WORDS = 180;
+// Tiered preference for humanities domains. Tier 1 = primary sources;
+// Tier 2 = historian / scholarly secondary sources; Tier 3 = general
+// reference / contemporary news (last resort).
+const HUMANITIES_TIER_1_PRIMARY = new Set([
+  "nas.gov.sg", "eresources.nlb.gov.sg", "nlb.gov.sg", "roots.gov.sg",
+  "mindef.gov.sg", "gov.sg",
+  "nationalarchives.gov.uk", "bl.uk", "archives.gov", "loc.gov",
+  "iwm.org.uk", "awm.gov.au", "ushmm.org", "un.org",
+  "avalon.law.yale.edu", "founders.archives.gov", "fordham.edu",
+  "wilsoncenter.org",
+]);
+const HUMANITIES_TIER_2_HISTORIAN = new Set([
+  "jstor.org", "historytoday.com", "historyextra.com",
+  "oxfordre.com", "britannica.com",
+]);
+
+function humanitiesTier(host: string): 1 | 2 | 3 {
+  // Walk parent domains for subdomain matches (e.g. www.nas.gov.sg → nas.gov.sg).
+  const parts = host.split(".");
+  for (let i = 0; i < parts.length; i++) {
+    const d = parts.slice(i).join(".");
+    if (HUMANITIES_TIER_1_PRIMARY.has(d)) return 1;
+    if (HUMANITIES_TIER_2_HISTORIAN.has(d)) return 2;
+  }
+  return 3;
+}
+
+const MIN_WORDS = 120;
+const MAX_WORDS = 200;
 
 export type SubjectKind = "humanities" | "english" | null;
 
@@ -115,7 +160,10 @@ function extractKeywords(text: string, max: number): string[] {
   return out;
 }
 
-/** Build a list of progressively broader queries to try. Earlier = more specific. */
+/** Build a list of progressively broader queries to try. Earlier = more specific.
+ *  For humanities we issue alternating primary-source / historian-perspective
+ *  queries so the search engine returns rich, analysable passages rather than
+ *  thin tertiary blurbs. */
 export function buildQueryChain(
   subjectKind: Exclude<SubjectKind, null>,
   topic: string,
@@ -123,21 +171,29 @@ export function buildQueryChain(
 ): string[] {
   const topicKw = extractKeywords(topic, 5);
   const loKw = extractKeywords((learningOutcomes[0] ?? ""), 4);
-  const suffix = subjectKind === "english" ? "short prose excerpt" : "primary source";
   const chain: string[] = [];
-  // 1) topic + LO context (most specific)
-  if (topicKw.length > 0 && loKw.length > 0) {
-    chain.push(`${[...topicKw, ...loKw].join(" ")} ${suffix}`);
+  if (subjectKind === "english") {
+    const suffix = "short prose excerpt";
+    if (topicKw.length > 0 && loKw.length > 0) chain.push(`${[...topicKw, ...loKw].join(" ")} ${suffix}`);
+    if (topicKw.length > 0) chain.push(`${topicKw.join(" ")} ${suffix}`);
+    if (topicKw.length >= 2) chain.push(`${topicKw.slice(0, 2).join(" ")} ${suffix}`);
+  } else {
+    // Humanities: alternate primary-source and historian-perspective queries.
+    const base = topicKw.join(" ");
+    const baseWithLo = [...topicKw, ...loKw].join(" ");
+    if (topicKw.length > 0 && loKw.length > 0) {
+      chain.push(`${baseWithLo} primary source document archive`);
+      chain.push(`${baseWithLo} historian analysis`);
+    }
+    if (topicKw.length > 0) {
+      chain.push(`${base} primary source document`);
+      chain.push(`${base} historian perspective scholarly`);
+      chain.push(`${base} contemporary account`);
+    }
+    if (topicKw.length >= 2) {
+      chain.push(`${topicKw.slice(0, 2).join(" ")} primary source`);
+    }
   }
-  // 2) topic only
-  if (topicKw.length > 0) {
-    chain.push(`${topicKw.join(" ")} ${suffix}`);
-  }
-  // 3) two most distinctive topic words + suffix (shortest fallback)
-  if (topicKw.length >= 2) {
-    chain.push(`${topicKw.slice(0, 2).join(" ")} ${suffix}`);
-  }
-  // Dedupe while keeping order.
   return Array.from(new Set(chain));
 }
 
@@ -238,7 +294,7 @@ async function firecrawlSearch(query: string, allowList: string[]): Promise<stri
       Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ query, limit: 10 }),
+    body: JSON.stringify({ query, limit: 15 }),
   });
   if (!resp.ok) {
     console.warn("[sources] firecrawl search failed", resp.status, await resp.text());
@@ -251,7 +307,7 @@ async function firecrawlSearch(query: string, allowList: string[]): Promise<stri
     const url = r?.url ?? r?.link;
     if (typeof url === "string") urls.push(url);
   }
-  return urls.filter((u) => isAllowed(u, allowList)).slice(0, 5);
+  return urls.filter((u) => isAllowed(u, allowList)).slice(0, 10);
 }
 
 /** Try Tavily first (native domain filtering), fall back to Firecrawl. */
@@ -260,13 +316,20 @@ async function searchUrls(query: string, allowList: string[]): Promise<string[]>
     const { results } = await tavilySearch(query, {
       includeDomains: allowList,
       excludeDomains: DENY_DOMAINS,
-      maxResults: 10,
+      maxResults: 15,
     });
     const urls = results.map((r) => r.url).filter((u) => isAllowed(u, allowList));
-    if (urls.length > 0) return urls.slice(0, 5);
+    if (urls.length > 0) return urls.slice(0, 10);
     console.warn("[sources] tavily returned 0 allow-listed results, falling back to firecrawl");
   }
   return firecrawlSearch(query, allowList);
+}
+
+/** Sort humanities URLs so Tier 1 (primary) comes first, then Tier 2 (historian),
+ *  then Tier 3 (general reference / news). For English, preserve search order. */
+function rankUrlsForSubject(subjectKind: SubjectKind, urls: string[]): string[] {
+  if (subjectKind !== "humanities") return urls;
+  return [...urls].sort((a, b) => humanitiesTier(hostnameOf(a)) - humanitiesTier(hostnameOf(b)));
 }
 
 async function firecrawlScrape(url: string): Promise<{ markdown: string; title: string } | null> {
@@ -317,7 +380,7 @@ export async function fetchGroundedSource(
       console.warn("[sources] no allow-listed results for query:", query);
       continue;
     }
-    const candidates = urls.filter((u) => {
+    const candidates = rankUrlsForSubject(subjectKind, urls).filter((u) => {
       if (usedUrls && usedUrls.has(u)) return false;
       if (usedHosts && usedHosts.has(hostnameOf(u))) return false;
       return true;
@@ -326,7 +389,7 @@ export async function fetchGroundedSource(
       console.warn("[sources] all candidates already used for query:", query);
       continue;
     }
-    for (const url of candidates.slice(0, 5)) {
+    for (const url of candidates.slice(0, 8)) {
       try {
         const scraped = await firecrawlScrape(url);
         if (!scraped) continue;
