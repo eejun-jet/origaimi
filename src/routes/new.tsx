@@ -345,7 +345,7 @@ function NewAssessment() {
         assessment_type: aType,
         duration_minutes: duration,
         total_marks: totalMarks,
-        status: "draft",
+        status: "generating",
         topics: allTopics,
         blueprint: blueprintForDb as unknown as never,
         question_types: allQTypes,
@@ -382,7 +382,7 @@ function NewAssessment() {
     });
 
     setBusy(false);
-    if (e2) toast.error("Generation failed — opening empty draft");
+    if (e2) toast.error("Generation failed — opening failed draft");
     else if (gen) toast.success(`Drafted ${gen.questionCount ?? "your"} questions`);
     navigate({ to: "/assessment/$id", params: { id: created.id } });
   };

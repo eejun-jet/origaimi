@@ -417,7 +417,9 @@ function EditorPage() {
               <div className="rounded-xl border border-dashed border-border bg-card/50 p-12 text-center">
                 <Sparkles className="mx-auto h-8 w-8 text-primary" />
                 <p className="mt-3 text-sm text-muted-foreground">
-                  No questions yet. Generation may still be in progress, or it failed silently.
+                  {assessment.status === "generation_failed"
+                    ? "Generation failed because no usable source-backed questions could be created for this topic."
+                    : "No questions yet. Generation is still in progress."}
                 </p>
               </div>
             ) : (

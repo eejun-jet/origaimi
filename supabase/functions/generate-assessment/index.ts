@@ -479,11 +479,19 @@ async function callAI(
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+  let statusAssessmentId: string | null = null;
+  let statusClient: ReturnType<typeof createClient> | null = null;
+  const markAssessmentStatus = async (status: string) => {
+    if (!statusClient || !statusAssessmentId) return;
+    await statusClient.from("assessments").update({ status }).eq("id", statusAssessmentId);
+  };
+
   try {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
+    statusClient = supabase;
 
     const body = await req.json();
     const {
@@ -492,12 +500,15 @@ Deno.serve(async (req) => {
       userId: bodyUserId,
       syllabusCode, paperCode,
     } = body;
+    statusAssessmentId = assessmentId;
+    await markAssessmentStatus("generating");
     const userId = bodyUserId ?? "00000000-0000-0000-0000-000000000001";
 
     const fallbackTypes = Array.isArray(questionTypes) ? questionTypes : [];
     const sections = toSections(blueprint, "structured", fallbackTypes);
     if (sections.length === 0) {
-      return new Response(JSON.stringify({ error: "Blueprint has no sections" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        await markAssessmentStatus("generation_failed");
+        return new Response(JSON.stringify({ error: "Blueprint has no sections" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const subjectKind = classifySubject(subject);
@@ -776,13 +787,20 @@ Deno.serve(async (req) => {
       const { error: insErr } = await supabase.from("assessment_questions").insert(allRows);
       if (insErr) {
         console.error("Insert error", insErr);
+        await markAssessmentStatus("generation_failed");
         return new Response(JSON.stringify({ error: insErr.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
     }
 
-    if (allRows.length === 0 && sectionFailures > 0) {
-      return new Response(JSON.stringify({ error: "AI service temporarily unavailable. Please try again in a moment." }), { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (allRows.length === 0) {
+      await markAssessmentStatus("generation_failed");
+      const error = sectionFailures > 0
+        ? "AI service temporarily unavailable. Please try again in a moment."
+        : "No usable source-backed questions could be generated for this topic. Please narrow the syllabus topic or try a different source-based section."
+      return new Response(JSON.stringify({ error, droppedNoSource, sectionFailures }), { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+
+    await markAssessmentStatus(droppedNoSource > 0 || sectionFailures > 0 ? "draft_partial" : "draft");
 
     return new Response(JSON.stringify({
       ok: true,
@@ -796,6 +814,7 @@ Deno.serve(async (req) => {
     });
   } catch (e) {
     console.error("Unhandled", e);
+    await markAssessmentStatus("generation_failed");
     return new Response(JSON.stringify({ error: String(e) }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });
