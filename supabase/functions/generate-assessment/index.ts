@@ -279,16 +279,20 @@ Deno.serve(async (req) => {
       let source_excerpt: string | null = q.source_excerpt ?? null;
       let source_url: string | null = q.source_url ?? null;
       let notes: string | null = null;
+      const needsSource = q.question_type === "source_based" || q.question_type === "comprehension";
 
-      if (expected) {
+      if (!needsSource) {
+        // Structured / long / MCQ / short_answer / practical → no source attached, ever.
+        source_excerpt = null;
+        source_url = null;
+      } else if (expected) {
         // Anti-hallucination: require exact verbatim excerpt back.
         if (source_excerpt !== expected) {
-          // Override with the trusted excerpt + URL we retrieved.
           source_excerpt = expected;
           source_url = groundedSources[i]?.source_url ?? source_url;
           notes = "Source excerpt enforced from retrieved citation (model attempted to alter it).";
         }
-      } else if (sourceGate && (q.question_type === "source_based" || q.question_type === "comprehension")) {
+      } else if (sourceGate) {
         notes = "Source retrieval failed for this row — please attach a passage manually.";
         source_excerpt = null;
         source_url = null;
