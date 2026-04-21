@@ -16,12 +16,24 @@ CRITICAL RULES on codes:
 - Extract the document-level syllabus_code from the cover/header FIRST.
 
 CRITICAL RULES on papers (multi-paper syllabuses):
-- Many syllabuses (e.g. Combined Humanities 2261, Combined Science 5076/5077/5078) contain MULTIPLE PAPERS in one document.
+- Many syllabuses (e.g. Combined Humanities 2261, Combined Science 5076/5077/5078/5086) contain MULTIPLE PAPERS in one document.
 - Detect this by looking for an examination format / scheme of assessment table on the cover or intro pages, typically with columns like "Paper No. | Component | Marks | Weighting | Duration".
 - Emit ONE entry in the papers[] array PER paper found. Use paper_number "1", "2", etc. verbatim.
 - If the document covers a SINGLE paper, still emit one entry with paper_number "1".
 - For each topic, set its paper_number to the paper it belongs to. Use textual cues: section headings like "Paper 1: Social Studies", "Paper 2 (History)", or theme blocks that follow such a heading.
 - If a topic genuinely applies to all papers (rare — e.g. shared skills), use paper_number null.
+
+CRITICAL RULES on multi-track / sectioned syllabuses (e.g. Combined Science 5086, 5076, 5077, 5078):
+- Some syllabuses split content into discipline SECTIONS (Physics / Chemistry / Biology) where one paper draws content from MULTIPLE sections (e.g. a shared MCQ paper) and other papers are dedicated to a single section.
+- For each PAPER, set:
+    section: the single discipline if the paper is dedicated (e.g. "Physics"), or null if it spans multiple sections.
+    track_tags: lowercase array of all sections this paper draws from, e.g. ["physics","chemistry","biology"] for a shared MCQ paper, ["physics"] for a Physics-only paper.
+- For each TOPIC, set section to the discipline heading it sits under verbatim ("Physics", "Chemistry", "Biology"), or null if not applicable.
+- For combined-subject syllabuses where each paper is itself a single subject (e.g. Combined Humanities 2261 = SS + History/Geo/Lit), DO NOT use section — use component_name on the paper instead and leave section null.
+
+CRITICAL RULES on assessment_mode:
+- For each paper, classify the mode of assessment as one of: "written" (default), "oral" (spoken response), "listening" (audio comprehension), "practical" (lab / hands-on).
+- English Language papers typically have a Paper 3 Listening + Paper 4 Oral. Combined Science Paper 5 is Practical.
 
 You will be given the raw text of a syllabus document. Build a flat list of topics where each topic carries:
 - topic_code (verbatim, or null)
@@ -33,6 +45,7 @@ You will be given the raw text of a syllabus document. Build a flat list of topi
 - suggested_blooms (subset of: Remember, Understand, Apply, Analyse, Evaluate, Create)
 - depth (0 = strand, 1 = sub-strand, 2 = topic, 3 = sub-topic)
 - paper_number (which paper this topic belongs to, or null)
+- section (discipline section the topic belongs to in multi-track syllabuses, or null)
 
 Also extract document-level fields: syllabus_code, paper_code, exam_board, syllabus_year, subject, level.`;
 
@@ -69,8 +82,12 @@ const TOOL = {
               weighting_percent: { type: ["integer", "null"] },
               duration_minutes: { type: ["integer", "null"], description: "Convert e.g. '1 hr 45 min' to 105." },
               topic_theme: { type: ["string", "null"], description: "Overall theme/title for this paper if printed." },
+              section: { type: ["string", "null"], description: "Discipline section if dedicated, e.g. 'Physics' / 'Chemistry' / 'Biology'. Null if cross-section or not applicable." },
+              track_tags: { type: "array", items: { type: "string" }, description: "Lowercase tags for which sections this paper covers, e.g. ['physics','chemistry','biology']. Empty array if not applicable." },
+              is_optional: { type: "boolean", description: "True for rare alternative / optional papers; false otherwise." },
+              assessment_mode: { type: ["string", "null"], enum: ["written", "oral", "listening", "practical", null], description: "Mode of assessment. Default 'written'." },
             },
-            required: ["paper_number", "component_name", "marks", "weighting_percent", "duration_minutes", "topic_theme"],
+            required: ["paper_number", "component_name", "marks", "weighting_percent", "duration_minutes", "topic_theme", "section", "track_tags", "is_optional", "assessment_mode"],
             additionalProperties: false,
           },
         },
@@ -89,8 +106,9 @@ const TOOL = {
               suggested_blooms: { type: "array", items: { type: "string", enum: ["Remember", "Understand", "Apply", "Analyse", "Evaluate", "Create"] } },
               depth: { type: "integer", minimum: 0, maximum: 5 },
               paper_number: { type: ["string", "null"], description: "Which paper this topic belongs to (matches papers[].paper_number), or null if it applies to all." },
+              section: { type: ["string", "null"], description: "Discipline section heading (Physics/Chemistry/Biology), or null." },
             },
-            required: ["topic_code", "parent_code", "title", "learning_outcomes", "suggested_blooms", "depth", "paper_number"],
+            required: ["topic_code", "parent_code", "title", "learning_outcomes", "suggested_blooms", "depth", "paper_number", "section"],
             additionalProperties: false,
           },
         },
@@ -152,14 +170,14 @@ Deno.serve(async (req) => {
       userMessage = {
         role: "user",
         content: [
-          { type: "text", text: `Extract the full syllabus structure from this document, including ALL papers if multi-paper. Title hint: "${doc.title}". Subject hint: ${doc.subject ?? "unknown"}. Level hint: ${doc.level ?? "unknown"}.` },
+          { type: "text", text: `Extract the full syllabus structure from this document, including ALL papers if multi-paper, and tag papers/topics with discipline section + assessment mode where applicable. Title hint: "${doc.title}". Subject hint: ${doc.subject ?? "unknown"}. Level hint: ${doc.level ?? "unknown"}.` },
           { type: "image_url", image_url: { url: `data:${mime};base64,${b64}` } },
         ],
       };
     } else {
       userMessage = {
         role: "user",
-        content: `Extract the full syllabus structure from this document, including ALL papers if multi-paper.\n\nTitle hint: "${doc.title}"\nSubject hint: ${doc.subject ?? "unknown"}\nLevel hint: ${doc.level ?? "unknown"}\n\n--- DOCUMENT TEXT ---\n${content.slice(0, 200000)}`,
+        content: `Extract the full syllabus structure from this document, including ALL papers if multi-paper, and tag papers/topics with discipline section + assessment mode where applicable.\n\nTitle hint: "${doc.title}"\nSubject hint: ${doc.subject ?? "unknown"}\nLevel hint: ${doc.level ?? "unknown"}\n\n--- DOCUMENT TEXT ---\n${content.slice(0, 200000)}`,
       };
     }
 
@@ -221,7 +239,7 @@ Deno.serve(async (req) => {
     // Ensure at least one paper exists (defensive — schema requires it)
     const safePapers = papers.length > 0
       ? papers
-      : [{ paper_number: "1", component_name: null, marks: null, weighting_percent: null, duration_minutes: null, topic_theme: null }];
+      : [{ paper_number: "1", component_name: null, marks: null, weighting_percent: null, duration_minutes: null, topic_theme: null, section: null, track_tags: [], is_optional: false, assessment_mode: "written" }];
 
     const paperRows = safePapers.map((p, i) => ({
       source_doc_id: documentId,
@@ -232,6 +250,10 @@ Deno.serve(async (req) => {
       weighting_percent: p.weighting_percent ?? null,
       duration_minutes: p.duration_minutes ?? null,
       topic_theme: p.topic_theme ?? null,
+      section: p.section ?? null,
+      track_tags: Array.isArray(p.track_tags) ? p.track_tags.map((t: string) => String(t).toLowerCase()) : [],
+      is_optional: !!p.is_optional,
+      assessment_mode: p.assessment_mode ?? "written",
       position: i,
     }));
 
@@ -269,6 +291,7 @@ Deno.serve(async (req) => {
           position: i,
           subject: doc.subject ?? docMeta.subject ?? null,
           level: doc.level ?? docMeta.level ?? null,
+          section: t.section ?? null,
         };
       });
       const { error: insErr } = await supabase.from("syllabus_topics").insert(rows);

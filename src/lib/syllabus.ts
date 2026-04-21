@@ -31,7 +31,19 @@ export const QUESTION_TYPES = [
   { id: "comprehension", label: "Comprehension" },
   { id: "practical", label: "Practical" },
   { id: "source_based", label: "Source-based" },
+  { id: "spoken_response", label: "Spoken response" },
+  { id: "listening_mcq", label: "Listening MCQ" },
+  { id: "note_taking", label: "Note-taking" },
+  { id: "summary", label: "Summary writing" },
 ] as const;
+
+// Default question types per assessment mode (for oral/listening/practical papers)
+export const QUESTION_TYPES_BY_MODE: Record<string, string[]> = {
+  written: ["mcq", "short_answer", "structured", "long"],
+  oral: ["spoken_response"],
+  listening: ["listening_mcq", "note_taking", "summary"],
+  practical: ["practical", "structured"],
+};
 
 export const ITEM_SOURCES = [
   { id: "ai", label: "AI-generated" },
