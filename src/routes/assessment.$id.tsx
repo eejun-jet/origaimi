@@ -7,8 +7,19 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Loader2, RefreshCw, Trash2, BookmarkPlus, Sparkles, ChevronUp, ChevronDown } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { ArrowLeft, Loader2, RefreshCw, Trash2, BookmarkPlus, Sparkles, ChevronUp, ChevronDown, X } from "lucide-react";
 import { BLOOMS } from "@/lib/syllabus";
 import { toast } from "sonner";
 
@@ -55,6 +66,11 @@ function EditorPage() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [fetching, setFetching] = useState(true);
   const [regenId, setRegenId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmDelete, setConfirmDelete] = useState<{ ids: string[]; label: string } | null>(null);
+  const [bulkRegenOpen, setBulkRegenOpen] = useState(false);
+  const [bulkRegenInstr, setBulkRegenInstr] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const loadAll = async () => {
     const { data: a } = await supabase.from("assessments").select("*").eq("id", id).single();
@@ -69,15 +85,31 @@ function EditorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  const toggleSelect = (qId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(qId)) next.delete(qId);
+      else next.add(qId);
+      return next;
+    });
+  };
+  const selectAll = () => setSelectedIds(new Set(questions.map((q) => q.id)));
+  const clearSelection = () => setSelectedIds(new Set());
+
   const updateQ = async (qId: string, patch: Partial<Question>) => {
     setQuestions((qs) => qs.map((q) => (q.id === qId ? { ...q, ...patch } : q)));
     await supabase.from("assessment_questions").update(patch).eq("id", qId);
   };
 
-  const deleteQ = async (qId: string) => {
-    setQuestions((qs) => qs.filter((q) => q.id !== qId));
-    await supabase.from("assessment_questions").delete().eq("id", qId);
-    toast.success("Question removed");
+  const performDelete = async (ids: string[]) => {
+    setQuestions((qs) => qs.filter((q) => !ids.includes(q.id)));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((i) => next.delete(i));
+      return next;
+    });
+    await supabase.from("assessment_questions").delete().in("id", ids);
+    toast.success(ids.length === 1 ? "Question removed" : `${ids.length} questions removed`);
   };
 
   const moveQ = async (qId: string, dir: -1 | 1) => {
@@ -109,7 +141,41 @@ function EditorPage() {
     }
   };
 
-  const saveToBank = async (q: Question) => {
+  const bulkRegenerate = async (instruction: string) => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setBulkBusy(true);
+    setBulkRegenOpen(false);
+    const toastId = toast.loading(`Regenerating 0 of ${ids.length}…`);
+    let done = 0;
+    let failed = 0;
+    for (const qId of ids) {
+      setRegenId(qId);
+      try {
+        const { data, error } = await supabase.functions.invoke("regenerate-question", {
+          body: { questionId: qId, instruction },
+        });
+        if (error) failed++;
+        else if (data?.question) {
+          setQuestions((qs) => qs.map((q) => (q.id === qId ? { ...q, ...data.question } : q)));
+        }
+      } catch {
+        failed++;
+      }
+      done++;
+      toast.loading(`Regenerating ${done} of ${ids.length}…`, { id: toastId });
+    }
+    setRegenId(null);
+    setBulkBusy(false);
+    setBulkRegenInstr("");
+    if (failed > 0) {
+      toast.error(`${done - failed} regenerated, ${failed} failed`, { id: toastId });
+    } else {
+      toast.success(`${done} questions regenerated`, { id: toastId });
+    }
+  };
+
+  const saveQToBank = async (q: Question) => {
     if (!user || !assessment) return;
     await supabase.from("question_bank_items").insert({
       user_id: user.id,
@@ -126,7 +192,42 @@ function EditorPage() {
       mark_scheme: q.mark_scheme,
       source: "ai",
     });
+  };
+
+  const saveToBank = async (q: Question) => {
+    await saveQToBank(q);
     toast.success("Saved to question bank");
+  };
+
+  const bulkSaveToBank = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0 || !user || !assessment) return;
+    setBulkBusy(true);
+    const toSave = questions.filter((q) => ids.includes(q.id));
+    try {
+      await supabase.from("question_bank_items").insert(
+        toSave.map((q) => ({
+          user_id: user.id,
+          subject: assessment.subject,
+          level: assessment.level,
+          topic: q.topic,
+          bloom_level: q.bloom_level,
+          difficulty: q.difficulty,
+          question_type: q.question_type,
+          marks: q.marks,
+          stem: q.stem,
+          options: q.options,
+          answer: q.answer,
+          mark_scheme: q.mark_scheme,
+          source: "ai",
+        })),
+      );
+      toast.success(`${toSave.length} saved to question bank`);
+      clearSelection();
+    } catch {
+      toast.error("Failed to save to bank");
+    }
+    setBulkBusy(false);
   };
 
   const setStatus = async (status: string) => {
@@ -171,6 +272,7 @@ function EditorPage() {
     if (q.bloom_level) actualByBloom[q.bloom_level] = (actualByBloom[q.bloom_level] ?? 0) + q.marks;
   });
   const totalActual = questions.reduce((s, q) => s + q.marks, 0);
+  const allSelected = questions.length > 0 && selectedIds.size === questions.length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -204,6 +306,67 @@ function EditorPage() {
 
         <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px]">
           <div className="space-y-4">
+            {selectedIds.size > 0 && (
+              <div className="sticky top-16 z-20 flex flex-wrap items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 p-3 shadow-sm backdrop-blur">
+                <span className="text-sm font-medium">{selectedIds.size} selected</span>
+                <Button size="sm" variant="ghost" onClick={allSelected ? clearSelection : selectAll}>
+                  {allSelected ? "Clear" : "Select all"}
+                </Button>
+                <div className="ml-auto flex flex-wrap gap-1">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={bulkBusy}
+                    onClick={() => setBulkRegenOpen(true)}
+                    className="gap-1"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" /> Regenerate
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={bulkBusy}
+                    onClick={bulkSaveToBank}
+                    className="gap-1"
+                  >
+                    <BookmarkPlus className="h-3.5 w-3.5" /> Save to bank
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={bulkBusy}
+                    onClick={() => setConfirmDelete({ ids: Array.from(selectedIds), label: `${selectedIds.size} questions` })}
+                    className="gap-1 text-destructive hover:text-destructive"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> Delete
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={clearSelection} className="gap-1">
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {bulkRegenOpen && (
+              <div className="rounded-xl border border-border bg-card p-4">
+                <div className="text-sm font-medium">Regenerate {selectedIds.size} questions</div>
+                <Textarea
+                  rows={2}
+                  value={bulkRegenInstr}
+                  onChange={(e) => setBulkRegenInstr(e.target.value)}
+                  placeholder="Optional instruction applied to each: 'make harder', 'use Singapore context'…"
+                  className="mt-2"
+                />
+                <div className="mt-2 flex gap-2">
+                  <Button size="sm" disabled={bulkBusy} onClick={() => bulkRegenerate(bulkRegenInstr)} className="gap-1">
+                    {bulkBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                    Regenerate selected
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setBulkRegenOpen(false)}>Cancel</Button>
+                </div>
+              </div>
+            )}
+
             {questions.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border bg-card/50 p-12 text-center">
                 <Sparkles className="mx-auto h-8 w-8 text-primary" />
@@ -220,8 +383,10 @@ function EditorPage() {
                   isLast={i === questions.length - 1}
                   isFirst={i === 0}
                   isRegen={regenId === q.id}
+                  selected={selectedIds.has(q.id)}
+                  onToggleSelect={() => toggleSelect(q.id)}
                   onUpdate={(patch) => updateQ(q.id, patch)}
-                  onDelete={() => deleteQ(q.id)}
+                  onDelete={() => setConfirmDelete({ ids: [q.id], label: `Q${i + 1}` })}
                   onMove={(d) => moveQ(q.id, d)}
                   onRegenerate={(ins) => regenerate(q.id, ins)}
                   onBank={() => saveToBank(q)}
@@ -281,14 +446,41 @@ function EditorPage() {
           </aside>
         </div>
       </main>
+
+      <AlertDialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {confirmDelete?.label}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmDelete && confirmDelete.ids.length > 1
+                ? `This will permanently delete ${confirmDelete.ids.length} questions from this assessment. This cannot be undone.`
+                : "This will permanently delete the question from this assessment. This cannot be undone."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (confirmDelete) performDelete(confirmDelete.ids);
+                setConfirmDelete(null);
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
 
 function QuestionCard({
-  q, index, isFirst, isLast, isRegen, onUpdate, onDelete, onMove, onRegenerate, onBank,
+  q, index, isFirst, isLast, isRegen, selected, onToggleSelect, onUpdate, onDelete, onMove, onRegenerate, onBank,
 }: {
   q: Question; index: number; isFirst: boolean; isLast: boolean; isRegen: boolean;
+  selected: boolean;
+  onToggleSelect: () => void;
   onUpdate: (patch: Partial<Question>) => void;
   onDelete: () => void;
   onMove: (dir: -1 | 1) => void;
@@ -310,9 +502,15 @@ function QuestionCard({
   };
 
   return (
-    <div className="rounded-xl border border-border bg-card p-5">
+    <div className={`rounded-xl border bg-card p-5 transition-colors ${selected ? "border-primary/60 ring-1 ring-primary/30" : "border-border"}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
+          <Checkbox
+            checked={selected}
+            onCheckedChange={onToggleSelect}
+            aria-label={`Select Q${index}`}
+            className="mr-1"
+          />
           <span className="font-paper text-lg font-semibold text-foreground">Q{index}</span>
           <Badge variant="outline">{q.question_type.replace("_", " ")}</Badge>
           {q.topic && <Badge variant="outline">{q.topic}</Badge>}
