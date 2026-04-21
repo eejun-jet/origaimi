@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { ArrowLeft, Save, Trash2, Plus, Loader2 } from "lucide-react";
 
@@ -37,6 +38,10 @@ type Paper = {
   duration_minutes: number | null;
   topic_theme: string | null;
   position: number;
+  section: string | null;
+  track_tags: string[] | null;
+  is_optional: boolean;
+  assessment_mode: string | null;
 };
 
 type Topic = {
@@ -52,6 +57,7 @@ type Topic = {
   suggested_blooms: string[];
   depth: number;
   position: number;
+  section: string | null;
 };
 
 const ALL_PAPERS = "__all__";
