@@ -14,8 +14,8 @@ import {
   SUBJECTS, LEVELS, ASSESSMENT_TYPES, QUESTION_TYPES, QUESTION_TYPES_BY_MODE, ITEM_SOURCES, BLOOMS, topicsFor,
 } from "@/lib/syllabus";
 import {
-  loadSyllabusLibrary, loadPaperTopics, loadDocTopics,
-  type SyllabusLibraryDoc, type SyllabusLibraryPaper, type PaperTopic,
+  loadSyllabusLibrary, loadPaperTopics, loadDocTopics, loadDocAssessmentObjectives,
+  type SyllabusLibraryDoc, type SyllabusLibraryPaper, type PaperTopic, type AssessmentObjective,
 } from "@/lib/syllabus-data";
 import { ChevronLeft, ChevronRight, Sparkles, Loader2, BookOpen, Upload } from "lucide-react";
 import { Link } from "@tanstack/react-router";
@@ -32,6 +32,8 @@ type BlueprintRow = {
   marks: number;
   topic_code?: string | null;
   learning_outcomes?: string[];
+  ao_codes?: string[];
+  outcome_categories?: string[];
 };
 type Blueprint = BlueprintRow[];
 
