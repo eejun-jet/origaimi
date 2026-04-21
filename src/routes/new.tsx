@@ -86,6 +86,7 @@ function NewAssessment() {
   useEffect(() => {
     if (!selected) {
       setPaperTopics([]);
+      setDocAOs([]);
       return;
     }
     const { doc, paper } = selected;
@@ -94,14 +95,18 @@ function NewAssessment() {
     if (paper.durationMinutes) setDuration(paper.durationMinutes);
     if (paper.marks) setTotalMarks(paper.marks);
     setTopicsLoading(true);
-    loadPaperTopics(paper.id)
-      .then(async (t) => {
+    Promise.all([
+      loadPaperTopics(paper.id).then(async (t) => {
         if (t.length === 0 && (paper.trackTags?.length ?? 0) > 1) {
-          const sibling = await loadDocTopics(doc.id);
-          setPaperTopics(sibling);
-        } else {
-          setPaperTopics(t);
+          return loadDocTopics(doc.id);
         }
+        return t;
+      }),
+      loadDocAssessmentObjectives(doc.id),
+    ])
+      .then(([t, aos]) => {
+        setPaperTopics(t);
+        setDocAOs(aos);
       })
       .catch((e) => toast.error(e.message ?? "Could not load topics"))
       .finally(() => setTopicsLoading(false));
