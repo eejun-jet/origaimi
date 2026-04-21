@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import {
-  SUBJECTS, LEVELS, ASSESSMENT_TYPES, QUESTION_TYPES, ITEM_SOURCES, BLOOMS, topicsFor,
+  SUBJECTS, LEVELS, ASSESSMENT_TYPES, QUESTION_TYPES, QUESTION_TYPES_BY_MODE, ITEM_SOURCES, BLOOMS, topicsFor,
 } from "@/lib/syllabus";
 import {
   loadSyllabusLibrary, loadPaperTopics,
@@ -96,11 +96,29 @@ function NewAssessment() {
 
   // Step 2 — topic selection
   const fallbackTopics = useMemo(() => topicsFor(subject, level), [subject, level]);
-  // For syllabus mode, only pick leaf-ish topics (depth >= 1) for selection
-  const selectableSyllabusTopics = useMemo(
-    () => paperTopics.filter((t) => t.depth >= 1 || paperTopics.every((x) => x.depth === 0)),
-    [paperTopics],
-  );
+
+  // Section sub-selector (for multi-track papers like Combined Science 5086)
+  const availableSections = useMemo(() => {
+    if (!selected) return [];
+    const tags = selected.paper.trackTags ?? [];
+    if (tags.length > 1) return tags.map((t) => t.charAt(0).toUpperCase() + t.slice(1));
+    const fromTopics = Array.from(new Set(paperTopics.map((t) => t.section).filter((s): s is string => !!s)));
+    return fromTopics.length > 1 ? fromTopics : [];
+  }, [selected, paperTopics]);
+  const [activeSection, setActiveSection] = useState<string | null>(null);
+  useEffect(() => {
+    if (availableSections.length > 0) setActiveSection(availableSections[0]);
+    else setActiveSection(selected?.paper.section ?? null);
+  }, [availableSections, selected]);
+
+  // For syllabus mode, only pick leaf-ish topics, optionally filtered by active section
+  const selectableSyllabusTopics = useMemo(() => {
+    let pool = paperTopics.filter((t) => t.depth >= 1 || paperTopics.every((x) => x.depth === 0));
+    if (availableSections.length > 0 && activeSection) {
+      pool = pool.filter((t) => !t.section || t.section.toLowerCase() === activeSection.toLowerCase());
+    }
+    return pool;
+  }, [paperTopics, availableSections, activeSection]);
 
   const [selectedTopicIds, setSelectedTopicIds] = useState<string[]>([]);
   const [topics, setTopics] = useState<string[]>([]); // fallback (non-syllabus) topic names
@@ -108,7 +126,7 @@ function NewAssessment() {
   useEffect(() => {
     setSelectedTopicIds([]);
     setTopics([]);
-  }, [selectedPaperKey, subject, level]);
+  }, [selectedPaperKey, subject, level, activeSection]);
 
   // Step 3 — blueprint
   const [blueprint, setBlueprint] = useState<Blueprint>([]);
