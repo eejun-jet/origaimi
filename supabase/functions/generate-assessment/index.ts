@@ -289,10 +289,12 @@ Deno.serve(async (req) => {
       let notes: string | null = null;
       let question_type: string = q.question_type;
 
-      // Humanities invariant: every question MUST have exactly one unique source.
-      if (subjectKind === "humanities") {
+      // Humanities: essays/long-answer questions never need a source.
+      // All other Humanities question types MUST have exactly one unique source.
+      const isEssay = question_type === "long" || question_type === "structured";
+      if (subjectKind === "humanities" && !isEssay) {
         if (!expected) {
-          // Drop this question — no source could be retrieved.
+          // Drop this question — no source could be retrieved for a non-essay humanities question.
           droppedHumanitiesNoSource++;
           return null;
         }
