@@ -1120,7 +1120,7 @@ function SectionCard({
       <div className="mt-3 grid gap-3 sm:grid-cols-4">
         <div>
           <Label className="text-xs">Question type</Label>
-          <Select value={section.question_type} onValueChange={(v) => onUpdate({ question_type: v, ...(v !== "source_based" ? { sbq_skill: undefined } : {}) })}>
+          <Select value={section.question_type} onValueChange={(v) => onUpdate({ question_type: v, ...(v !== "source_based" ? { sbq_skill: undefined, sbq_skills: undefined } : {}) })}>
             <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
             <SelectContent>
               {visibleQuestionTypes.map((q) => (
