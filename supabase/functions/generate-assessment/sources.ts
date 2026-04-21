@@ -65,8 +65,35 @@ const DENY_DOMAINS = [
   "tumblr.com", "pinterest.com",
 ];
 
-const MIN_WORDS = 100;
-const MAX_WORDS = 180;
+// Tiered preference for humanities domains. Tier 1 = primary sources;
+// Tier 2 = historian / scholarly secondary sources; Tier 3 = general
+// reference / contemporary news (last resort).
+const HUMANITIES_TIER_1_PRIMARY = new Set([
+  "nas.gov.sg", "eresources.nlb.gov.sg", "nlb.gov.sg", "roots.gov.sg",
+  "mindef.gov.sg", "gov.sg",
+  "nationalarchives.gov.uk", "bl.uk", "archives.gov", "loc.gov",
+  "iwm.org.uk", "awm.gov.au", "ushmm.org", "un.org",
+  "avalon.law.yale.edu", "founders.archives.gov", "fordham.edu",
+  "wilsoncenter.org",
+]);
+const HUMANITIES_TIER_2_HISTORIAN = new Set([
+  "jstor.org", "historytoday.com", "historyextra.com",
+  "oxfordre.com", "britannica.com",
+]);
+
+function humanitiesTier(host: string): 1 | 2 | 3 {
+  // Walk parent domains for subdomain matches (e.g. www.nas.gov.sg → nas.gov.sg).
+  const parts = host.split(".");
+  for (let i = 0; i < parts.length; i++) {
+    const d = parts.slice(i).join(".");
+    if (HUMANITIES_TIER_1_PRIMARY.has(d)) return 1;
+    if (HUMANITIES_TIER_2_HISTORIAN.has(d)) return 2;
+  }
+  return 3;
+}
+
+const MIN_WORDS = 120;
+const MAX_WORDS = 200;
 
 export type SubjectKind = "humanities" | "english" | null;
 
