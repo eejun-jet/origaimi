@@ -9,6 +9,7 @@ export const SUBJECTS = [
 
 export const LEVELS = [
   "P1", "P2", "P3", "P4", "P5", "P6",
+  "P6 Foundation",
   "Sec 1", "Sec 2",
   "Sec 3", "Sec 4",
   "Sec 3N", "Sec 4N", "Sec 5N",
