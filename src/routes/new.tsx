@@ -38,6 +38,41 @@ type BlueprintRow = {
 };
 type Blueprint = BlueprintRow[];
 
+type Band = "primary" | "secondary";
+type Stream = "standard" | "foundation" | "g3" | "g2";
+
+function classifyLevel(level?: string | null): { band: Band; stream: Stream } | null {
+  if (!level) return null;
+  const l = level.toLowerCase();
+  if (l.startsWith("p")) {
+    return { band: "primary", stream: l.includes("foundation") ? "foundation" : "standard" };
+  }
+  if (l.startsWith("sec") || l.startsWith("s")) {
+    // "Sec 4N" / "Sec 4 N(A)" → G2; everything else secondary → G3 (covers G3/Express/O-Level)
+    const isNA = /\b(n\(a\)|na|n\b|4n|3n)/i.test(level);
+    return { band: "secondary", stream: isNA ? "g2" : "g3" };
+  }
+  return null;
+}
+
+function matchesBandStream(level: string | null | undefined, band: Band, stream: Stream): boolean {
+  const c = classifyLevel(level);
+  if (!c) return false;
+  return c.band === band && c.stream === stream;
+}
+
+const STREAMS_FOR_BAND: Record<Band, { id: Stream; label: string }[]> = {
+  primary: [
+    { id: "standard", label: "Standard (PSLE)" },
+    { id: "foundation", label: "Foundation" },
+  ],
+  secondary: [
+    { id: "g3", label: "G3 / Express" },
+    { id: "g2", label: "G2 / N(A)" },
+  ],
+};
+
+
 function NewAssessment() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -326,16 +361,46 @@ function NewAssessment() {
                   </div>
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <Label className="flex items-center gap-2">
                     <BookOpen className="h-3.5 w-3.5" /> Syllabus paper
                   </Label>
+
+                  {/* Band + Stream filter */}
+                  <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-2.5">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                      <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Band</span>
+                      <SegmentedFilter
+                        options={[{ id: "primary", label: "Primary" }, { id: "secondary", label: "Secondary" }]}
+                        value={bandFilter}
+                        onChange={(v) => {
+                          const b = v as Band;
+                          setBandFilter(b);
+                          // Reset stream to first available for the new band.
+                          setStreamFilter(STREAMS_FOR_BAND[b][0].id);
+                        }}
+                      />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                      <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Stream</span>
+                      <SegmentedFilter
+                        options={STREAMS_FOR_BAND[bandFilter]}
+                        value={streamFilter}
+                        onChange={(v) => setStreamFilter(v as Stream)}
+                      />
+                    </div>
+                  </div>
+
                   <Select value={selectedPaperKey} onValueChange={setSelectedPaperKey}>
                     <SelectTrigger>
                       <SelectValue placeholder="Pick the syllabus + paper to align to…" />
                     </SelectTrigger>
                     <SelectContent>
-                      {library.map((doc) => (
+                      {filteredLibrary.length === 0 ? (
+                        <div className="px-3 py-2 text-xs italic text-muted-foreground">
+                          No syllabuses uploaded for this band/stream yet.
+                        </div>
+                      ) : filteredLibrary.map((doc) => (
                         <div key={doc.id}>
                           <div className="px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                             {doc.syllabusCode ? `${doc.syllabusCode} · ` : ""}{doc.title}
