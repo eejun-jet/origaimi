@@ -332,23 +332,23 @@ function NewAssessment() {
 
   const handleGenerate = async () => {
     setBusy(true);
+    const blueprintForDb: SectionedBlueprint = { sections };
+    const allTopics = Array.from(new Set(sections.flatMap((s) => s.topic_pool.map((t) => t.topic))));
+    const allQTypes = Array.from(new Set(sections.map((s) => s.question_type)));
+
     const { data: created, error: e1 } = await supabase
       .from("assessments")
       .insert({
         user_id: user.id,
-        title,
-        subject,
-        level,
+        title, subject, level,
         assessment_type: aType,
         duration_minutes: duration,
         total_marks: totalMarks,
         status: "draft",
-        topics: useSyllabus
-          ? blueprint.map((b) => b.topic)
-          : topics,
-        blueprint,
-        question_types: qTypes,
-        item_sources: sources,
+        topics: allTopics,
+        blueprint: blueprintForDb as unknown as never,
+        question_types: allQTypes,
+        item_sources: ["ai"],
         instructions: referenceNote || null,
         syllabus_doc_id: selected?.doc.id ?? null,
         syllabus_paper_id: selected?.paper.id ?? null,
@@ -370,10 +370,10 @@ function NewAssessment() {
         assessmentType: aType,
         durationMinutes: duration,
         totalMarks,
-        topics: useSyllabus ? blueprint.map((b) => b.topic) : topics,
-        blueprint,
-        questionTypes: qTypes,
-        itemSources: sources,
+        topics: allTopics,
+        blueprint: blueprintForDb,
+        questionTypes: allQTypes,
+        itemSources: ["ai"],
         instructions: referenceNote,
         syllabusCode: selected?.doc.syllabusCode ?? null,
         paperCode: selected?.paper.paperCode ?? null,
@@ -381,12 +381,8 @@ function NewAssessment() {
     });
 
     setBusy(false);
-
-    if (e2) {
-      toast.error("Generation failed — opening empty draft");
-    } else if (gen) {
-      toast.success(`Drafted ${gen.questionCount ?? "your"} questions`);
-    }
+    if (e2) toast.error("Generation failed — opening empty draft");
+    else if (gen) toast.success(`Drafted ${gen.questionCount ?? "your"} questions`);
     navigate({ to: "/assessment/$id", params: { id: created.id } });
   };
 
