@@ -1,45 +1,38 @@
 
 
-## Add Tavily as a second web-search provider (alongside Firecrawl)
+## Fix: drop the `auth.users` FK on `assessments` (trial mode)
 
-You'll provide a **Tavily API key** and the generator will use Tavily as an additional crawl/search backend. Firecrawl stays — Tavily complements it.
+### Root cause
 
-### How the two providers will be used
+The app currently runs in **trial mode** (`src/lib/auth-context.tsx`) with a hard-coded demo user `00000000-0000-0000-0000-000000000001`. RLS is permissively open for `public` so most tables accept inserts from this fake user.
 
-Tavily and Firecrawl have different strengths, so we'll route by job:
+But the `assessments` table was created with a strict foreign key:
 
-| Job | Primary | Fallback |
-|---|---|---|
-| **Web search** (find candidate URLs on allow-listed domains) for History/Social Studies sources, English passages, and Math/Science diagrams | **Tavily** (`/search` — fast, returns ranked results with snippets and `include_domains` filter) | Firecrawl `/v2/search` |
-| **Page scrape** (pull full markdown of a chosen URL to extract a 100–180 word excerpt) | **Firecrawl** `/v2/scrape` (best markdown quality, `onlyMainContent`) | Tavily `/extract` |
-| **Image discovery** for diagrams (find labelled figures on Khan Academy, OpenStax, etc.) | **Tavily** (`include_images: true`) | Firecrawl |
+```
+assessments_user_id_fkey: FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
+```
 
-This means Tavily becomes the default **search + image-finder** (cheaper, faster, native domain filtering), while Firecrawl stays the default **page-content extractor** (best markdown).
+Since the demo user does not exist in `auth.users`, **every** assessment insert fails — not just History. (You probably hit it on History first because that's the first time you actually clicked generate.)
 
-### Changes
+None of the other trial-mode tables (`assessment_questions`, `past_papers`, `question_bank_items`, `reference_materials`, etc.) have this FK, which is why they work.
 
-**Secret**: Add `TAVILY_API_KEY` as a runtime secret. I'll prompt you with `add_secret` once you approve.
+### The fix (one migration)
 
-**New file**: `supabase/functions/_shared/tavily.ts` — thin wrapper exposing:
-- `tavilySearch(query, { includeDomains, excludeDomains, maxResults, includeImages })` → POSTs to `https://api.tavily.com/search`
-- `tavilyExtract(urls)` → POSTs to `https://api.tavily.com/extract` (fallback for scrape)
+Drop the FK on `assessments.user_id` so it matches the rest of the trial-mode tables. The column stays `uuid NOT NULL`, just without the referential constraint.
 
-**Updated files**:
-- `supabase/functions/generate-assessment/sources.ts` — replace `firecrawlSearch` with a `searchUrls()` helper that tries Tavily first (with `include_domains` = our allow-list), falls back to Firecrawl. Scraping still uses Firecrawl. Allow-list and deny-list logic unchanged.
-- `supabase/functions/generate-assessment/diagrams.ts` — for the "web crawl for diagrams" tier (tier 2), use Tavily with `include_images: true` to find diagram URLs on the allow-listed Math/Science domains. Falls back to Firecrawl. AI generation tier (tier 3) and past-paper tier (tier 1) unchanged.
+```sql
+ALTER TABLE public.assessments
+  DROP CONSTRAINT IF EXISTS assessments_user_id_fkey;
+```
 
-**No DB changes, no UI changes.** Behaviour is transparent — citations on questions and diagrams continue to render exactly as today; only the upstream provider changes.
+That's it. No code changes needed — the insert in `generate-assessment/index.ts` already passes the demo user ID, and the open RLS policies already permit it.
 
-### Failure / cost behaviour
+### Why this is safe for now
 
-- If `TAVILY_API_KEY` is missing → silently fall through to Firecrawl-only (current behaviour).
-- If Tavily returns 0 allow-listed results → fall through to Firecrawl.
-- If Tavily returns a 401/402/429 → log + fall through to Firecrawl, never crash the generation.
+- You're explicitly in trial mode (no real auth, RLS is open to `public`).
+- When you later re-enable real authentication, we'll re-add a proper FK as part of that migration alongside restoring tighter RLS policies. That's a larger piece of work and deserves its own plan.
 
-### What you need to do
+### After approval
 
-1. Approve this plan.
-2. When prompted, paste your Tavily API key (get one free at tavily.com — 1,000 searches/month on the free tier).
-
-Once added I'll wire both providers in and we can verify by generating a History SBQ (text source via Tavily search → Firecrawl scrape) and a Physics paper (diagram URL via Tavily image search → embedded with citation).
+I'll run the migration and you can immediately retry "Generate assessment" on History (and any other subject). The FK error will be gone.
 
