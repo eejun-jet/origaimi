@@ -8,7 +8,13 @@ const corsHeaders = {
 
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 
-interface BlueprintRow { topic: string; bloom: string; marks: number }
+interface BlueprintRow {
+  topic: string;
+  bloom: string;
+  marks: number;
+  topic_code?: string | null;
+  learning_outcomes?: string[];
+}
 
 const QUESTION_TYPE_LABELS: Record<string, string> = {
   mcq: "multiple-choice (4 options, one correct)",
@@ -20,11 +26,15 @@ const QUESTION_TYPE_LABELS: Record<string, string> = {
   source_based: "source-based with stimulus and analysis",
 };
 
-function buildSystemPrompt(subject: string, level: string) {
+function buildSystemPrompt(subject: string, level: string, paperCode?: string | null) {
+  const alignLine = paperCode
+    ? `All questions must align to MOE syllabus paper ${paperCode}. Reference the topic code (e.g. §1.2) when relevant in mark schemes.`
+    : "";
   return `You are an expert assessment writer for the Singapore Ministry of Education (MOE) syllabus.
 You write clear, fair, age-appropriate questions for ${level} ${subject}.
 Always use British English spelling and SI units. Use Singapore-relevant contexts (HDB, MRT, hawker centres, neighbourhood schools, local names like Wei Ling, Aravind, Mei Ling, Hadi) where natural.
 Match MOE phrasing conventions and difficulty norms for ${level}.
+${alignLine}
 Each question must include a clear stem, a precise answer, and a marking scheme that breaks down marks where appropriate.
 Use Bloom's taxonomy levels rigorously.`;
 }
@@ -34,13 +44,25 @@ function buildUserPrompt(opts: {
   totalMarks: number; durationMinutes: number;
   blueprint: BlueprintRow[]; questionTypes: string[]; itemSources: string[];
   instructions?: string;
+  syllabusCode?: string | null;
+  paperCode?: string | null;
 }) {
   const typeStr = opts.questionTypes.map((t) => `- ${QUESTION_TYPE_LABELS[t] ?? t}`).join("\n");
   const blueprintStr = opts.blueprint
-    .map((r, i) => `${i + 1}. Topic: "${r.topic}" — Bloom: ${r.bloom} — ${r.marks} marks`)
+    .map((r, i) => {
+      const code = r.topic_code ? ` [${r.topic_code}]` : "";
+      const los = r.learning_outcomes && r.learning_outcomes.length > 0
+        ? `\n   Learning outcomes: ${r.learning_outcomes.slice(0, 4).map((lo) => `• ${lo}`).join(" ")}`
+        : "";
+      return `${i + 1}. Topic${code}: "${r.topic}" — Bloom: ${r.bloom} — ${r.marks} marks${los}`;
+    })
     .join("\n");
 
-  return `Draft a ${opts.assessmentType} for ${opts.level} ${opts.subject} titled "${opts.title}".
+  const grounding = opts.paperCode
+    ? `Aligned to MOE syllabus ${opts.syllabusCode ?? ""} paper ${opts.paperCode}.\n`
+    : "";
+
+  return `${grounding}Draft a ${opts.assessmentType} for ${opts.level} ${opts.subject} titled "${opts.title}".
 Duration: ${opts.durationMinutes} minutes. Total marks: ${opts.totalMarks}.
 
 BLUEPRINT (you MUST match the marks per topic+Bloom row):
@@ -109,6 +131,7 @@ Deno.serve(async (req) => {
       assessmentId, title, subject, level, assessmentType, durationMinutes,
       totalMarks, blueprint, questionTypes, itemSources, instructions,
       userId: bodyUserId,
+      syllabusCode, paperCode,
     } = body;
     const userId = bodyUserId ?? "00000000-0000-0000-0000-000000000001";
 
@@ -121,10 +144,11 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: "google/gemini-2.5-pro",
         messages: [
-          { role: "system", content: buildSystemPrompt(subject, level) },
+          { role: "system", content: buildSystemPrompt(subject, level, paperCode) },
           { role: "user", content: buildUserPrompt({
             title, subject, level, assessmentType, totalMarks, durationMinutes,
             blueprint, questionTypes, itemSources, instructions,
+            syllabusCode, paperCode,
           }) },
         ],
         tools: [TOOL],
