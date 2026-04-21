@@ -474,10 +474,11 @@ export async function fetchGroundedSource(
 
   // Vocabulary used for relevance gating: the topic plus ALL learning outcomes.
   const topicVocab = syllabusKeywordsFor(topic, learningOutcomes);
-  // Threshold tuned empirically: at least a quarter of the syllabus terms
-  // (or at minimum 2 distinct terms) must appear in the excerpt.
-  const MIN_RELEVANCE = 0.25;
-  const MIN_RELEVANCE_HITS = 2;
+  // Strict AND-gate: excerpt must hit BOTH a proportional threshold AND a
+  // minimum number of distinct syllabus keywords. Previous OR-gate let pages
+  // with a single repeated keyword pass even when off-topic.
+  const MIN_RELEVANCE = 0.30;
+  const MIN_RELEVANCE_HITS = 3;
 
   // Walk the query chain (most specific → most general) until we get hits.
   for (const query of queries) {
@@ -502,13 +503,17 @@ export async function fetchGroundedSource(
         const excerpt = extractExcerpt(scraped.markdown);
         if (!excerpt) continue;
 
-        // Relevance gate: drop excerpts that don't actually discuss the syllabus
-        // topic. Without this we get e.g. an FSA photo catalogue listing for a
-        // Singapore-history query just because firecrawl scraped well.
-        const score = relevanceScore(excerpt, topicVocab);
-        const hits = topicVocab.filter((k) => k.length >= 3 && excerpt.toLowerCase().includes(k)).length;
-        if (score < MIN_RELEVANCE && hits < MIN_RELEVANCE_HITS) {
-          console.warn(`[sources] dropped off-topic excerpt (score=${score.toFixed(2)}, hits=${hits}) from ${url}`);
+        // Relevance gate (AND): must overlap syllabus vocabulary on BOTH metrics.
+        const { score, hits, matched } = relevanceMetrics(excerpt, topicVocab);
+        if (score < MIN_RELEVANCE || hits < MIN_RELEVANCE_HITS) {
+          console.warn(`[sources] dropped off-topic excerpt (score=${score.toFixed(2)}, hits=${hits}, matched=[${matched.join(",")}]) from ${url}`);
+          continue;
+        }
+
+        // Richness gate: must read like analytical prose, not a list/catalogue.
+        const poor = richnessReason(excerpt);
+        if (poor) {
+          console.warn(`[sources] dropped thin excerpt (${poor}) from ${url}`);
           continue;
         }
 
