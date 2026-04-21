@@ -195,6 +195,8 @@ function SyllabusReview() {
           title: t.title,
           learning_outcomes: t.learning_outcomes,
           suggested_blooms: t.suggested_blooms,
+          outcome_categories: t.outcome_categories ?? [],
+          ao_codes: t.ao_codes ?? [],
           depth: t.depth,
           position: i,
           subject: doc.subject,
@@ -203,6 +205,23 @@ function SyllabusReview() {
         }));
         const { error: insErr } = await supabase.from("syllabus_topics").insert(rows);
         if (insErr) throw insErr;
+      }
+
+      // Replace AOs (similar approach)
+      const { error: aoDelErr } = await supabase.from("syllabus_assessment_objectives").delete().eq("source_doc_id", id);
+      if (aoDelErr) throw aoDelErr;
+      if (aos.length > 0) {
+        const aoRows = aos.map((a, i) => ({
+          source_doc_id: id,
+          paper_id: a.paper_id,
+          code: a.code,
+          title: a.title,
+          description: a.description,
+          weighting_percent: a.weighting_percent,
+          position: i,
+        }));
+        const { error: aoInsErr } = await supabase.from("syllabus_assessment_objectives").insert(aoRows);
+        if (aoInsErr) throw aoInsErr;
       }
 
       toast.success("Saved");
