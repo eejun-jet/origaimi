@@ -42,6 +42,7 @@ export type Section = {
   marks: number;         // total marks for this section
   num_questions: number; // how many questions to generate in this section
   bloom?: string;        // primary Bloom's level for the section
+  sbq_skill?: SbqSkill;  // for History/Social Studies SBQ sections
   topic_pool: SectionTopic[];
   instructions?: string;
 };
