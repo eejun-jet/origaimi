@@ -1,53 +1,45 @@
 
 
-## Add multi-select + bulk actions to the assessment editor
+## Enforce 1-source-per-question for History & Social Studies
 
-The assessment editor already has per-question **Edit**, **Delete**, and **Regenerate** buttons working. What's missing is the ability to **select** questions and act on multiple at once. I'll add that, plus tighten a couple of rough edges.
+Right now, source-grounding is only triggered for question types the model labels `source_based` or `comprehension` — and only for English/Humanities subjects. For History & Social Studies, the model often picks `structured` or `long`, which means **no source gets attached at all**, even though every Humanities SBQ should be source-anchored. You also want a strict **1 source ↔ 1 question** mapping (no two questions sharing the same passage, no question without a source).
 
-### What you'll see on `/assessment/$id`
+### What changes
 
-1. **Checkbox on every question card** (top-left, next to the "Q1" label).
-2. **Selection bar** appears at the top of the question list when ≥1 is selected:
-   - "3 selected" counter
-   - **Select all** / **Clear** toggle
-   - **Regenerate selected** — runs the regenerate edge function on each in sequence (with a single optional instruction prompt)
-   - **Delete selected** — confirmation dialog, then bulk delete
-   - **Save selected to bank** — bulk-add to question bank
-3. **Confirmation dialog before delete** (single or bulk) — currently single-delete fires instantly with no confirm, easy to misclick. I'll add an `AlertDialog`.
-4. **Toast feedback** during bulk ops ("Regenerating 3 questions… 1 of 3 done…").
+For Humanities subjects (History, Social Studies, Combined Humanities):
+
+1. **Every generated question gets exactly one source.** Regardless of whether the model labels it `source_based`, `structured`, or `long`, we fetch a grounded passage for it and attach `source_excerpt` + `source_url`.
+2. **Every source is unique to one question.** The existing `usedHosts` set already prevents domain reuse; we'll additionally track `usedUrls` so the same article can never appear twice even if the host allow-list returns it again.
+3. **If no source can be fetched for a Humanities question, the question is dropped** (with a warning logged) rather than emitted source-less. This guarantees the invariant "every Humanities question has a source."
+4. **Question type is auto-promoted to `source_based`** for Humanities so the rendered card shows the passage + link UI properly (the editor already renders source UI conditionally on type).
+
+English and other subjects keep current behavior (sources only for `source_based`/`comprehension`, structured essays stay clean — per your earlier rule).
 
 ### Technical changes
 
-**File: `src/routes/assessment.$id.tsx`**
-- Add `selectedIds: Set<string>` state in `EditorPage`.
-- Add `toggleSelect(id)`, `selectAll()`, `clearSelection()` helpers.
-- Add `<BulkActionBar>` component rendered above the question list when `selectedIds.size > 0`. Sticky at top of the column.
-- Pass `selected` + `onToggleSelect` props into `QuestionCard`; render a `Checkbox` (shadcn) in the card header.
-- Add `bulkDelete()`, `bulkRegenerate(instruction)`, `bulkSaveToBank()` in `EditorPage`. Bulk regenerate runs sequentially (not parallel) to respect AI rate limits, with a progress toast.
-- Wrap single + bulk delete in `AlertDialog` from `@/components/ui/alert-dialog` (already installed).
-- A small "Regenerate selected" dialog reuses the same instruction textarea pattern already used for single regenerate.
+**File: `supabase/functions/generate-assessment/sources.ts`**
+- Add `usedUrls?: Set<string>` parameter to `fetchGroundedSource` alongside the existing `usedHosts`. Skip any candidate URL already in the set; add successful URL on return.
 
-**No backend changes needed** — `assessment_questions` already has open RLS for delete/update, and `regenerate-question` edge function already exists and works per-question.
+**File: `supabase/functions/generate-assessment/index.ts`** (post-generation enrichment loop)
+- Maintain `const usedHosts = new Set<string>()` and `const usedUrls = new Set<string>()` per assessment.
+- For each generated question, detect Humanities via `isHumanitiesSubject(subject)`:
+  - **Humanities branch**: always call `fetchGroundedSource("humanities", topic, los, usedHosts, usedUrls)`. If it returns a source → attach excerpt+url and force `question_type = "source_based"`. If it returns `null` → drop the question from the output array and log a warning.
+  - **English branch**: keep current logic (only fetch when `questionTypeNeedsSource(qt)` is true).
+  - **Other subjects**: unchanged.
+- After enrichment, if Humanities and the dropped-question count left fewer than the requested total, log how many sources were missed (no auto-retry for now — keeps the loop bounded).
 
-### Layout sketch
+**No DB schema changes. No frontend changes** — `assessment.$id.tsx` already renders `source_excerpt` + clickable `source_url` for any question that has them.
 
-```text
-┌─ Q1 ─────────────────────────────────────────┐
-│ ☐  Q1  [structured] [Topic] [Apply] [4]      │   ← checkbox added
-│ ───────────────────────────────────────────  │
-│ Question stem...                              │
-│ [Edit] [Regenerate] [Save to bank] [Delete]   │   ← per-card actions stay
-└──────────────────────────────────────────────┘
+### Edge cases handled
 
-When ≥1 selected, sticky bar at top:
-┌──────────────────────────────────────────────┐
-│ 3 selected   [Select all] [Clear]            │
-│              [Regenerate] [Save to bank] [Delete] │
-└──────────────────────────────────────────────┘
-```
+- Search returns 0 allow-listed results → question dropped (Humanities) or skipped (others), warning logged.
+- All allow-listed results are from already-used hosts → question dropped, warning logged.
+- Firecrawl scrape fails on every candidate → question dropped, warning logged.
+- Tavily key missing → falls back to Firecrawl as today.
 
-### Out of scope (ask if you want these too)
-- Drag-and-drop reordering (current up/down arrows stay)
-- Inserting a brand-new question manually
-- Cross-assessment bulk operations (this is single-assessment only)
+### Out of scope
+
+- Retry loop to backfill dropped questions (would slow generation; revisit if drop rate is high).
+- Letting users pick which source goes to which question (manual override).
+- Changes to English subject behavior — kept as-is per the earlier conversation.
 
