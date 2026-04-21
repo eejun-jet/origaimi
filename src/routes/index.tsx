@@ -17,13 +17,13 @@ export const Route = createFileRoute("/")({
   component: Landing,
   head: () => ({
     meta: [
-      { title: "Origaimi — Unfold the Joy of Assessing" },
+      { title: "origAImi — Unfold the Joy of Assessing" },
       {
         name: "description",
         content:
-          "Origaimi is the AI co-architect for Singapore educators. Effortless generation, intelligent coaching, curated inspiration, precision alignment — human-in-the-loop, from start to finish.",
+          "origAImi is the AI co-architect for Singapore educators. Effortless generation, intelligent coaching, curated inspiration, precision alignment — human-in-the-loop, from start to finish.",
       },
-      { property: "og:title", content: "Origaimi — Unfold the Joy of Assessing" },
+      { property: "og:title", content: "origAImi — Unfold the Joy of Assessing" },
       {
         property: "og:description",
         content:
@@ -45,7 +45,7 @@ function Landing() {
             <div className="mx-auto max-w-3xl text-center">
               <img
                 src={logo}
-                alt="Origaimi"
+                alt="origAImi"
                 className="mx-auto h-24 w-auto sm:h-28"
               />
               <div className="mt-8 inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground">
@@ -56,7 +56,7 @@ function Landing() {
                 Unfold the joy of <span className="text-primary">assessing.</span>
               </h1>
               <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-                AI does the paddling. You set the course. Origaimi takes over the heavy
+                AI does the paddling. You set the course. origAImi takes over the heavy
                 lifting of assessment design — so educators can focus on what only they
                 can do.
               </p>
@@ -131,7 +131,7 @@ function Landing() {
           <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
             <div className="mx-auto max-w-2xl text-center">
               <h2 className="font-paper text-3xl font-semibold tracking-tight sm:text-4xl">
-                Why <span className="text-primary">Origaimi</span>?
+                Why <span>orig<span className="text-primary">AI</span>mi</span>?
               </h2>
               <p className="mt-4 text-muted-foreground">
                 The name reflects our philosophy: AI accelerates, but the educator
@@ -155,7 +155,7 @@ function Landing() {
                 The engine: four friction points, solved.
               </h2>
               <p className="mt-4 text-muted-foreground">
-                Origaimi takes over the heavy lifting where it matters most.
+                origAImi takes over the heavy lifting where it matters most.
               </p>
             </div>
 
@@ -208,7 +208,7 @@ function Landing() {
 
       <footer className="border-t border-border/60 py-8">
         <div className="mx-auto max-w-6xl px-4 text-center text-xs text-muted-foreground sm:px-6">
-          © {new Date().getFullYear()} Origaimi · For Singapore educators
+          © {new Date().getFullYear()} origAImi · For Singapore educators
         </div>
       </footer>
     </div>
