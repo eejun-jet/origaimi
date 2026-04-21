@@ -118,6 +118,29 @@ function countWords(s: string): number {
   return s.trim().split(/\s+/).filter(Boolean).length;
 }
 
+// Phrases commonly found in nav/footer/paywall/CTA boilerplate that should never
+// appear inside a comprehension or source-based excerpt.
+const JUNK_PATTERNS: RegExp[] = [
+  /\blog ?in\b/i, /\bsign ?in\b/i, /\bsign ?up\b/i, /\bregister\b/i,
+  /\bcreate (a |an )?(free )?account\b/i, /\blogin to (your |a )?(free )?account\b/i,
+  /\bsubscribe\b/i, /\bsubscription\b/i, /\bnewsletter\b/i,
+  /\bcookie(s)?\b.*\b(policy|consent|accept)\b/i, /\baccept (all )?cookies\b/i,
+  /\bprivacy policy\b/i, /\bterms (of (use|service)|and conditions)\b/i,
+  /\b(read|continue) (more|reading)\b/i, /\bclick here\b/i,
+  /\badvertisement\b/i, /\bsponsored\b/i, /\bshare (this )?(article|story)\b/i,
+  /\bfollow us\b/i, /\bdownload the app\b/i, /\bpaywall\b/i,
+  /\bsupport (our|independent) journalism\b/i, /\bbecome a (member|supporter)\b/i,
+  /\bcopyright\b|©/i, /\ball rights reserved\b/i,
+];
+
+function isJunkSentence(s: string): boolean {
+  const t = s.trim();
+  if (!t) return true;
+  // Very short fragments are usually nav/headers, not prose.
+  if (countWords(t) < 4) return true;
+  return JUNK_PATTERNS.some((re) => re.test(t));
+}
+
 /** Extract a sentence-bounded contiguous excerpt of 100–180 word from markdown. */
 function extractExcerpt(markdown: string): string | null {
   if (!markdown) return null;
@@ -132,8 +155,9 @@ function extractExcerpt(markdown: string): string | null {
     .replace(/\s+/g, " ")
     .trim();
 
-  // Split into paragraphs by sentence groupings.
-  const sentences = cleaned.match(/[^.!?]+[.!?]+(?:\s|$)/g) ?? [];
+  // Split into sentences, then drop boilerplate/CTA/nav junk.
+  const rawSentences = cleaned.match(/[^.!?]+[.!?]+(?:\s|$)/g) ?? [];
+  const sentences = rawSentences.filter((s) => !isJunkSentence(s));
   if (sentences.length === 0) return null;
 
   // Greedy window: keep adding sentences until we exceed MAX_WORDS,
