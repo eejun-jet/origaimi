@@ -237,8 +237,8 @@ Deno.serve(async (req) => {
           source_url = groundedSources[i]?.source_url ?? source_url;
           notes = "Source excerpt enforced from retrieved citation (model attempted to alter it).";
         }
-      } else if (sourceGate && q.question_type === "source_based") {
-        notes = "Source retrieval failed for this row — please attach a source manually.";
+      } else if (sourceGate && (q.question_type === "source_based" || q.question_type === "comprehension")) {
+        notes = "Source retrieval failed for this row — please attach a passage manually.";
         source_excerpt = null;
         source_url = null;
       }
