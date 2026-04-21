@@ -15,6 +15,14 @@ CRITICAL RULES on codes:
 - NEVER invent a code. If a topic has no printed code, return null for topic_code.
 - Extract the document-level syllabus_code from the cover/header FIRST.
 
+CRITICAL RULES on papers (multi-paper syllabuses):
+- Many syllabuses (e.g. Combined Humanities 2261, Combined Science 5076/5077/5078) contain MULTIPLE PAPERS in one document.
+- Detect this by looking for an examination format / scheme of assessment table on the cover or intro pages, typically with columns like "Paper No. | Component | Marks | Weighting | Duration".
+- Emit ONE entry in the papers[] array PER paper found. Use paper_number "1", "2", etc. verbatim.
+- If the document covers a SINGLE paper, still emit one entry with paper_number "1".
+- For each topic, set its paper_number to the paper it belongs to. Use textual cues: section headings like "Paper 1: Social Studies", "Paper 2 (History)", or theme blocks that follow such a heading.
+- If a topic genuinely applies to all papers (rare — e.g. shared skills), use paper_number null.
+
 You will be given the raw text of a syllabus document. Build a flat list of topics where each topic carries:
 - topic_code (verbatim, or null)
 - parent_code (the code of its parent in the hierarchy, or null for top-level)
@@ -24,6 +32,7 @@ You will be given the raw text of a syllabus document. Build a flat list of topi
 - learning_outcomes (array of "students should be able to..." statements, verbatim where possible)
 - suggested_blooms (subset of: Remember, Understand, Apply, Analyse, Evaluate, Create)
 - depth (0 = strand, 1 = sub-strand, 2 = topic, 3 = sub-topic)
+- paper_number (which paper this topic belongs to, or null)
 
 Also extract document-level fields: syllabus_code, paper_code, exam_board, syllabus_year, subject, level.`;
 
@@ -31,7 +40,7 @@ const TOOL = {
   type: "function",
   function: {
     name: "save_syllabus",
-    description: "Save the extracted syllabus structure.",
+    description: "Save the extracted syllabus structure including any sub-papers.",
     parameters: {
       type: "object",
       properties: {
@@ -48,6 +57,23 @@ const TOOL = {
           required: ["syllabus_code", "paper_code", "exam_board", "syllabus_year", "subject", "level"],
           additionalProperties: false,
         },
+        papers: {
+          type: "array",
+          description: "One entry per paper detected. Always emit at least one entry — use paper_number '1' for single-paper docs.",
+          items: {
+            type: "object",
+            properties: {
+              paper_number: { type: "string", description: "Verbatim paper number, e.g. '1', '2'." },
+              component_name: { type: ["string", "null"], description: "e.g. 'Social Studies', 'History', 'Theory'." },
+              marks: { type: ["integer", "null"] },
+              weighting_percent: { type: ["integer", "null"] },
+              duration_minutes: { type: ["integer", "null"], description: "Convert e.g. '1 hr 45 min' to 105." },
+              topic_theme: { type: ["string", "null"], description: "Overall theme/title for this paper if printed." },
+            },
+            required: ["paper_number", "component_name", "marks", "weighting_percent", "duration_minutes", "topic_theme"],
+            additionalProperties: false,
+          },
+        },
         topics: {
           type: "array",
           items: {
@@ -62,13 +88,14 @@ const TOOL = {
               learning_outcomes: { type: "array", items: { type: "string" } },
               suggested_blooms: { type: "array", items: { type: "string", enum: ["Remember", "Understand", "Apply", "Analyse", "Evaluate", "Create"] } },
               depth: { type: "integer", minimum: 0, maximum: 5 },
+              paper_number: { type: ["string", "null"], description: "Which paper this topic belongs to (matches papers[].paper_number), or null if it applies to all." },
             },
-            required: ["topic_code", "parent_code", "title", "learning_outcomes", "suggested_blooms", "depth"],
+            required: ["topic_code", "parent_code", "title", "learning_outcomes", "suggested_blooms", "depth", "paper_number"],
             additionalProperties: false,
           },
         },
       },
-      required: ["document", "topics"],
+      required: ["document", "papers", "topics"],
       additionalProperties: false,
     },
   },
@@ -81,11 +108,17 @@ async function fileToText(supabase: any, filePath: string, mimeType: string): Pr
   if (mimeType?.startsWith("text/") || filePath.endsWith(".txt") || filePath.endsWith(".md")) {
     return await data.text();
   }
-  // For PDF/DOCX, we'll send base64 to Gemini's multimodal endpoint instead.
   const buf = new Uint8Array(await data.arrayBuffer());
   let bin = "";
   for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
   return `__BINARY_BASE64__:${mimeType}:${btoa(bin)}`;
+}
+
+function composePaperCode(syllabusCode: string | null, paperNumber: string | null): string | null {
+  if (!syllabusCode || !paperNumber) return null;
+  // Pad numeric paper numbers to 2 digits; preserve non-numeric verbatim.
+  const padded = /^\d+$/.test(paperNumber) ? paperNumber.padStart(2, "0") : paperNumber;
+  return `${syllabusCode}/${padded}`;
 }
 
 Deno.serve(async (req) => {
@@ -102,7 +135,6 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "documentId required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Mark as parsing
     await supabase.from("syllabus_documents").update({ parse_status: "parsing", parse_error: null }).eq("id", documentId);
 
     const { data: doc, error: docErr } = await supabase
@@ -120,14 +152,14 @@ Deno.serve(async (req) => {
       userMessage = {
         role: "user",
         content: [
-          { type: "text", text: `Extract the full syllabus structure from this document. Title hint: "${doc.title}". Subject hint: ${doc.subject ?? "unknown"}. Level hint: ${doc.level ?? "unknown"}.` },
+          { type: "text", text: `Extract the full syllabus structure from this document, including ALL papers if multi-paper. Title hint: "${doc.title}". Subject hint: ${doc.subject ?? "unknown"}. Level hint: ${doc.level ?? "unknown"}.` },
           { type: "image_url", image_url: { url: `data:${mime};base64,${b64}` } },
         ],
       };
     } else {
       userMessage = {
         role: "user",
-        content: `Extract the full syllabus structure from this document.\n\nTitle hint: "${doc.title}"\nSubject hint: ${doc.subject ?? "unknown"}\nLevel hint: ${doc.level ?? "unknown"}\n\n--- DOCUMENT TEXT ---\n${content.slice(0, 200000)}`,
+        content: `Extract the full syllabus structure from this document, including ALL papers if multi-paper.\n\nTitle hint: "${doc.title}"\nSubject hint: ${doc.subject ?? "unknown"}\nLevel hint: ${doc.level ?? "unknown"}\n\n--- DOCUMENT TEXT ---\n${content.slice(0, 200000)}`,
       };
     }
 
@@ -165,11 +197,15 @@ Deno.serve(async (req) => {
 
     const args = JSON.parse(toolCall.function.arguments);
     const docMeta = args.document ?? {};
+    const papers: any[] = args.papers ?? [];
     const topics: any[] = args.topics ?? [];
 
-    // Update document with extracted metadata (don't overwrite if user already set values)
+    // Resolve final syllabus_code (user-supplied takes precedence).
+    const finalSyllabusCode = doc.syllabus_code ?? docMeta.syllabus_code ?? null;
+
+    // Update document metadata
     await supabase.from("syllabus_documents").update({
-      syllabus_code: doc.syllabus_code ?? docMeta.syllabus_code ?? null,
+      syllabus_code: finalSyllabusCode,
       paper_code: doc.paper_code ?? docMeta.paper_code ?? null,
       exam_board: doc.exam_board ?? docMeta.exam_board ?? "MOE",
       syllabus_year: doc.syllabus_year ?? docMeta.syllabus_year ?? null,
@@ -178,25 +214,63 @@ Deno.serve(async (req) => {
       parse_status: "parsed",
     }).eq("id", documentId);
 
-    // Clear existing topics for this doc and re-insert
+    // Replace existing papers + topics for this doc
     await supabase.from("syllabus_topics").delete().eq("source_doc_id", documentId);
+    await supabase.from("syllabus_papers").delete().eq("source_doc_id", documentId);
+
+    // Ensure at least one paper exists (defensive — schema requires it)
+    const safePapers = papers.length > 0
+      ? papers
+      : [{ paper_number: "1", component_name: null, marks: null, weighting_percent: null, duration_minutes: null, topic_theme: null }];
+
+    const paperRows = safePapers.map((p, i) => ({
+      source_doc_id: documentId,
+      paper_number: String(p.paper_number ?? (i + 1)),
+      paper_code: composePaperCode(finalSyllabusCode, String(p.paper_number ?? (i + 1))),
+      component_name: p.component_name ?? null,
+      marks: p.marks ?? null,
+      weighting_percent: p.weighting_percent ?? null,
+      duration_minutes: p.duration_minutes ?? null,
+      topic_theme: p.topic_theme ?? null,
+      position: i,
+    }));
+
+    const { data: insertedPapers, error: papErr } = await supabase
+      .from("syllabus_papers")
+      .insert(paperRows)
+      .select("id, paper_number");
+    if (papErr) {
+      console.error("Insert papers error", papErr);
+      await supabase.from("syllabus_documents").update({ parse_status: "failed", parse_error: papErr.message }).eq("id", documentId);
+      return new Response(JSON.stringify({ error: papErr.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // Build paper_number -> id map
+    const paperIdByNumber = new Map<string, string>();
+    for (const p of insertedPapers ?? []) paperIdByNumber.set(String(p.paper_number), p.id);
+    const fallbackPaperId = insertedPapers?.[0]?.id ?? null;
 
     if (topics.length > 0) {
-      const rows = topics.map((t, i) => ({
-        source_doc_id: documentId,
-        topic_code: t.topic_code ?? null,
-        parent_code: t.parent_code ?? null,
-        learning_outcome_code: t.learning_outcome_code ?? null,
-        strand: t.strand ?? null,
-        sub_strand: t.sub_strand ?? null,
-        title: t.title,
-        learning_outcomes: t.learning_outcomes ?? [],
-        suggested_blooms: t.suggested_blooms ?? [],
-        depth: t.depth ?? 0,
-        position: i,
-        subject: doc.subject ?? docMeta.subject ?? null,
-        level: doc.level ?? docMeta.level ?? null,
-      }));
+      const rows = topics.map((t, i) => {
+        const num = t.paper_number != null ? String(t.paper_number) : null;
+        const paper_id = num ? (paperIdByNumber.get(num) ?? fallbackPaperId) : fallbackPaperId;
+        return {
+          source_doc_id: documentId,
+          paper_id,
+          topic_code: t.topic_code ?? null,
+          parent_code: t.parent_code ?? null,
+          learning_outcome_code: t.learning_outcome_code ?? null,
+          strand: t.strand ?? null,
+          sub_strand: t.sub_strand ?? null,
+          title: t.title,
+          learning_outcomes: t.learning_outcomes ?? [],
+          suggested_blooms: t.suggested_blooms ?? [],
+          depth: t.depth ?? 0,
+          position: i,
+          subject: doc.subject ?? docMeta.subject ?? null,
+          level: doc.level ?? docMeta.level ?? null,
+        };
+      });
       const { error: insErr } = await supabase.from("syllabus_topics").insert(rows);
       if (insErr) {
         console.error("Insert topics error", insErr);
@@ -205,7 +279,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ ok: true, topicCount: topics.length, document: docMeta }), {
+    return new Response(JSON.stringify({ ok: true, topicCount: topics.length, paperCount: paperRows.length, document: docMeta }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

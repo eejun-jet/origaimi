@@ -1,5 +1,5 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { ArrowLeft, Save, Trash2, Plus, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/admin/syllabus/$id")({
   component: SyllabusReview,
-  head: () => ({ meta: [{ title: "Review syllabus · Joy of Assessment" }] }),
+  head: () => ({ meta: [{ title: "Review syllabus · Origaimi" }] }),
 });
 
 type Doc = {
@@ -27,8 +27,21 @@ type Doc = {
   parse_status: string;
 };
 
+type Paper = {
+  id: string;
+  paper_number: string;
+  paper_code: string | null;
+  component_name: string | null;
+  marks: number | null;
+  weighting_percent: number | null;
+  duration_minutes: number | null;
+  topic_theme: string | null;
+  position: number;
+};
+
 type Topic = {
   id: string;
+  paper_id: string | null;
   topic_code: string | null;
   parent_code: string | null;
   learning_outcome_code: string | null;
@@ -41,26 +54,47 @@ type Topic = {
   position: number;
 };
 
+const ALL_PAPERS = "__all__";
+const UNASSIGNED = "__unassigned__";
+
+function formatDuration(mins: number | null): string {
+  if (!mins) return "";
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h && m) return `${h}h${m}`;
+  if (h) return `${h}h`;
+  return `${m}m`;
+}
+
 function SyllabusReview() {
   const { id } = Route.useParams();
-  const navigate = useNavigate();
   const [doc, setDoc] = useState<Doc | null>(null);
+  const [papers, setPapers] = useState<Paper[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
+  const [activePaperId, setActivePaperId] = useState<string>(ALL_PAPERS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
     setLoading(true);
-    const [{ data: d }, { data: ts }] = await Promise.all([
+    const [{ data: d }, { data: ps }, { data: ts }] = await Promise.all([
       supabase.from("syllabus_documents").select("*").eq("id", id).single(),
+      supabase.from("syllabus_papers").select("*").eq("source_doc_id", id).order("position", { ascending: true }),
       supabase.from("syllabus_topics").select("*").eq("source_doc_id", id).order("position", { ascending: true }),
     ]);
     setDoc(d as Doc);
+    setPapers((ps as Paper[]) ?? []);
     setTopics((ts as Topic[]) ?? []);
     setLoading(false);
   };
 
   useEffect(() => { load(); }, [id]);
+
+  const filteredTopics = useMemo(() => {
+    if (activePaperId === ALL_PAPERS) return topics.map((t, i) => ({ t, originalIdx: i }));
+    if (activePaperId === UNASSIGNED) return topics.map((t, i) => ({ t, originalIdx: i })).filter(({ t }) => !t.paper_id);
+    return topics.map((t, i) => ({ t, originalIdx: i })).filter(({ t }) => t.paper_id === activePaperId);
+  }, [topics, activePaperId]);
 
   const updateTopic = (idx: number, patch: Partial<Topic>) => {
     setTopics((prev) => prev.map((t, i) => (i === idx ? { ...t, ...patch } : t)));
@@ -71,10 +105,12 @@ function SyllabusReview() {
   };
 
   const addTopic = () => {
+    const paper_id = activePaperId !== ALL_PAPERS && activePaperId !== UNASSIGNED ? activePaperId : (papers[0]?.id ?? null);
     setTopics((prev) => [
       ...prev,
       {
         id: crypto.randomUUID(),
+        paper_id,
         topic_code: null, parent_code: null, learning_outcome_code: null,
         strand: null, sub_strand: null, title: "New topic",
         learning_outcomes: [], suggested_blooms: [],
@@ -83,11 +119,14 @@ function SyllabusReview() {
     ]);
   };
 
+  const updatePaper = (idx: number, patch: Partial<Paper>) => {
+    setPapers((prev) => prev.map((p, i) => (i === idx ? { ...p, ...patch } : p)));
+  };
+
   const saveAll = async () => {
     if (!doc) return;
     setSaving(true);
     try {
-      // Update doc
       const { error: dErr } = await supabase.from("syllabus_documents").update({
         title: doc.title,
         syllabus_code: doc.syllabus_code,
@@ -99,13 +138,28 @@ function SyllabusReview() {
       }).eq("id", id);
       if (dErr) throw dErr;
 
-      // Replace all topics
+      // Update each paper individually (preserve ids so topics keep their links)
+      for (const p of papers) {
+        const { error: pErr } = await supabase.from("syllabus_papers").update({
+          paper_number: p.paper_number,
+          paper_code: p.paper_code,
+          component_name: p.component_name,
+          marks: p.marks,
+          weighting_percent: p.weighting_percent,
+          duration_minutes: p.duration_minutes,
+          topic_theme: p.topic_theme,
+        }).eq("id", p.id);
+        if (pErr) throw pErr;
+      }
+
+      // Replace all topics (keeps logic simple; preserves paper_id from state)
       const { error: delErr } = await supabase.from("syllabus_topics").delete().eq("source_doc_id", id);
       if (delErr) throw delErr;
 
       if (topics.length > 0) {
         const rows = topics.map((t, i) => ({
           source_doc_id: id,
+          paper_id: t.paper_id,
           topic_code: t.topic_code,
           parent_code: t.parent_code,
           learning_outcome_code: t.learning_outcome_code,
@@ -142,6 +196,8 @@ function SyllabusReview() {
     await load();
   };
 
+  const unassignedCount = topics.filter((t) => !t.paper_id).length;
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
@@ -169,7 +225,6 @@ function SyllabusReview() {
     <div className="min-h-screen bg-background">
       <AppHeader />
 
-      {/* Sticky doc-level header */}
       <div className="sticky top-14 z-30 border-b bg-background/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3 sm:px-6">
           <Button asChild variant="ghost" size="sm">
@@ -179,7 +234,6 @@ function SyllabusReview() {
             <div className="flex flex-wrap items-center gap-2">
               <span className="truncate font-medium">{doc.title}</span>
               {doc.syllabus_code && <Badge variant="secondary" className="font-mono">{doc.syllabus_code}</Badge>}
-              {doc.paper_code && <Badge variant="outline" className="font-mono">Paper {doc.paper_code}</Badge>}
               {doc.exam_board && <Badge variant="outline">{doc.exam_board}</Badge>}
               {doc.syllabus_year && <Badge variant="outline">{doc.syllabus_year}</Badge>}
             </div>
@@ -195,7 +249,6 @@ function SyllabusReview() {
       </div>
 
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
-        {/* Doc metadata editor */}
         <Card className="mb-6 p-4">
           <h2 className="mb-3 text-sm font-medium text-muted-foreground">Document metadata</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -206,10 +259,6 @@ function SyllabusReview() {
             <div>
               <Label className="text-xs">Syllabus code</Label>
               <Input className="font-mono" value={doc.syllabus_code ?? ""} onChange={(e) => setDoc({ ...doc, syllabus_code: e.target.value || null })} />
-            </div>
-            <div>
-              <Label className="text-xs">Paper code</Label>
-              <Input className="font-mono" value={doc.paper_code ?? ""} onChange={(e) => setDoc({ ...doc, paper_code: e.target.value || null })} />
             </div>
             <div>
               <Label className="text-xs">Exam board</Label>
@@ -230,20 +279,113 @@ function SyllabusReview() {
           </div>
         </Card>
 
+        {/* Paper switcher */}
+        {papers.length > 0 && (
+          <Card className="mb-4 p-3">
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium text-muted-foreground">Papers:</span>
+              <Button
+                variant={activePaperId === ALL_PAPERS ? "default" : "outline"}
+                size="sm"
+                onClick={() => setActivePaperId(ALL_PAPERS)}
+              >
+                All ({topics.length})
+              </Button>
+              {papers.map((p) => {
+                const count = topics.filter((t) => t.paper_id === p.id).length;
+                const active = activePaperId === p.id;
+                return (
+                  <Button
+                    key={p.id}
+                    variant={active ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setActivePaperId(p.id)}
+                    className="font-mono"
+                  >
+                    Paper {p.paper_number}
+                    {p.paper_code && <span className="ml-1.5 opacity-70">· {p.paper_code}</span>}
+                    {p.component_name && <span className="ml-1.5 font-sans opacity-90">· {p.component_name}</span>}
+                    <span className="ml-2 opacity-60">({count})</span>
+                  </Button>
+                );
+              })}
+              {unassignedCount > 0 && (
+                <Button
+                  variant={activePaperId === UNASSIGNED ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setActivePaperId(UNASSIGNED)}
+                >
+                  Unassigned ({unassignedCount})
+                </Button>
+              )}
+            </div>
+
+            {/* Editable paper details for selected paper */}
+            {activePaperId !== ALL_PAPERS && activePaperId !== UNASSIGNED && (() => {
+              const idx = papers.findIndex((p) => p.id === activePaperId);
+              if (idx === -1) return null;
+              const p = papers[idx];
+              return (
+                <div className="grid grid-cols-2 gap-3 border-t pt-3 sm:grid-cols-6">
+                  <div>
+                    <Label className="text-xs">Paper #</Label>
+                    <Input className="font-mono" value={p.paper_number} onChange={(e) => updatePaper(idx, { paper_number: e.target.value })} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Paper code</Label>
+                    <Input className="font-mono" value={p.paper_code ?? ""} onChange={(e) => updatePaper(idx, { paper_code: e.target.value || null })} />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <Label className="text-xs">Component name</Label>
+                    <Input value={p.component_name ?? ""} onChange={(e) => updatePaper(idx, { component_name: e.target.value || null })} placeholder="e.g. Social Studies" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Marks</Label>
+                    <Input type="number" value={p.marks ?? ""} onChange={(e) => updatePaper(idx, { marks: e.target.value ? parseInt(e.target.value, 10) : null })} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Duration (min)</Label>
+                    <Input
+                      type="number"
+                      value={p.duration_minutes ?? ""}
+                      onChange={(e) => updatePaper(idx, { duration_minutes: e.target.value ? parseInt(e.target.value, 10) : null })}
+                      placeholder={formatDuration(p.duration_minutes)}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Weighting %</Label>
+                    <Input type="number" value={p.weighting_percent ?? ""} onChange={(e) => updatePaper(idx, { weighting_percent: e.target.value ? parseInt(e.target.value, 10) : null })} />
+                  </div>
+                  {p.topic_theme && (
+                    <div className="sm:col-span-6">
+                      <Label className="text-xs">Theme</Label>
+                      <Input value={p.topic_theme} onChange={(e) => updatePaper(idx, { topic_theme: e.target.value || null })} />
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </Card>
+        )}
+
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-medium">Extracted topics ({topics.length})</h2>
+          <h2 className="text-lg font-medium">
+            Extracted topics ({filteredTopics.length}{filteredTopics.length !== topics.length ? ` of ${topics.length}` : ""})
+          </h2>
           <Button variant="outline" size="sm" onClick={addTopic}>
             <Plus className="mr-2 h-4 w-4" />Add topic
           </Button>
         </div>
 
-        {topics.length === 0 ? (
+        {filteredTopics.length === 0 ? (
           <Card className="p-8 text-center text-sm text-muted-foreground">
-            No topics extracted yet. Try re-parsing from the library page.
+            {topics.length === 0
+              ? "No topics extracted yet. Try re-parsing from the library page."
+              : "No topics in this paper. Switch papers above or add a new topic."}
           </Card>
         ) : (
           <div className="space-y-2">
-            {topics.map((t, idx) => (
+            {filteredTopics.map(({ t, originalIdx }) => (
               <Card key={t.id} className="p-3" style={{ marginLeft: `${Math.min(t.depth, 4) * 16}px` }}>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-12">
                   <div className="sm:col-span-2">
@@ -252,7 +394,7 @@ function SyllabusReview() {
                       className="font-mono text-sm"
                       placeholder="1.2.3"
                       value={t.topic_code ?? ""}
-                      onChange={(e) => updateTopic(idx, { topic_code: e.target.value || null })}
+                      onChange={(e) => updateTopic(originalIdx, { topic_code: e.target.value || null })}
                     />
                   </div>
                   <div className="sm:col-span-2">
@@ -261,14 +403,14 @@ function SyllabusReview() {
                       className="font-mono text-sm"
                       placeholder="1.2"
                       value={t.parent_code ?? ""}
-                      onChange={(e) => updateTopic(idx, { parent_code: e.target.value || null })}
+                      onChange={(e) => updateTopic(originalIdx, { parent_code: e.target.value || null })}
                     />
                   </div>
                   <div className="sm:col-span-6">
                     <Label className="text-xs">Title</Label>
                     <Input
                       value={t.title}
-                      onChange={(e) => updateTopic(idx, { title: e.target.value })}
+                      onChange={(e) => updateTopic(originalIdx, { title: e.target.value })}
                     />
                   </div>
                   <div className="sm:col-span-1">
@@ -278,14 +420,41 @@ function SyllabusReview() {
                       min={0}
                       max={5}
                       value={t.depth}
-                      onChange={(e) => updateTopic(idx, { depth: parseInt(e.target.value, 10) || 0 })}
+                      onChange={(e) => updateTopic(originalIdx, { depth: parseInt(e.target.value, 10) || 0 })}
                     />
                   </div>
                   <div className="flex items-end justify-end sm:col-span-1">
-                    <Button variant="ghost" size="sm" onClick={() => removeTopic(idx)}>
+                    <Button variant="ghost" size="sm" onClick={() => removeTopic(originalIdx)}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
+                  {/* Paper assignment selector */}
+                  {papers.length > 1 && (
+                    <div className="sm:col-span-12">
+                      <Label className="text-xs text-muted-foreground">Belongs to paper</Label>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {papers.map((p) => (
+                          <Button
+                            key={p.id}
+                            variant={t.paper_id === p.id ? "default" : "outline"}
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            onClick={() => updateTopic(originalIdx, { paper_id: p.id })}
+                          >
+                            Paper {p.paper_number}
+                          </Button>
+                        ))}
+                        <Button
+                          variant={t.paper_id === null ? "default" : "outline"}
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => updateTopic(originalIdx, { paper_id: null })}
+                        >
+                          Unassigned
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                   {(t.learning_outcomes?.length ?? 0) > 0 && (
                     <div className="sm:col-span-12">
                       <Label className="text-xs text-muted-foreground">Learning outcomes</Label>
