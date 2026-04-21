@@ -217,11 +217,14 @@ function buildSectionUserPrompt(opts: {
   section: Section; sectionIndex: number; totalSections: number;
   syllabusCode?: string | null; paperCode?: string | null;
   groundedSources: (GroundedSource | null)[][]; // [questionIdx][sourceIdx]
+  sharedSourcePool?: GroundedSource[]; // For humanities SBQ: ONE shared pool A–E
   subjectKind?: "humanities" | "english" | null;
   instructions?: string;
 }) {
   const { section } = opts;
   const typeLabel = QUESTION_TYPE_LABELS[section.question_type] ?? section.question_type;
+  const isHumanitiesSBQ =
+    opts.subjectKind === "humanities" && section.question_type === "source_based";
 
   const topicLines = section.topic_pool.map((t, i) => {
     const code = t.topic_code ? ` [${t.topic_code}]` : "";
@@ -234,25 +237,62 @@ function buildSectionUserPrompt(opts: {
     return `  ${i + 1}. ${t.topic}${code}${los}${aos}`;
   }).join("\n");
 
-  // Humanities-specific: tell the model these are primary or historian-perspective
-  // sources and the question must require analysis, not paraphrase.
   const humanitiesSourceGuidance = opts.subjectKind === "humanities"
-    ? `\nSOURCE NATURE: All grounded sources for this section are PRIMARY SOURCES (archives, government records, contemporary newspaper reportage, speeches, treaties, museum-held documents) or SECONDARY SOURCES presenting a HISTORIAN'S PERSPECTIVE (scholarly analysis, edited reference works). Treat each source as analysable evidence, not as a textbook summary. Sub-questions MUST require students to interrogate the source — its content, provenance, tone, purpose, reliability, or utility — not merely paraphrase it. For Assertion questions, frame the hypothesis so students can test it against ALL provided sources, weighing how each one supports or challenges it.\n`
+    ? `\nSOURCE NATURE: All grounded sources for this section are PRIMARY SOURCES (archives, government records, contemporary newspaper reportage, speeches, treaties, museum-held documents) or SECONDARY SOURCES presenting a HISTORIAN'S PERSPECTIVE (scholarly analysis, edited reference works). Treat each source as analysable evidence, not as a textbook summary. Sub-questions MUST require students to interrogate the source — its content, provenance, tone, purpose, reliability, or utility — not merely paraphrase it.\n`
     : "";
 
-  const sourceBlocks = opts.groundedSources.map((slot, qi) => {
-    const valid = slot.filter((s): s is GroundedSource => !!s);
-    if (valid.length === 0) return "";
-    const blocks = valid.map((src, si) => {
-      const label = String.fromCharCode(65 + si); // A, B, C…
-      return `  [Question ${qi + 1} · Source ${label}] (use VERBATIM, do not modify):
+  // For HUMANITIES SBQ: render ONE shared Sources A–E block at the section level,
+  // anchored on a single Key Inquiry Question. All sub-questions reference it.
+  // For everything else: per-question source blocks (existing behaviour).
+  let sourceBlocks = "";
+  let sbqSectionPreamble = "";
+  if (isHumanitiesSBQ && opts.sharedSourcePool && opts.sharedSourcePool.length > 0) {
+    const pool = opts.sharedSourcePool;
+    const sectionTopic = section.topic_pool[0]?.topic ?? "the topic";
+    const labels = pool.map((_, i) => String.fromCharCode(65 + i));
+    const labelList = labels.join(", ");
+    const blocks = pool.map((src, i) => {
+      const label = labels[i];
+      return `  [Source ${label}] (use VERBATIM, do not modify):
   ---
   ${src.excerpt}
   ---
   Citation: Source: ${src.publisher} — ${src.source_url}`;
     }).join("\n\n");
-    return `\n${blocks}\n  Set source_excerpt for question ${qi + 1} to the EXACT text of Source A above (or, if multiple sources, concatenate them as "Source A: …\\n\\nSource B: …"). Set source_url to the URL of Source A.`;
-  }).join("\n");
+    const concatenatedExcerpt = pool
+      .map((s, i) => `Source ${labels[i]}: ${s.excerpt}`)
+      .join("\\n\\n");
+    sbqSectionPreamble = `
+
+THIS IS A SOURCE-BASED QUESTION (SBQ) SECTION — SEAB FORMAT:
+  - The ENTIRE section is anchored on ONE single KEY INQUIRY QUESTION about "${sectionTopic}".
+  - You MUST write a clear inquiry question (a debatable, analytical line of inquiry — e.g. "How significant was X in causing Y?", "To what extent did X contribute to Y?", "Why did X happen?") and place it as the FIRST line of question 1's stem, followed by a blank line, then the sub-question.
+  - All ${section.num_questions} sub-questions investigate this SAME inquiry question using the SAME shared Sources ${labelList} below.
+  - Number sub-questions (a), (b), (c)… in order. Each sub-question's stem must explicitly name which source(s) it uses (e.g. "Study Source A.", "Compare Sources A and B.", "Use Sources A, B, and C.").
+  - DO NOT invent new sources. DO NOT paraphrase or modify the source text.
+  - For EVERY question in this section, set source_excerpt to the FULL concatenated pool below (so the editor renders all sources). Set source_url to Source A's URL.
+
+SHARED SOURCES FOR THIS SECTION (Sources ${labelList}):
+${blocks}
+
+  source_excerpt value to use for EVERY question in this section:
+  "${concatenatedExcerpt}"
+  source_url value to use for EVERY question in this section: ${pool[0].source_url}`;
+  } else {
+    sourceBlocks = opts.groundedSources.map((slot, qi) => {
+      const valid = slot.filter((s): s is GroundedSource => !!s);
+      if (valid.length === 0) return "";
+      const blocks = valid.map((src, si) => {
+        const label = String.fromCharCode(65 + si);
+        return `  [Question ${qi + 1} · Source ${label}] (use VERBATIM, do not modify):
+  ---
+  ${src.excerpt}
+  ---
+  Citation: Source: ${src.publisher} — ${src.source_url}`;
+      }).join("\n\n");
+      return `\n${blocks}\n  Set source_excerpt for question ${qi + 1} to the EXACT text of Source A above (or, if multiple sources, concatenate them as "Source A: …\\n\\nSource B: …"). Set source_url to the URL of Source A.`;
+    }).join("\n");
+  }
 
   const grounding = opts.paperCode
     ? `Aligned to MOE syllabus ${opts.syllabusCode ?? ""} paper ${opts.paperCode}.\n`
@@ -266,19 +306,28 @@ function buildSectionUserPrompt(opts: {
 
   const sectionLabel = section.name ? `Section ${section.letter} — ${section.name}` : `Section ${section.letter}`;
 
-  // SBQ skills block (History/Social Studies SBQ sections only). Supports 0–5 skills
-  // distributed across the questions in this section.
   const effectiveSkillIds = resolveEffectiveSkills(section);
   const effectiveSkills = effectiveSkillIds.map((id) => SBQ_SKILLS[id]).filter(Boolean);
   const perQuestionSkills = assignSkillsToQuestions(effectiveSkills, section.num_questions);
 
   let skillBlock = "";
   if (effectiveSkills.length > 0) {
+    const poolLabels = (opts.sharedSourcePool ?? []).map((_, i) => String.fromCharCode(65 + i));
+    const poolLabelList = poolLabels.join(", ") || "A";
     const skillSummaries = effectiveSkills.map((s) => `- ${s.label}: ${s.promptHeader}\n  Mark scheme: ${s.markScheme}`).join("\n\n");
     const assignments = perQuestionSkills.map((s, i) => {
       if (!s) return `  - Question ${i + 1}: generic SBQ (no specific skill assigned)`;
-      const lockedNote = s.locked ? ` — MUST be exactly ${s.default} marks and use ALL provided sources` : ` — must be worth one of: ${s.marks.join(", ")} marks`;
-      const srcNote = s.minSources >= 2 ? ` (uses at least ${s.minSources} sources labelled Source A, B${s.minSources >= 3 ? ", C" : ""}…)` : ` (uses Source A)`;
+      const lockedNote = s.locked
+        ? ` — MUST be exactly ${s.default} marks and use ALL ${poolLabels.length || "available"} sources (${poolLabelList})`
+        : ` — must be worth one of: ${s.marks.join(", ")} marks`;
+      let srcNote: string;
+      if (isHumanitiesSBQ) {
+        if (s.id === "assertion") srcNote = ` (uses ALL Sources ${poolLabelList} from the shared pool)`;
+        else if (s.minSources >= 2) srcNote = ` (uses any ${s.minSources} sources from the shared pool, e.g. Sources A and B)`;
+        else srcNote = ` (uses ONE source from the shared pool — name it explicitly, e.g. Source A or Source B)`;
+      } else {
+        srcNote = s.minSources >= 2 ? ` (uses at least ${s.minSources} sources labelled Source A, B${s.minSources >= 3 ? ", C" : ""}…)` : ` (uses Source A)`;
+      }
       return `  - Question ${i + 1}: ${s.label}${lockedNote}${srcNote}`;
     }).join("\n");
 
@@ -290,7 +339,7 @@ ${skillSummaries}
 PER-QUESTION SKILL MAPPING (you MUST follow this exact mapping):
 ${assignments}
 
-IMPORTANT: For Assertion questions, use ALL sources provided for that question slot. For single-source skills, use Source A only. Do NOT mix skill formats across questions.`;
+IMPORTANT: For Assertion questions, the hypothesis MUST be testable against ALL sources (each should plausibly support OR challenge it). For single-source skills, name the chosen source explicitly in the stem. Do NOT mix skill formats across questions.`;
   }
 
   return `${grounding}You are drafting ${sectionLabel} of "${opts.title}" (${opts.level} ${opts.subject}, ${opts.assessmentType}, ${opts.durationMinutes} min, ${opts.totalMarks} total marks across ${opts.totalSections} sections).
@@ -303,7 +352,7 @@ THIS SECTION:
   - Bloom's level focus: ${section.bloom ?? "Apply"} (use other levels only if the topic clearly demands it)
   ${section.instructions ? `- Section instructions for the rubric: ${section.instructions}` : ""}
 ${skillBlock}
-${humanitiesSourceGuidance}
+${humanitiesSourceGuidance}${sbqSectionPreamble}
 ALLOWED TOPICS (pick from these only — DO NOT invent topics outside this pool):
 ${topicLines}
 ${sourceBlocks}
@@ -316,7 +365,7 @@ For every question:
   - bloom_level: Remember | Understand | Apply | Analyse | Evaluate | Create.
   - The topic field must be one of the allowed topics above (verbatim).
 ${section.question_type === "source_based" || section.question_type === "comprehension"
-    ? `  - This is a ${section.question_type === "source_based" ? "source-based" : "comprehension"} question. Build sub-parts (a), (b), (c) that explicitly REFER TO Source A by name and require analysis/inference of the passage — never generic content recall that ignores the source.`
+    ? `  - Each sub-question must explicitly NAME the source(s) it uses by letter and require analysis/inference — never generic content recall that ignores the source.`
     : ""}
 
 Call the tool save_assessment with the full list of ${section.num_questions} questions for this section.`;
