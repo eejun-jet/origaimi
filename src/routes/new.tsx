@@ -20,7 +20,7 @@ import {
 import {
   type Section, type SectionTopic, type SectionedBlueprint,
   defaultSection, nextSectionLetter, blueprintTotalMarks,
-  SBQ_SKILLS, getSbqSkill, isHumanitiesSubject, type SbqSkill,
+  SBQ_SKILLS, MAX_SBQ_SKILLS, getSectionSkills, isHumanitiesSubject, type SbqSkill,
 } from "@/lib/sections";
 import { ChevronLeft, ChevronRight, Sparkles, Loader2, BookOpen, Upload, Plus, Trash2, ChevronUp, ChevronDown } from "lucide-react";
 import { Link } from "@tanstack/react-router";
