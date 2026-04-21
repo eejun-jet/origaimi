@@ -684,7 +684,7 @@ function QuestionCard({
           </div>
         ) : (
           <>
-            {q.source_excerpt && (
+            {q.source_excerpt && !hideSourceBlock && (
               <div className="mb-4 rounded-lg border-l-4 border-primary bg-muted/40 p-4">
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">Source A</div>
                 <p className="mt-2 font-paper text-sm italic leading-relaxed text-foreground whitespace-pre-wrap">
