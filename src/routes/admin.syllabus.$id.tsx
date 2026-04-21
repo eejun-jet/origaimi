@@ -317,6 +317,10 @@ function SyllabusReview() {
                     Paper {p.paper_number}
                     {p.paper_code && <span className="ml-1.5 opacity-70">· {p.paper_code}</span>}
                     {p.component_name && <span className="ml-1.5 font-sans opacity-90">· {p.component_name}</span>}
+                    {p.section && <span className="ml-1.5 font-sans opacity-90">· {p.section}</span>}
+                    {p.assessment_mode && p.assessment_mode !== "written" && (
+                      <span className="ml-1.5 rounded-full bg-background/20 px-1.5 font-sans text-[10px] uppercase">{p.assessment_mode}</span>
+                    )}
                     <span className="ml-2 opacity-60">({count})</span>
                   </Button>
                 );
@@ -367,6 +371,38 @@ function SyllabusReview() {
                   <div>
                     <Label className="text-xs">Weighting %</Label>
                     <Input type="number" value={p.weighting_percent ?? ""} onChange={(e) => updatePaper(idx, { weighting_percent: e.target.value ? parseInt(e.target.value, 10) : null })} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Section</Label>
+                    <Input value={p.section ?? ""} onChange={(e) => updatePaper(idx, { section: e.target.value || null })} placeholder="Physics / Chemistry / Biology" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Mode</Label>
+                    <Select value={p.assessment_mode ?? "written"} onValueChange={(v) => updatePaper(idx, { assessment_mode: v })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="written">Written</SelectItem>
+                        <SelectItem value="oral">Oral</SelectItem>
+                        <SelectItem value="listening">Listening</SelectItem>
+                        <SelectItem value="practical">Practical</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <Label className="text-xs">Track tags (comma-separated)</Label>
+                    <Input
+                      className="font-mono text-xs"
+                      value={(p.track_tags ?? []).join(", ")}
+                      onChange={(e) =>
+                        updatePaper(idx, {
+                          track_tags: e.target.value
+                            .split(",")
+                            .map((s) => s.trim().toLowerCase())
+                            .filter(Boolean),
+                        })
+                      }
+                      placeholder="physics, chemistry, biology"
+                    />
                   </div>
                   {p.topic_theme && (
                     <div className="sm:col-span-6">
