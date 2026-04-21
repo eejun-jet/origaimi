@@ -85,6 +85,48 @@ const SBQ_SKILLS: Record<string, SbqSkillDef> = {
   },
 };
 
+// Resolve effective skill IDs for a section, supporting new sbq_skills array
+// and legacy single sbq_skill. Caps at 5 and filters unknown ids.
+function resolveEffectiveSkills(section: Section): string[] {
+  const raw = Array.isArray(section.sbq_skills) && section.sbq_skills.length > 0
+    ? section.sbq_skills
+    : (section.sbq_skill ? [section.sbq_skill] : []);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const id of raw) {
+    if (!id || seen.has(id) || !SBQ_SKILLS[id]) continue;
+    seen.add(id);
+    out.push(id);
+    if (out.length >= 5) break;
+  }
+  return out;
+}
+
+// Distribute selected skills across the section's question slots.
+// Assertion (locked) always takes exactly 1 slot if selected; remaining slots
+// are filled round-robin from the other selected skills.
+function assignSkillsToQuestions(skills: SbqSkillDef[], numQuestions: number): (SbqSkillDef | null)[] {
+  if (skills.length === 0 || numQuestions <= 0) {
+    return Array(numQuestions).fill(null);
+  }
+  const assertion = skills.find((s) => s.id === "assertion");
+  const others = skills.filter((s) => s.id !== "assertion");
+  const slots: (SbqSkillDef | null)[] = [];
+  if (assertion) {
+    // Assertion takes the LAST slot (so earlier slots use single sources).
+    for (let i = 0; i < numQuestions - 1; i++) {
+      const pick = others.length > 0 ? others[i % others.length] : assertion;
+      slots.push(pick);
+    }
+    slots.push(assertion);
+  } else {
+    for (let i = 0; i < numQuestions; i++) {
+      slots.push(others[i % others.length]);
+    }
+  }
+  return slots;
+}
+
 type LegacyBlueprintRow = {
   topic: string;
   bloom?: string;
