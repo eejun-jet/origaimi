@@ -533,7 +533,7 @@ Deno.serve(async (req) => {
         content: buildSectionUserPrompt({
           title, subject, level, assessmentType, totalMarks, durationMinutes,
           section, sectionIndex: si, totalSections: sections.length,
-          syllabusCode, paperCode, groundedSources: sourcesForSection, instructions,
+          syllabusCode, paperCode, groundedSources: sourcesForSection, subjectKind, instructions,
         }),
       });
 
