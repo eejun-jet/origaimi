@@ -5,3 +5,9 @@ verify_jwt = false
 
 [functions.regenerate-question]
 verify_jwt = false
+
+[functions.parse-paper]
+verify_jwt = false
+
+[functions.generate-diagram]
+verify_jwt = false
