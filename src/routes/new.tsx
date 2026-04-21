@@ -1156,26 +1156,47 @@ function SectionCard({
 
       {showSbqSkill && (
         <div className="mt-3 rounded-md border border-primary/30 bg-primary-soft/20 p-3">
-          <Label className="text-xs font-medium">SBQ Skill (History / Social Studies)</Label>
-          <div className="mt-1 grid gap-2 sm:grid-cols-2">
-            <Select value={section.sbq_skill ?? ""} onValueChange={handleSkillChange}>
-              <SelectTrigger className="h-9"><SelectValue placeholder="Select a skill type…" /></SelectTrigger>
-              <SelectContent>
-                {SBQ_SKILLS.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.label} {s.locked ? `(${s.default}m, fixed)` : `(${s.marks.join("/")}m)`}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {currentSkill && (
-              <p className="text-xs text-muted-foreground self-center">
-                {currentSkill.locked
-                  ? `Assertion is always ${currentSkill.default} marks with all sources used as evidence.`
-                  : `Each question should be worth ${currentSkill.marks.join(", ")} or ${currentSkill.marks[currentSkill.marks.length - 1]} marks.`}
-              </p>
-            )}
+          <Label className="text-xs font-medium">SBQ Skills (History / Social Studies)</Label>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Leave blank to let the AI choose, or pick up to {MAX_SBQ_SKILLS} skills. Selected skills will be distributed across the {section.num_questions} question(s) in this section.
+          </p>
+          <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
+            {SBQ_SKILLS.map((s) => {
+              const checked = selectedSet.has(s.id);
+              const disabled = !checked && atMax;
+              return (
+                <label
+                  key={s.id}
+                  title={disabled ? `Maximum ${MAX_SBQ_SKILLS} skills selected` : ""}
+                  className={`flex cursor-pointer items-start gap-2 rounded p-1.5 text-xs ${
+                    checked ? "bg-primary-soft/40" : disabled ? "opacity-50 cursor-not-allowed" : "hover:bg-muted/40"
+                  }`}
+                >
+                  <Checkbox
+                    checked={checked}
+                    disabled={disabled}
+                    onCheckedChange={() => toggleSkill(s.id as SbqSkill)}
+                  />
+                  <span>
+                    <span className="font-medium">{s.label}</span>{" "}
+                    <span className="text-muted-foreground">
+                      {s.locked ? `(${s.default}m, fixed)` : `(${s.marks.join("/")}m)`}
+                    </span>
+                  </span>
+                </label>
+              );
+            })}
           </div>
+          {hasAssertion && (
+            <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
+              Assertion contributes 1 fixed 8-mark question using all sources; remaining questions split across other selected skills.
+            </p>
+          )}
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            {selectedSkills.length === 0
+              ? "No skills selected — AI will use a generic SBQ format."
+              : `${selectedSkills.length}/${MAX_SBQ_SKILLS} selected`}
+          </p>
         </div>
       )}
 
