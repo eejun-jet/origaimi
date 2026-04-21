@@ -1,50 +1,61 @@
 
 
-# Add P6 Foundation level + upload PSLE syllabuses
+## Add Assessment Objectives (AOs) + outcome categorisation across all syllabuses
 
-PSLE has two parallel tracks at P6: Standard (codes 0001/0001/0009) and Foundation (codes 0031/0038/0039). To keep them distinguishable in the wizard picker, add a `P6 Foundation` level tag — same pattern as `Sec 4` vs `Sec 4N`.
+Right now the parser only pulls topics + learning outcomes. MOE/SEAB syllabuses also publish a separate **Assessment Objectives** section (e.g. "AO1: Knowledge with Understanding", "AO2: Application", "AO3: Analysis") and most newer syllabuses tag each learning outcome as **Knowledge / Skills / Values** (esp. Humanities, Combined Sci, Character & Citizenship). Surfacing these lets teachers verify construct validity ("does my paper hit AO1/2/3 in the right weighting? am I over-testing knowledge and under-testing values?").
 
-## Change
+### What you'll get
 
-Extend `LEVELS` in `src/lib/syllabus.ts`:
+1. **AOs panel** on every syllabus review page — code, title, description, weighting % per paper, source quote.
+2. **Outcome tagging** on every learning outcome: `knowledge | skills | values | attitudes` (multi-tag allowed; defaults to `knowledge` when the syllabus doesn't say).
+3. **AO coverage chip** in the wizard's blueprint step — live bar showing AO1/AO2/AO3 distribution + K/S/V mix as the teacher selects topics and assigns marks.
+4. **Construct validity warning** if the blueprint leaves any AO at 0% (or wildly off the syllabus's published weighting).
 
-```text
-"P1", "P2", "P3", "P4", "P5", "P6",
-"P6 Foundation",                       ← new
-"Sec 1", "Sec 2",
-"Sec 3", "Sec 4",
-"Sec 3N", "Sec 4N", "Sec 5N",
-"JC1", "JC2",
-```
+### Plan
 
-## Upload guidance (after change lands)
+**1. Schema additions** (one migration)
 
-Upload through `/admin/syllabus`:
+- New table `syllabus_assessment_objectives`:
+  - `id, source_doc_id, paper_id (nullable — null = applies to all papers in doc), code (e.g. "AO1"), title, description, weighting_percent, position`
+  - RLS: trial-open like sibling syllabus tables.
+- Extend `syllabus_topics`:
+  - `outcome_categories text[]` default `{}` (values: `knowledge`, `skills`, `values`, `attitudes`)
+  - `ao_codes text[]` default `{}` (e.g. `{AO1, AO2}`) — which AOs each learning outcome maps to.
 
-| File | Title | Code | Subject | Level |
-|---|---|---|---|---|
-| PSLE_EL_0001 | PSLE English | 0001 | English Language | P6 |
-| PSLE_Math_0001 | PSLE Mathematics | 0001 | Mathematics | P6 |
-| PSLE_Sci_0009 | PSLE Science | 0009 | Science | P6 |
-| Foundation_EL_0031 | PSLE Foundation English | 0031 | English Language | P6 Foundation |
-| Foundation_Math_0038 | PSLE Foundation Mathematics | 0038 | Mathematics | P6 Foundation |
-| Foundation_Sci_0039 | PSLE Foundation Science | 0039 | Science | P6 Foundation |
+**2. Parser upgrade** (`parse-syllabus` edge function)
 
-The duplicate `0001` code on English and Math is expected — SEAB scopes codes within a level group, and our schema has no uniqueness constraint on `syllabus_code`, so both upload cleanly and display as separate documents.
+- Extend the `save_syllabus` tool schema with:
+  - `assessment_objectives[]`: `{ paper_number|null, code, title, description, weighting_percent }`
+  - `topics[].outcome_categories`: enum array
+  - `topics[].ao_codes`: string array
+- Beef up the system prompt with a dedicated AO section: "Locate the 'Assessment Objectives' section… capture AO1/AO2/AO3 verbatim with their descriptors and any weighting table per paper. For each topic's learning outcomes, classify each as knowledge/skills/values/attitudes based on verbs ('state/define' → knowledge; 'analyse/evaluate/draw/calculate' → skills; 'appreciate/respect/value' → values)."
+- Insert AOs into the new table after papers are inserted; map by `paper_number` like topics.
+- Re-run parser across all 16 syllabuses (small script, sequential, ~30s each).
 
-## What this exercises
+**3. Review UI** (`/admin/syllabus/$id`)
 
-- **PSLE English (0001)** likely has Paper 1 (Writing), Paper 2 (Language Use & Comprehension), Paper 3 (Listening), Paper 4 (Oral) — should produce 4 papers tagged with `assessment_mode` of `written`/`written`/`listening`/`oral`. Good real-world test of the mode-aware question-type defaults built earlier.
-- **PSLE Science (0009)** is a single paper combining MCQ + open-ended — single-paper, no sections.
-- **Foundation papers** are structurally simpler than Standard — fewer sub-papers, mostly written.
+- New "Assessment Objectives" card above the topics list, scoped to the active paper tab. Editable rows (code, title, description, weighting).
+- In each topic row, show small chips for `outcome_categories` + `ao_codes`; click to toggle/edit.
 
-## Out of scope
+**4. Wizard upgrade** (`/new` step 3 — Blueprint)
 
-- Auto-detecting Foundation vs Standard from the filename — admin tags it at upload time.
-- Mother Tongue PSLE syllabuses (Chinese/Malay/Tamil + their Foundation variants) — flag for a follow-up upload batch.
-- Filtering the wizard picker by level — defer until you have ~20+ syllabuses.
+- Add `ao_codes` + `outcome_categories` to `BlueprintRow` (carried from the picked topic).
+- Render an **AO Coverage** strip below the marks total: stacked bar AO1/AO2/AO3 (computed from blueprint marks × the topic's AO mapping; if topic has no AOs, marks count toward "Unmapped").
+- Render a **K/S/V Coverage** strip alongside it.
+- Show a soft warning if AOs published for the paper aren't all represented, or if marks distribution deviates >15% from the syllabus's published AO weighting.
 
-## Files touched
+**5. Generator awareness** (`generate-assessment`)
 
-- `src/lib/syllabus.ts` — add `"P6 Foundation"` to `LEVELS` (1-line edit)
+- Pass `ao_codes` + `outcome_categories` into the prompt per blueprint row so the AI is told which AO each item must address. Already wired through `BlueprintRow`; just extend the interface and prompt builder line.
+
+### Out of scope (deliberately)
+
+- No automatic re-balancing of the blueprint — teacher remains in control; we only flag.
+- No retroactive editing of already-generated assessments — AOs only affect new drafts.
+
+### Notes / risks
+
+- Some syllabuses (Foundation Maths, PSLE Math) don't publish AOs as a separate section — parser will gracefully emit an empty array and the UI will hide the panel.
+- Outcome categorisation in older syllabuses is heuristic (verb-based); admin can hand-correct in the review page.
+- Re-parsing all 16 docs costs ~16 Lovable AI Gateway calls on `gemini-2.5-pro`. Cheap, but worth flagging.
 
