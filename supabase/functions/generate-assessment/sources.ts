@@ -163,38 +163,51 @@ function extractKeywords(text: string, max: number): string[] {
 /** Build a list of progressively broader queries to try. Earlier = more specific.
  *  For humanities we issue alternating primary-source / historian-perspective
  *  queries so the search engine returns rich, analysable passages rather than
- *  thin tertiary blurbs. */
+ *  thin tertiary blurbs. Uses ALL learning outcomes (not just the first) so
+ *  searches stay anchored to the syllabus. An optional `queryHint` injects
+ *  extra context (used by the SBQ pool to vary across A/B/C/D/E fetches). */
 export function buildQueryChain(
   subjectKind: Exclude<SubjectKind, null>,
   topic: string,
   learningOutcomes: string[] = [],
+  queryHint?: string,
 ): string[] {
   const topicKw = extractKeywords(topic, 5);
-  const loKw = extractKeywords((learningOutcomes[0] ?? ""), 4);
+  // Pull keywords from EVERY learning outcome, not just the first, so the
+  // search vocabulary actually reflects what the syllabus covers.
+  const allLoText = learningOutcomes.join(" ");
+  const loKw = extractKeywords(allLoText, 6);
+  const hintKw = queryHint ? extractKeywords(queryHint, 3) : [];
   const chain: string[] = [];
+  const hintSuffix = hintKw.length > 0 ? ` ${hintKw.join(" ")}` : "";
   if (subjectKind === "english") {
     const suffix = "short prose excerpt";
-    if (topicKw.length > 0 && loKw.length > 0) chain.push(`${[...topicKw, ...loKw].join(" ")} ${suffix}`);
-    if (topicKw.length > 0) chain.push(`${topicKw.join(" ")} ${suffix}`);
+    if (topicKw.length > 0 && loKw.length > 0) chain.push(`${[...topicKw, ...loKw].join(" ")} ${suffix}${hintSuffix}`);
+    if (topicKw.length > 0) chain.push(`${topicKw.join(" ")} ${suffix}${hintSuffix}`);
     if (topicKw.length >= 2) chain.push(`${topicKw.slice(0, 2).join(" ")} ${suffix}`);
   } else {
     // Humanities: alternate primary-source and historian-perspective queries.
     const base = topicKw.join(" ");
     const baseWithLo = [...topicKw, ...loKw].join(" ");
     if (topicKw.length > 0 && loKw.length > 0) {
-      chain.push(`${baseWithLo} primary source document archive`);
-      chain.push(`${baseWithLo} historian analysis`);
+      chain.push(`${baseWithLo} primary source document archive${hintSuffix}`);
+      chain.push(`${baseWithLo} historian analysis${hintSuffix}`);
     }
     if (topicKw.length > 0) {
-      chain.push(`${base} primary source document`);
-      chain.push(`${base} historian perspective scholarly`);
-      chain.push(`${base} contemporary account`);
+      chain.push(`${base} primary source document${hintSuffix}`);
+      chain.push(`${base} historian perspective scholarly${hintSuffix}`);
+      chain.push(`${base} contemporary account${hintSuffix}`);
     }
     if (topicKw.length >= 2) {
       chain.push(`${topicKw.slice(0, 2).join(" ")} primary source`);
     }
   }
   return Array.from(new Set(chain));
+}
+
+/** Exposed for callers that need the syllabus-relevance vocabulary. */
+export function syllabusKeywordsFor(topic: string, learningOutcomes: string[] = []): string[] {
+  return [...extractKeywords(topic, 8), ...extractKeywords(learningOutcomes.join(" "), 10)];
 }
 
 // Backwards-compat single-query helper (kept for any older callers).
@@ -239,6 +252,23 @@ const JUNK_PATTERNS: RegExp[] = [
   /\bfollow us\b/i, /\bdownload the app\b/i, /\bpaywall\b/i,
   /\bsupport (our|independent) journalism\b/i, /\bbecome a (member|supporter)\b/i,
   /\bcopyright\b|©/i, /\ball rights reserved\b/i,
+  // Browser/tech warnings (catches "Your browser is out of date…", "Please consider updating your browser", "Image Lightbox", "View this term in the glossary").
+  /\bbrowser is out of date\b/i, /\bupdate(ing)? your browser\b/i, /\bplease consider updating\b/i,
+  /\bmay not support some of the features\b/i, /\bimage lightbox\b/i,
+  /\bview (this )?(term )?in the glossary\b/i, /\bclose\s+image\b/i,
+  /\benable javascript\b/i, /\bjavascript is (disabled|required)\b/i,
+  // Archive listing / catalogue captions (catches FSA-style "…Office of War Information Black-and-White Negatives" listings).
+  /\bblack[- ]?and[- ]?white negatives?\b/i, /\bcolor (slides?|photographs?|negatives?)\b/i,
+  /\bcatalog(ue)? record\b/i, /\bfinding aid\b/i, /\bcollection (overview|guide|finding aid)\b/i,
+  /\bview (the )?(full )?(record|item|object)\b/i, /\bdownload (image|pdf|document)\b/i,
+  /\b(prints? (and|&) photographs? division)\b/i, /\b(call number|shelfmark|accession number)\b/i,
+  /\b(digital id|reproduction number|repository)\s*[:#]/i,
+  /\b(timeline overview|primary source timeline)\b/i,
+  // Navigation / breadcrumbs / "back to top".
+  /\bback to (top|search|results)\b/i, /\bskip to (main )?content\b/i,
+  /\b(home|search|menu|browse)\s*[›»>]\s*/i,
+  // Pagination / "page x of y".
+  /\bpage \d+ of \d+\b/i, /\bnext\s+page\b/i, /\bprevious\s+page\b/i,
 ];
 
 function isJunkSentence(s: string): boolean {
@@ -246,10 +276,32 @@ function isJunkSentence(s: string): boolean {
   if (!t) return true;
   // Very short fragments are usually nav/headers, not prose.
   if (countWords(t) < 4) return true;
+  // Reject sentences with too many capitalised "Title Case Phrase Words" — a
+  // signature of catalogue listings ("Wife of a Migratory Laborer, 1938 Farm
+  // Security Administration/Office of War Information Black-and-White Negatives").
+  const caps = (t.match(/\b[A-Z][a-z]+/g) ?? []).length;
+  const words = countWords(t);
+  if (words >= 8 && caps / words > 0.55) return true;
   return JUNK_PATTERNS.some((re) => re.test(t));
 }
 
-/** Extract a sentence-bounded contiguous excerpt of 100–180 word from markdown. */
+/** Compute simple keyword-overlap relevance between an excerpt and the syllabus
+ *  topic + learning outcomes. Used to drop scrapes that have nothing to do with
+ *  the topic the teacher actually selected. */
+function relevanceScore(excerpt: string, topicKeywords: string[]): number {
+  if (topicKeywords.length === 0) return 1;
+  const lc = excerpt.toLowerCase();
+  let hits = 0;
+  for (const kw of topicKeywords) {
+    if (kw.length < 3) continue;
+    if (lc.includes(kw)) hits++;
+  }
+  return hits / Math.max(1, topicKeywords.length);
+}
+
+/** Extract a sentence-bounded contiguous excerpt of 100–200 words from markdown.
+ *  Requires at least 3 prose sentences in the window so we never return a list
+ *  of catalogue captions glued together. */
 function extractExcerpt(markdown: string): string | null {
   if (!markdown) return null;
   // Strip markdown noise: code blocks, images, links syntax, headings markers, tables.
@@ -266,21 +318,23 @@ function extractExcerpt(markdown: string): string | null {
   // Split into sentences, then drop boilerplate/CTA/nav junk.
   const rawSentences = cleaned.match(/[^.!?]+[.!?]+(?:\s|$)/g) ?? [];
   const sentences = rawSentences.filter((s) => !isJunkSentence(s));
-  if (sentences.length === 0) return null;
+  if (sentences.length < 3) return null;
 
   // Greedy window: keep adding sentences until we exceed MAX_WORDS,
-  // then back off; if window ≥ MIN_WORDS, return it. Slide forward otherwise.
+  // then back off; require ≥3 sentences AND ≥MIN_WORDS for a valid excerpt.
   for (let i = 0; i < sentences.length; i++) {
     let buf = "";
+    let count = 0;
     for (let j = i; j < sentences.length; j++) {
       const next = (buf + " " + sentences[j]).trim();
       const w = countWords(next);
       if (w > MAX_WORDS) {
-        if (countWords(buf) >= MIN_WORDS) return buf.trim();
-        break; // window starting at i can't satisfy; advance i
+        if (count >= 3 && countWords(buf) >= MIN_WORDS) return buf.trim();
+        break;
       }
       buf = next;
-      if (w >= MIN_WORDS && w <= MAX_WORDS) return buf.trim();
+      count++;
+      if (w >= MIN_WORDS && w <= MAX_WORDS && count >= 3) return buf.trim();
     }
   }
   return null;
@@ -354,24 +408,34 @@ async function firecrawlScrape(url: string): Promise<{ markdown: string; title: 
   return { markdown, title };
 }
 
-/** Search + scrape + extract a usable 100–180 word excerpt. Returns null on total failure.
- *  When `usedHosts` is provided, results from already-used hostnames are skipped so each
- *  generated assessment ends up with at most one source per site.
- *  When `usedUrls` is provided, exact URLs already used are skipped so the same article
- *  can never be reused even if the host allow-list returns it again. */
+/** Search + scrape + extract a usable, syllabus-relevant 100–200 word excerpt.
+ *  Returns null on total failure.
+ *  - `usedHosts` / `usedUrls` prevent the same site/article being reused.
+ *  - `queryHint` lets callers vary search context across multiple fetches for
+ *    the same topic (e.g. building an SBQ pool of Sources A–E).
+ *  - The excerpt MUST overlap the syllabus topic + learning-outcome vocabulary
+ *    (>= 25% keyword hit rate); otherwise we treat it as off-topic and skip. */
 export async function fetchGroundedSource(
   subjectKind: Exclude<SubjectKind, null>,
   topic: string,
   learningOutcomes: string[] = [],
   usedHosts?: Set<string>,
   usedUrls?: Set<string>,
+  queryHint?: string,
 ): Promise<GroundedSource | null> {
   const allowList = subjectKind === "english" ? ALLOW_DOMAINS_ENGLISH : ALLOW_DOMAINS_HUMANITIES;
-  const queries = buildQueryChain(subjectKind, topic, learningOutcomes);
+  const queries = buildQueryChain(subjectKind, topic, learningOutcomes, queryHint);
   if (queries.length === 0) {
     console.warn("[sources] could not build any search query for topic:", topic);
     return null;
   }
+
+  // Vocabulary used for relevance gating: the topic plus ALL learning outcomes.
+  const topicVocab = syllabusKeywordsFor(topic, learningOutcomes);
+  // Threshold tuned empirically: at least a quarter of the syllabus terms
+  // (or at minimum 2 distinct terms) must appear in the excerpt.
+  const MIN_RELEVANCE = 0.25;
+  const MIN_RELEVANCE_HITS = 2;
 
   // Walk the query chain (most specific → most general) until we get hits.
   for (const query of queries) {
@@ -395,6 +459,17 @@ export async function fetchGroundedSource(
         if (!scraped) continue;
         const excerpt = extractExcerpt(scraped.markdown);
         if (!excerpt) continue;
+
+        // Relevance gate: drop excerpts that don't actually discuss the syllabus
+        // topic. Without this we get e.g. an FSA photo catalogue listing for a
+        // Singapore-history query just because firecrawl scraped well.
+        const score = relevanceScore(excerpt, topicVocab);
+        const hits = topicVocab.filter((k) => k.length >= 3 && excerpt.toLowerCase().includes(k)).length;
+        if (score < MIN_RELEVANCE && hits < MIN_RELEVANCE_HITS) {
+          console.warn(`[sources] dropped off-topic excerpt (score=${score.toFixed(2)}, hits=${hits}) from ${url}`);
+          continue;
+        }
+
         const host = hostnameOf(url);
         if (usedHosts) usedHosts.add(host);
         if (usedUrls) usedUrls.add(url);

@@ -558,12 +558,23 @@ Deno.serve(async (req) => {
         const maxMinSources = effectiveSkillDefs.reduce((m, s) => Math.max(m, s.minSources), 0);
         const poolSize = Math.min(5, Math.max(4, maxMinSources));
         const sectionTopic = section.topic_pool[0] ?? null;
+        // Vary the query angle for each of the 5 fetches so we get DIFFERENT
+        // perspectives on the SAME inquiry question (rather than 5 near-duplicate
+        // articles). Hints rotate through complementary angles a historian would
+        // assemble for an SBQ pool.
+        const POOL_QUERY_HINTS = [
+          "official government statement",
+          "newspaper report contemporary",
+          "speech address transcript",
+          "memoir eyewitness account",
+          "historian scholarly analysis",
+        ];
         if (sectionTopic) {
           for (let i = 0; i < poolSize; i++) {
             try {
               const src = await fetchGroundedSource(
                 subjectKind, sectionTopic.topic, sectionTopic.learning_outcomes ?? [],
-                usedHosts, usedUrls,
+                usedHosts, usedUrls, POOL_QUERY_HINTS[i % POOL_QUERY_HINTS.length],
               );
               if (src) sharedSourcePool.push(src);
             } catch (e) {
