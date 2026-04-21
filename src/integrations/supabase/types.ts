@@ -20,6 +20,10 @@ export type Database = {
           assessment_id: string
           bloom_level: string | null
           created_at: string
+          diagram_caption: string | null
+          diagram_citation: string | null
+          diagram_source: string | null
+          diagram_url: string | null
           difficulty: string | null
           id: string
           mark_scheme: string | null
@@ -41,6 +45,10 @@ export type Database = {
           assessment_id: string
           bloom_level?: string | null
           created_at?: string
+          diagram_caption?: string | null
+          diagram_citation?: string | null
+          diagram_source?: string | null
+          diagram_url?: string | null
           difficulty?: string | null
           id?: string
           mark_scheme?: string | null
@@ -62,6 +70,10 @@ export type Database = {
           assessment_id?: string
           bloom_level?: string | null
           created_at?: string
+          diagram_caption?: string | null
+          diagram_citation?: string | null
+          diagram_source?: string | null
+          diagram_url?: string | null
           difficulty?: string | null
           id?: string
           mark_scheme?: string | null
@@ -203,6 +215,107 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      past_paper_diagrams: {
+        Row: {
+          bbox: Json | null
+          caption: string | null
+          created_at: string
+          id: string
+          image_path: string
+          page_number: number | null
+          paper_id: string
+          topic_tags: string[] | null
+        }
+        Insert: {
+          bbox?: Json | null
+          caption?: string | null
+          created_at?: string
+          id?: string
+          image_path: string
+          page_number?: number | null
+          paper_id: string
+          topic_tags?: string[] | null
+        }
+        Update: {
+          bbox?: Json | null
+          caption?: string | null
+          created_at?: string
+          id?: string
+          image_path?: string
+          page_number?: number | null
+          paper_id?: string
+          topic_tags?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "past_paper_diagrams_paper_id_fkey"
+            columns: ["paper_id"]
+            isOneToOne: false
+            referencedRelation: "past_papers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      past_papers: {
+        Row: {
+          created_at: string
+          exam_board: string | null
+          file_path: string
+          id: string
+          level: string | null
+          notes: string | null
+          page_count: number | null
+          paper_number: string | null
+          parse_error: string | null
+          parse_status: string
+          question_types: string[] | null
+          subject: string | null
+          title: string
+          topics: string[] | null
+          updated_at: string
+          user_id: string
+          year: number | null
+        }
+        Insert: {
+          created_at?: string
+          exam_board?: string | null
+          file_path: string
+          id?: string
+          level?: string | null
+          notes?: string | null
+          page_count?: number | null
+          paper_number?: string | null
+          parse_error?: string | null
+          parse_status?: string
+          question_types?: string[] | null
+          subject?: string | null
+          title: string
+          topics?: string[] | null
+          updated_at?: string
+          user_id: string
+          year?: number | null
+        }
+        Update: {
+          created_at?: string
+          exam_board?: string | null
+          file_path?: string
+          id?: string
+          level?: string | null
+          notes?: string | null
+          page_count?: number | null
+          paper_number?: string | null
+          parse_error?: string | null
+          parse_status?: string
+          question_types?: string[] | null
+          subject?: string | null
+          title?: string
+          topics?: string[] | null
+          updated_at?: string
+          user_id?: string
+          year?: number | null
+        }
+        Relationships: []
       }
       profiles: {
         Row: {
