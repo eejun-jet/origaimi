@@ -11,13 +11,17 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import {
-  SUBJECTS, LEVELS, ASSESSMENT_TYPES, QUESTION_TYPES, QUESTION_TYPES_BY_MODE, ITEM_SOURCES, topicsFor,
+  SUBJECTS, LEVELS, ASSESSMENT_TYPES, QUESTION_TYPES, QUESTION_TYPES_BY_MODE, BLOOMS, topicsFor,
 } from "@/lib/syllabus";
 import {
   loadSyllabusLibrary, loadPaperTopics, loadDocTopics, loadDocAssessmentObjectives,
   type SyllabusLibraryDoc, type SyllabusLibraryPaper, type PaperTopic, type AssessmentObjective,
 } from "@/lib/syllabus-data";
-import { ChevronLeft, ChevronRight, Sparkles, Loader2, BookOpen, Upload } from "lucide-react";
+import {
+  type Section, type SectionTopic, type SectionedBlueprint,
+  defaultSection, nextSectionLetter, blueprintTotalMarks,
+} from "@/lib/sections";
+import { ChevronLeft, ChevronRight, Sparkles, Loader2, BookOpen, Upload, Plus, Trash2, ChevronUp, ChevronDown } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 
