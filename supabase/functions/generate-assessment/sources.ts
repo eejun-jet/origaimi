@@ -87,15 +87,21 @@ export function buildQuery(
   topic: string,
   learningOutcomes: string[] = [],
 ): string {
-  const lo = learningOutcomes[0] ?? "";
-  const base = `${topic} ${lo}`.trim();
+  // Strip markdown / boilerplate markers (e.g. trailing "*") and keep the
+  // topic short. Long queries hurt search relevance and hit Tavily's 400-char limit.
+  const cleanTopic = topic.replace(/[*_`#]+/g, "").trim().slice(0, 120);
+  // Take only the first ~8 words of the first LO to add context without bloat.
+  const firstLo = (learningOutcomes[0] ?? "")
+    .replace(/[*_`#]+/g, "")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 8)
+    .join(" ");
+  const base = `${cleanTopic} ${firstLo}`.trim();
   if (subjectKind === "english") {
-    // Bias toward narrative / descriptive / journalistic prose suitable for
-    // comprehension and visual text questions.
-    return `${base} short passage prose excerpt`;
+    return `${base} short prose excerpt`;
   }
-  // Humanities: bias toward archival / news content.
-  return `${base} primary source historical account`;
+  return `${base} primary source`;
 }
 
 function hostnameOf(url: string): string {
