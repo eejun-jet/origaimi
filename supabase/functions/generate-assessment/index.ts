@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.0";
 import { fetchGroundedSource, classifySubject, type GroundedSource } from "./sources.ts";
 import { fetchDiagram, classifyScienceMath, questionWantsDiagram } from "./diagrams.ts";
+import { fetchExemplars } from "./exemplars.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -182,6 +183,26 @@ Deno.serve(async (req) => {
       for (let i = 0; i < (blueprint as BlueprintRow[]).length; i++) groundedSources.push(null);
     }
 
+    // Fetch past-paper exemplars (auto-match by subject + level) to anchor style/difficulty.
+    let exemplarBlock = "";
+    try {
+      const ex = await fetchExemplars(supabase, subject, level);
+      exemplarBlock = ex.block;
+      console.log(`[generate] exemplars: ${ex.paperCount} papers, ${ex.questionCount} questions`);
+    } catch (e) {
+      console.warn("[generate] exemplar fetch failed", e);
+    }
+
+    const messages: Array<{ role: string; content: string }> = [
+      { role: "system", content: buildSystemPrompt(subject, level, paperCode) },
+    ];
+    if (exemplarBlock) messages.push({ role: "system", content: exemplarBlock });
+    messages.push({ role: "user", content: buildUserPrompt({
+      title, subject, level, assessmentType, totalMarks, durationMinutes,
+      blueprint, questionTypes, itemSources, instructions,
+      syllabusCode, paperCode, groundedSources,
+    }) });
+
     const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -190,14 +211,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         model: "google/gemini-2.5-pro",
-        messages: [
-          { role: "system", content: buildSystemPrompt(subject, level, paperCode) },
-          { role: "user", content: buildUserPrompt({
-            title, subject, level, assessmentType, totalMarks, durationMinutes,
-            blueprint, questionTypes, itemSources, instructions,
-            syllabusCode, paperCode, groundedSources,
-          }) },
-        ],
+        messages,
         tools: [TOOL],
         tool_choice: { type: "function", function: { name: "save_assessment" } },
       }),

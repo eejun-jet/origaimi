@@ -1,10 +1,9 @@
-// Parse an uploaded past paper PDF: extract per-page text and detect figures with captions.
-// Stores diagram crops as separate uploads in the `diagrams` bucket and indexes them.
+// Parse an uploaded past paper PDF: extract per-page text, detect figures with captions,
+// AND extract verbatim question stems + a style summary so the generator can anchor
+// future assessments on the paper's tone, command-words, and difficulty.
 //
-// This is intentionally lightweight — Gemini multimodal is asked to identify figure
-// captions and topic tags page-by-page, but we DO NOT crop the image (cropping in a
-// Worker runtime requires native libs we don't have). Instead, we save the full page
-// rendering as the "diagram" and let the diagram cascade attribute it correctly.
+// We do NOT crop diagrams (Worker runtime can't run native image libs); the diagram
+// cascade points at the original PDF page so attribution still works.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.0";
@@ -16,10 +15,12 @@ const corsHeaders = {
 
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 
-const SYSTEM_PROMPT = `You are an exam-paper analyst. Given the rendered pages of a past exam paper PDF,
-extract for each page:
-- a list of figures present (caption text verbatim if printed, or a short generated caption)
-- topic tags (lowercase keywords) for each figure based on the question context around it
+const SYSTEM_PROMPT = `You are an exam-paper analyst. Given the rendered pages of a past exam paper PDF, extract:
+1) Figures present on each page (caption verbatim if printed; topic_tags from question context).
+2) Every numbered question with its verbatim stem, command word, marks, and sub-parts.
+3) A short (2-3 sentence) "style_summary" describing the paper's tone, command-word patterns,
+   structural format (e.g. source-based, structured (a)(b)(c), MCQ + short answer, essay), and difficulty norms.
+4) Overall topic tags.
 Return ONLY via the save_paper_index tool.`;
 
 const TOOL = {
@@ -44,9 +45,42 @@ const TOOL = {
             additionalProperties: false,
           },
         },
+        questions: {
+          type: "array",
+          description: "Every printed question, in order. Use verbatim text from the paper.",
+          items: {
+            type: "object",
+            properties: {
+              number: { type: "string", description: "e.g. '1', '2', '3a' as printed." },
+              page: { type: "integer", minimum: 1 },
+              command_word: { type: "string", description: "e.g. Explain, Compare, To what extent, How far do you agree." },
+              marks: { type: "integer", minimum: 0 },
+              stem: { type: "string", description: "Verbatim question stem (no paraphrasing). For source-based questions, include the prompt around sources but NOT the source text itself." },
+              sub_parts: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    label: { type: "string", description: "e.g. 'a', 'b', 'i', 'ii'." },
+                    text: { type: "string" },
+                    marks: { type: "integer", minimum: 0 },
+                  },
+                  required: ["label", "text"],
+                  additionalProperties: false,
+                },
+              },
+            },
+            required: ["number", "page", "stem"],
+            additionalProperties: false,
+          },
+        },
+        style_summary: {
+          type: "string",
+          description: "2-3 sentences describing tone, command-word patterns, structural format, and difficulty.",
+        },
         topics_overall: { type: "array", items: { type: "string" } },
       },
-      required: ["page_count", "figures"],
+      required: ["page_count", "figures", "questions", "style_summary"],
       additionalProperties: false,
     },
   },
@@ -78,7 +112,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Download the PDF.
     const filePath = (paper as { file_path: string }).file_path;
     const { data: fileBlob, error: dErr } = await supabase.storage.from("papers").download(filePath);
     if (dErr || !fileBlob) {
@@ -92,7 +125,6 @@ Deno.serve(async (req) => {
     const buf = new Uint8Array(await fileBlob.arrayBuffer());
     const b64 = base64Encode(buf);
 
-    // Ask Gemini to index the figures.
     const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
@@ -103,7 +135,7 @@ Deno.serve(async (req) => {
           {
             role: "user",
             content: [
-              { type: "text", text: `Index this past paper. Title: ${(paper as { title: string }).title}. Subject: ${(paper as { subject: string | null }).subject ?? "unknown"}. Identify every printed figure / diagram / graph and assign topic tags.` },
+              { type: "text", text: `Index this past paper. Title: ${(paper as { title: string }).title}. Subject: ${(paper as { subject: string | null }).subject ?? "unknown"}. Level: ${(paper as { level: string | null }).level ?? "unknown"}. Identify every figure, every numbered question (verbatim), and produce a style_summary.` },
               { type: "file", file: { filename: "paper.pdf", file_data: `data:application/pdf;base64,${b64}` } },
             ],
           },
@@ -137,15 +169,17 @@ Deno.serve(async (req) => {
     const args = JSON.parse(toolCall.function.arguments);
     const pageCount: number = args.page_count ?? 0;
     const figures: Array<{ page_number: number; caption: string; topic_tags: string[] }> = args.figures ?? [];
+    const questions: unknown[] = Array.isArray(args.questions) ? args.questions : [];
+    const styleSummary: string | null = typeof args.style_summary === "string" ? args.style_summary : null;
     const topicsOverall: string[] = args.topics_overall ?? [];
 
-    // Insert diagram rows. We point image_path at the original PDF since we can't crop.
-    // The cascade will surface this as "see uploaded paper, page N".
     if (figures.length > 0) {
+      // Replace existing diagram rows for this paper to keep things idempotent on re-parse.
+      await supabase.from("past_paper_diagrams").delete().eq("paper_id", paperId);
       const rows = figures.map((f) => ({
         paper_id: paperId,
         page_number: f.page_number,
-        image_path: `papers/${filePath}`, // bucket-prefixed
+        image_path: `papers/${filePath}`,
         caption: f.caption,
         topic_tags: f.topic_tags,
         bbox: null,
@@ -157,9 +191,17 @@ Deno.serve(async (req) => {
       parse_status: "ready",
       page_count: pageCount,
       topics: topicsOverall,
+      questions_json: questions,
+      style_summary: styleSummary,
     }).eq("id", paperId);
 
-    return new Response(JSON.stringify({ ok: true, figures: figures.length, pages: pageCount }), {
+    return new Response(JSON.stringify({
+      ok: true,
+      figures: figures.length,
+      pages: pageCount,
+      questions: questions.length,
+      hasStyleSummary: Boolean(styleSummary),
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

@@ -29,6 +29,8 @@ type PaperRow = {
   parse_error: string | null;
   page_count: number | null;
   topics: string[] | null;
+  questions_json: unknown;
+  style_summary: string | null;
   created_at: string;
 };
 
@@ -323,6 +325,11 @@ function PaperCard({
         {paper.parse_status === "ready" ? (
           <>
             {paper.page_count ?? "?"} pages · <span className="text-foreground">{diagramCount} diagrams indexed</span>
+            {Array.isArray(paper.questions_json) && (paper.questions_json as unknown[]).length > 0 && (
+              <span className="ml-2 inline-flex items-center rounded-full bg-success/15 px-1.5 py-0.5 text-[10px] font-medium text-success">
+                ✓ exemplar-ready ({(paper.questions_json as unknown[]).length} Qs)
+              </span>
+            )}
           </>
         ) : paper.parse_status === "failed" ? (
           <span className="text-destructive">{paper.parse_error ?? "Parse failed"}</span>
