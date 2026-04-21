@@ -63,6 +63,18 @@ function NewAssessment() {
     return () => { cancelled = true; };
   }, []);
 
+  const filteredLibrary = useMemo(
+    () => library.filter((d) => matchesBandStream(d.level, bandFilter, streamFilter)),
+    [library, bandFilter, streamFilter],
+  );
+
+  // If the current selection no longer matches the active filter, clear it.
+  useEffect(() => {
+    if (!selectedPaperKey) return;
+    const [docId] = selectedPaperKey.split(":");
+    if (!filteredLibrary.some((d) => d.id === docId)) setSelectedPaperKey("");
+  }, [filteredLibrary, selectedPaperKey]);
+
   const selected = useMemo(() => {
     if (!selectedPaperKey) return null;
     const [docId, paperId] = selectedPaperKey.split(":");
@@ -73,6 +85,7 @@ function NewAssessment() {
   }, [selectedPaperKey, library]);
 
   const useSyllabus = !!selected;
+
 
   // Step 1 / basics — auto-filled when a syllabus paper is selected
   const [title, setTitle] = useState("");
