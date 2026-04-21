@@ -31,6 +31,10 @@ type Question = {
   source_excerpt: string | null;
   source_url: string | null;
   notes: string | null;
+  diagram_url: string | null;
+  diagram_source: string | null;
+  diagram_citation: string | null;
+  diagram_caption: string | null;
 };
 
 type Assessment = {
@@ -388,6 +392,25 @@ function QuestionCard({
               </div>
             )}
             <p className="font-paper text-base leading-relaxed text-foreground whitespace-pre-wrap">{q.stem}</p>
+            {q.diagram_url && (
+              <figure className="mt-4 overflow-hidden rounded-lg border border-border bg-background">
+                <img
+                  src={q.diagram_url}
+                  alt={q.diagram_caption ?? "Question diagram"}
+                  className="mx-auto max-h-[420px] w-auto bg-white object-contain p-2"
+                />
+                <figcaption className="border-t border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">Figure {index}</span>
+                  {q.diagram_caption ? <> — {q.diagram_caption}</> : null}
+                  {q.diagram_citation && (
+                    <div className="mt-0.5 break-all">Source: {q.diagram_citation}</div>
+                  )}
+                  {q.diagram_source === "ai_generated" && (
+                    <div className="mt-0.5 italic">AI-generated exam-style diagram</div>
+                  )}
+                </figcaption>
+              </figure>
+            )}
             {q.options && Array.isArray(q.options) && q.options.length > 0 && (
               <ol className="mt-3 list-inside list-[upper-alpha] space-y-1 font-paper text-sm">
                 {q.options.map((o, i) => <li key={i}>{o}</li>)}

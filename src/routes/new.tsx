@@ -646,6 +646,12 @@ function NewAssessment() {
                     We pull a 100–180 word excerpt from approved sources (Project Gutenberg, Standard Ebooks, Poetry Foundation, BBC, The Guardian, Smithsonian, National Geographic, Granta, Lit Hub, Straits Times, etc.) — never Wikipedia, blogs, or AI-fabricated content. Each question shows a clickable citation.
                   </p>
                 )}
+                {/(math|science|physics|chemistry|biology)/i.test(subject) && qTypes.some((t) => ["structured","practical","source_based","comprehension"].includes(t)) && (
+                  <p className="mt-3 rounded-md border border-primary/30 bg-primary/5 p-3 text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">Diagrams will be sourced through a 4-tier cascade.</span>{" "}
+                    For each question that needs a figure: (1) reuse a tagged figure from your uploaded past papers, (2) find a labelled diagram from approved educational sites (Khan Academy, OpenStax, CK-12, PhET, NRICH, etc. — never Wikipedia), (3) AI-generate an MOE exam-style line-art diagram, or (4) flag it for manual attachment. Upload past papers in the <a href="/papers" className="underline">Papers</a> section to seed the first tier.
+                  </p>
+                )}
               </div>
               <div>
                 <h2 className="font-paper text-xl font-semibold">Item sources</h2>

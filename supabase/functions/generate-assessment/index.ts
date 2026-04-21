@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.0";
 import { fetchGroundedSource, classifySubject, type GroundedSource } from "./sources.ts";
+import { fetchDiagram, classifyScienceMath, questionWantsDiagram } from "./diagrams.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -222,6 +223,41 @@ Deno.serve(async (req) => {
     // Build a normalized lookup of grounded excerpts to verify byte-equality.
     const expectedByIndex = groundedSources.map((s) => s?.excerpt ?? null);
 
+    // Diagram cascade for science/math questions (after AI returns).
+    const scienceMathKind = classifyScienceMath(subject);
+    const diagramByIndex: (Awaited<ReturnType<typeof fetchDiagram>>)[] = [];
+    if (scienceMathKind) {
+      console.log("[generate] diagram pipeline enabled for", subject, "kind:", scienceMathKind);
+      for (let i = 0; i < questions.length; i++) {
+        const q = questions[i];
+        const blueprintRow = (blueprint as BlueprintRow[])[i];
+        const wantDiagram = questionWantsDiagram(
+          scienceMathKind,
+          [q.question_type],
+          q.topic ?? blueprintRow?.topic ?? "",
+          blueprintRow?.learning_outcomes ?? [],
+        );
+        if (!wantDiagram) { diagramByIndex.push(null); continue; }
+        try {
+          const d = await fetchDiagram({
+            supabase,
+            kind: scienceMathKind,
+            subject,
+            level,
+            topic: q.topic ?? blueprintRow?.topic ?? "",
+            learningOutcomes: blueprintRow?.learning_outcomes ?? [],
+            assessmentId,
+          });
+          diagramByIndex.push(d);
+        } catch (e) {
+          console.warn("[generate] diagram fetch failed for q", i, e);
+          diagramByIndex.push(null);
+        }
+      }
+    } else {
+      for (let i = 0; i < questions.length; i++) diagramByIndex.push(null);
+    }
+
     // Insert all questions
     const rows = questions.map((q, i) => {
       const expected = expectedByIndex[i] ?? null;
@@ -243,6 +279,7 @@ Deno.serve(async (req) => {
         source_url = null;
       }
 
+      const diag = diagramByIndex[i];
       return {
         assessment_id: assessmentId,
         user_id: userId,
@@ -259,6 +296,10 @@ Deno.serve(async (req) => {
         source_excerpt,
         source_url,
         notes,
+        diagram_url: diag?.url ?? null,
+        diagram_source: diag?.source ?? null,
+        diagram_citation: diag?.citation ?? null,
+        diagram_caption: diag?.caption ?? null,
       };
     });
 
@@ -270,7 +311,12 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ ok: true, questionCount: rows.length, groundedCount: groundedSources.filter(Boolean).length }), {
+    return new Response(JSON.stringify({
+      ok: true,
+      questionCount: rows.length,
+      groundedCount: groundedSources.filter(Boolean).length,
+      diagramCount: diagramByIndex.filter(Boolean).length,
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

@@ -25,6 +25,13 @@ export function AppHeader() {
             Inspiration
           </Link>
           <Link
+            to="/papers"
+            className="text-sm text-muted-foreground hover:text-foreground"
+            activeProps={{ className: "text-foreground font-medium" }}
+          >
+            Papers
+          </Link>
+          <Link
             to="/admin/syllabus"
             className="text-sm text-muted-foreground hover:text-foreground"
             activeProps={{ className: "text-foreground font-medium" }}
