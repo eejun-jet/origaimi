@@ -38,6 +38,41 @@ type BlueprintRow = {
 };
 type Blueprint = BlueprintRow[];
 
+type Band = "primary" | "secondary";
+type Stream = "standard" | "foundation" | "g3" | "g2";
+
+function classifyLevel(level?: string | null): { band: Band; stream: Stream } | null {
+  if (!level) return null;
+  const l = level.toLowerCase();
+  if (l.startsWith("p")) {
+    return { band: "primary", stream: l.includes("foundation") ? "foundation" : "standard" };
+  }
+  if (l.startsWith("sec") || l.startsWith("s")) {
+    // "Sec 4N" / "Sec 4 N(A)" → G2; everything else secondary → G3 (covers G3/Express/O-Level)
+    const isNA = /\b(n\(a\)|na|n\b|4n|3n)/i.test(level);
+    return { band: "secondary", stream: isNA ? "g2" : "g3" };
+  }
+  return null;
+}
+
+function matchesBandStream(level: string | null | undefined, band: Band, stream: Stream): boolean {
+  const c = classifyLevel(level);
+  if (!c) return false;
+  return c.band === band && c.stream === stream;
+}
+
+const STREAMS_FOR_BAND: Record<Band, { id: Stream; label: string }[]> = {
+  primary: [
+    { id: "standard", label: "Standard (PSLE)" },
+    { id: "foundation", label: "Foundation" },
+  ],
+  secondary: [
+    { id: "g3", label: "G3 / Express" },
+    { id: "g2", label: "G2 / N(A)" },
+  ],
+};
+
+
 function NewAssessment() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -51,6 +86,8 @@ function NewAssessment() {
   const [paperTopics, setPaperTopics] = useState<PaperTopic[]>([]);
   const [docAOs, setDocAOs] = useState<AssessmentObjective[]>([]);
   const [topicsLoading, setTopicsLoading] = useState(false);
+  const [bandFilter, setBandFilter] = useState<"primary" | "secondary">("primary");
+  const [streamFilter, setStreamFilter] = useState<"standard" | "foundation" | "g3" | "g2">("standard");
 
   useEffect(() => {
     let cancelled = false;
@@ -60,6 +97,18 @@ function NewAssessment() {
       .finally(() => { if (!cancelled) setLibLoading(false); });
     return () => { cancelled = true; };
   }, []);
+
+  const filteredLibrary = useMemo(
+    () => library.filter((d) => matchesBandStream(d.level, bandFilter, streamFilter)),
+    [library, bandFilter, streamFilter],
+  );
+
+  // If the current selection no longer matches the active filter, clear it.
+  useEffect(() => {
+    if (!selectedPaperKey) return;
+    const [docId] = selectedPaperKey.split(":");
+    if (!filteredLibrary.some((d) => d.id === docId)) setSelectedPaperKey("");
+  }, [filteredLibrary, selectedPaperKey]);
 
   const selected = useMemo(() => {
     if (!selectedPaperKey) return null;
@@ -71,6 +120,7 @@ function NewAssessment() {
   }, [selectedPaperKey, library]);
 
   const useSyllabus = !!selected;
+
 
   // Step 1 / basics — auto-filled when a syllabus paper is selected
   const [title, setTitle] = useState("");
@@ -311,16 +361,46 @@ function NewAssessment() {
                   </div>
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <Label className="flex items-center gap-2">
                     <BookOpen className="h-3.5 w-3.5" /> Syllabus paper
                   </Label>
+
+                  {/* Band + Stream filter */}
+                  <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-2.5">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                      <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Band</span>
+                      <SegmentedFilter
+                        options={[{ id: "primary", label: "Primary" }, { id: "secondary", label: "Secondary" }]}
+                        value={bandFilter}
+                        onChange={(v) => {
+                          const b = v as Band;
+                          setBandFilter(b);
+                          // Reset stream to first available for the new band.
+                          setStreamFilter(STREAMS_FOR_BAND[b][0].id);
+                        }}
+                      />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                      <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Stream</span>
+                      <SegmentedFilter
+                        options={STREAMS_FOR_BAND[bandFilter]}
+                        value={streamFilter}
+                        onChange={(v) => setStreamFilter(v as Stream)}
+                      />
+                    </div>
+                  </div>
+
                   <Select value={selectedPaperKey} onValueChange={setSelectedPaperKey}>
                     <SelectTrigger>
                       <SelectValue placeholder="Pick the syllabus + paper to align to…" />
                     </SelectTrigger>
                     <SelectContent>
-                      {library.map((doc) => (
+                      {filteredLibrary.length === 0 ? (
+                        <div className="px-3 py-2 text-xs italic text-muted-foreground">
+                          No syllabuses uploaded for this band/stream yet.
+                        </div>
+                      ) : filteredLibrary.map((doc) => (
                         <div key={doc.id}>
                           <div className="px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                             {doc.syllabusCode ? `${doc.syllabusCode} · ` : ""}{doc.title}
@@ -655,6 +735,38 @@ function Stepper({ step }: { step: number }) {
   );
 }
 
+function SegmentedFilter({
+  options,
+  value,
+  onChange,
+}: {
+  options: { id: string; label: string }[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="inline-flex rounded-md border border-border bg-background p-0.5">
+      {options.map((opt) => {
+        const active = opt.id === value;
+        return (
+          <button
+            key={opt.id}
+            type="button"
+            onClick={() => onChange(opt.id)}
+            className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+              active
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 const AO_COLORS: Record<string, string> = {
   AO1: "bg-chart-1",
   AO2: "bg-chart-2",
@@ -684,7 +796,6 @@ function BlueprintTable({
   paperAOs: AssessmentObjective[];
   onUpdate: (i: number, patch: Partial<BlueprintRow>) => void;
 }) {
-  // Group rows by section, preserving original index for updates.
   const groups = useMemo(() => {
     const map = new Map<string, { row: BlueprintRow; index: number }[]>();
     blueprint.forEach((row, index) => {
@@ -703,7 +814,6 @@ function BlueprintTable({
       seen.add(a.code);
       opts.push({ code: a.code, title: a.title });
     }
-    // Fall back to whatever AOs are already on the topics if none published.
     if (opts.length === 0) {
       for (const r of blueprint) {
         for (const c of r.ao_codes ?? []) {
@@ -799,7 +909,6 @@ function BlueprintTable({
     </div>
   );
 }
-
 
 function CoverageStrips({ blueprint, aos }: { blueprint: Blueprint; aos: AssessmentObjective[] }) {
   const aoMarks: Record<string, number> = {};
