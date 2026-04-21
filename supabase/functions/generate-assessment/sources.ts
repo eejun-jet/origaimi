@@ -92,8 +92,8 @@ function humanitiesTier(host: string): 1 | 2 | 3 {
   return 3;
 }
 
-const MIN_WORDS = 120;
-const MAX_WORDS = 200;
+const MIN_WORDS = 150;
+const MAX_WORDS = 240;
 
 export type SubjectKind = "humanities" | "english" | null;
 
@@ -252,23 +252,33 @@ const JUNK_PATTERNS: RegExp[] = [
   /\bfollow us\b/i, /\bdownload the app\b/i, /\bpaywall\b/i,
   /\bsupport (our|independent) journalism\b/i, /\bbecome a (member|supporter)\b/i,
   /\bcopyright\b|©/i, /\ball rights reserved\b/i,
-  // Browser/tech warnings (catches "Your browser is out of date…", "Please consider updating your browser", "Image Lightbox", "View this term in the glossary").
+  // Browser/tech warnings.
   /\bbrowser is out of date\b/i, /\bupdate(ing)? your browser\b/i, /\bplease consider updating\b/i,
   /\bmay not support some of the features\b/i, /\bimage lightbox\b/i,
   /\bview (this )?(term )?in the glossary\b/i, /\bclose\s+image\b/i,
   /\benable javascript\b/i, /\bjavascript is (disabled|required)\b/i,
-  // Archive listing / catalogue captions (catches FSA-style "…Office of War Information Black-and-White Negatives" listings).
+  // Archive listing / catalogue captions.
   /\bblack[- ]?and[- ]?white negatives?\b/i, /\bcolor (slides?|photographs?|negatives?)\b/i,
   /\bcatalog(ue)? record\b/i, /\bfinding aid\b/i, /\bcollection (overview|guide|finding aid)\b/i,
   /\bview (the )?(full )?(record|item|object)\b/i, /\bdownload (image|pdf|document)\b/i,
   /\b(prints? (and|&) photographs? division)\b/i, /\b(call number|shelfmark|accession number)\b/i,
   /\b(digital id|reproduction number|repository)\s*[:#]/i,
   /\b(timeline overview|primary source timeline)\b/i,
-  // Navigation / breadcrumbs / "back to top".
+  // Navigation / breadcrumbs.
   /\bback to (top|search|results)\b/i, /\bskip to (main )?content\b/i,
   /\b(home|search|menu|browse)\s*[›»>]\s*/i,
-  // Pagination / "page x of y".
   /\bpage \d+ of \d+\b/i, /\bnext\s+page\b/i, /\bprevious\s+page\b/i,
+  // Image / media captions and credits.
+  /^\s*(figure|fig\.|image|photo|photograph|plate|table|chart|map)\s+\d+/i,
+  /\b(photo|image|illustration|portrait|engraving)\s+(by|courtesy of|credit|source)\b/i,
+  /\b(courtesy of|reproduced (with )?permission|getty images|associated press)\b/i,
+  // Site chrome / utility / related-content widgets.
+  /\b(about us|contact us|site map|sitemap|help cent(er|re)|customer service)\b/i,
+  /\b(related (articles|stories|content|posts)|you (may|might) (also )?like|recommended for you)\b/i,
+  /\b(view profile|edit profile|my account|sign out|log out)\b/i,
+  // Search / filter UI.
+  /\b(filter (by|results)|sort by|show more|load more|refine (your )?search)\b/i,
+  /\b(\d+\s+(results?|items?|articles?|matches?)\s+found)\b/i,
 ];
 
 function isJunkSentence(s: string): boolean {
