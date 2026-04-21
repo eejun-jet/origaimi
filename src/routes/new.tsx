@@ -159,6 +159,8 @@ function NewAssessment() {
         marks: per,
         topic_code: t.topicCode,
         learning_outcomes: t.learningOutcomes,
+        ao_codes: t.aoCodes,
+        outcome_categories: t.outcomeCategories,
       })));
     } else {
       if (topics.length === 0) { setBlueprint([]); return; }
