@@ -220,55 +220,96 @@ function NewAssessment() {
     setTopics([]);
   }, [selectedPaperKey, subject, level, activeSection]);
 
-  // Step 3 — blueprint
-  const [blueprint, setBlueprint] = useState<Blueprint>([]);
-  useEffect(() => {
-    if (useSyllabus) {
-      const picked = selectableSyllabusTopics.filter((t) => selectedTopicIds.includes(t.id));
-      if (picked.length === 0) { setBlueprint([]); return; }
-      const per = Math.max(1, Math.floor(totalMarks / picked.length));
-      setBlueprint(picked.map((t) => ({
-        topic: t.topicCode ? `${t.topicCode} · ${t.title}` : t.title,
-        bloom: t.suggestedBlooms[0] ?? "Apply",
-        marks: per,
-        topic_code: t.topicCode,
-        section: t.section ?? null,
-        learning_outcomes: t.learningOutcomes,
-        ao_codes: t.aoCodes,
-        outcome_categories: t.outcomeCategories,
-      })));
-    } else {
-      if (topics.length === 0) { setBlueprint([]); return; }
-      const per = Math.max(1, Math.floor(totalMarks / topics.length));
-      setBlueprint(topics.map((t) => ({ topic: t, bloom: "Apply", marks: per })));
-    }
-  }, [useSyllabus, selectedTopicIds, topics, totalMarks, selectableSyllabusTopics]);
+  // Step 3 — sections (replaces old blueprint + question types steps)
+  const [sections, setSections] = useState<Section[]>([]);
 
-  // Step 4 — question types & sources (mode-aware defaults)
+  // Auto-seed a default Section A when topics are first picked, but only if user
+  // hasn't created sections yet. Also clear sections when the topic pool is reset.
+  useEffect(() => {
+    const pickedTopicsCount = useSyllabus ? selectedTopicIds.length : topics.length;
+    if (pickedTopicsCount === 0) {
+      setSections([]);
+      return;
+    }
+    if (sections.length === 0) {
+      const seedType = (QUESTION_TYPES_BY_MODE[selected?.paper.assessmentMode ?? "written"] ?? ["structured"])[0] ?? "structured";
+      const masterPool: SectionTopic[] = useSyllabus
+        ? selectableSyllabusTopics
+            .filter((t) => selectedTopicIds.includes(t.id))
+            .map((t) => ({
+              topic: t.topicCode ? `${t.topicCode} · ${t.title}` : t.title,
+              topic_code: t.topicCode,
+              learning_outcomes: t.learningOutcomes,
+              ao_codes: t.aoCodes,
+              outcome_categories: t.outcomeCategories,
+            }))
+        : topics.map((t) => ({ topic: t }));
+      setSections([{
+        ...defaultSection("A", totalMarks),
+        question_type: seedType,
+        num_questions: Math.max(1, masterPool.length),
+        topic_pool: masterPool,
+      }]);
+    }
+    // intentionally no `sections` dep — only seed when pool first becomes non-empty
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTopicIds, topics, useSyllabus, selected?.paper.assessmentMode]);
+
+  // The full master pool of topics available to any section (derived from Step 2 selection).
+  const masterTopicPool: SectionTopic[] = useMemo(() => {
+    if (useSyllabus) {
+      return selectableSyllabusTopics
+        .filter((t) => selectedTopicIds.includes(t.id))
+        .map((t) => ({
+          topic: t.topicCode ? `${t.topicCode} · ${t.title}` : t.title,
+          topic_code: t.topicCode,
+          learning_outcomes: t.learningOutcomes,
+          ao_codes: t.aoCodes,
+          outcome_categories: t.outcomeCategories,
+        }));
+    }
+    return topics.map((t) => ({ topic: t }));
+  }, [useSyllabus, selectableSyllabusTopics, selectedTopicIds, topics]);
+
+  const sectionsTotalMarks = blueprintTotalMarks({ sections });
+  const totalQuestions = sections.reduce((acc, s) => acc + (s.num_questions || 0), 0);
   const assessmentMode = selected?.paper.assessmentMode ?? "written";
+
   const visibleQuestionTypes = useMemo(() => {
     const allowedIds = QUESTION_TYPES_BY_MODE[assessmentMode] ?? QUESTION_TYPES_BY_MODE.written;
-    // For written mode show everything except oral/listening-only types; for non-written hide written-only.
     if (assessmentMode === "written") {
       return QUESTION_TYPES.filter((t) => !["spoken_response", "listening_mcq", "note_taking"].includes(t.id));
     }
     return QUESTION_TYPES.filter((t) => allowedIds.includes(t.id));
   }, [assessmentMode]);
-  const [qTypes, setQTypes] = useState<string[]>(["mcq", "short_answer", "structured"]);
-  useEffect(() => {
-    const defaults = QUESTION_TYPES_BY_MODE[assessmentMode] ?? ["mcq", "short_answer", "structured"];
-    setQTypes(defaults);
-  }, [assessmentMode]);
-  const [sources, setSources] = useState<string[]>(["ai"]);
 
-  // Step 5
-  const [referenceNote, setReferenceNote] = useState("");
-
-  const blueprintSum = blueprint.reduce((acc, b) => acc + (b.marks || 0), 0);
-
-  const updateBlueprintRow = (i: number, patch: Partial<BlueprintRow>) => {
-    setBlueprint((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  const updateSection = (id: string, patch: Partial<Section>) => {
+    setSections((sx) => sx.map((s) => (s.id === id ? { ...s, ...patch } : s)));
   };
+  const addSection = () => {
+    const remaining = Math.max(1, totalMarks - sectionsTotalMarks);
+    setSections((sx) => [...sx, { ...defaultSection(nextSectionLetter(sx), remaining), topic_pool: masterTopicPool }]);
+  };
+  const removeSection = (id: string) => {
+    setSections((sx) => {
+      const next = sx.filter((s) => s.id !== id);
+      // Re-letter A, B, C…
+      return next.map((s, i) => ({ ...s, letter: String.fromCharCode(65 + i) }));
+    });
+  };
+  const moveSection = (id: string, dir: -1 | 1) => {
+    setSections((sx) => {
+      const i = sx.findIndex((s) => s.id === id);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= sx.length) return sx;
+      const next = [...sx];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next.map((s, k) => ({ ...s, letter: String.fromCharCode(65 + k) }));
+    });
+  };
+
+  // Step 4 — references / instructions
+  const [referenceNote, setReferenceNote] = useState("");
 
   const toggle = (arr: string[], v: string) =>
     arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v];
@@ -276,12 +317,16 @@ function NewAssessment() {
   const canNext = () => {
     if (step === 1) {
       if (libLoading) return false;
-      if (library.length > 0 && !selected) return false; // must pick a paper if any exist
+      if (library.length > 0 && !selected) return false;
       return title.trim().length > 0;
     }
     if (step === 2) return useSyllabus ? selectedTopicIds.length > 0 : topics.length > 0;
-    if (step === 3) return blueprintSum === totalMarks;
-    if (step === 4) return qTypes.length > 0 && sources.length > 0;
+    if (step === 3) {
+      if (sections.length === 0) return false;
+      if (sectionsTotalMarks !== totalMarks) return false;
+      if (sections.some((s) => s.topic_pool.length === 0 || s.num_questions < 1)) return false;
+      return true;
+    }
     return true;
   };
 
