@@ -163,38 +163,51 @@ function extractKeywords(text: string, max: number): string[] {
 /** Build a list of progressively broader queries to try. Earlier = more specific.
  *  For humanities we issue alternating primary-source / historian-perspective
  *  queries so the search engine returns rich, analysable passages rather than
- *  thin tertiary blurbs. */
+ *  thin tertiary blurbs. Uses ALL learning outcomes (not just the first) so
+ *  searches stay anchored to the syllabus. An optional `queryHint` injects
+ *  extra context (used by the SBQ pool to vary across A/B/C/D/E fetches). */
 export function buildQueryChain(
   subjectKind: Exclude<SubjectKind, null>,
   topic: string,
   learningOutcomes: string[] = [],
+  queryHint?: string,
 ): string[] {
   const topicKw = extractKeywords(topic, 5);
-  const loKw = extractKeywords((learningOutcomes[0] ?? ""), 4);
+  // Pull keywords from EVERY learning outcome, not just the first, so the
+  // search vocabulary actually reflects what the syllabus covers.
+  const allLoText = learningOutcomes.join(" ");
+  const loKw = extractKeywords(allLoText, 6);
+  const hintKw = queryHint ? extractKeywords(queryHint, 3) : [];
   const chain: string[] = [];
+  const hintSuffix = hintKw.length > 0 ? ` ${hintKw.join(" ")}` : "";
   if (subjectKind === "english") {
     const suffix = "short prose excerpt";
-    if (topicKw.length > 0 && loKw.length > 0) chain.push(`${[...topicKw, ...loKw].join(" ")} ${suffix}`);
-    if (topicKw.length > 0) chain.push(`${topicKw.join(" ")} ${suffix}`);
+    if (topicKw.length > 0 && loKw.length > 0) chain.push(`${[...topicKw, ...loKw].join(" ")} ${suffix}${hintSuffix}`);
+    if (topicKw.length > 0) chain.push(`${topicKw.join(" ")} ${suffix}${hintSuffix}`);
     if (topicKw.length >= 2) chain.push(`${topicKw.slice(0, 2).join(" ")} ${suffix}`);
   } else {
     // Humanities: alternate primary-source and historian-perspective queries.
     const base = topicKw.join(" ");
     const baseWithLo = [...topicKw, ...loKw].join(" ");
     if (topicKw.length > 0 && loKw.length > 0) {
-      chain.push(`${baseWithLo} primary source document archive`);
-      chain.push(`${baseWithLo} historian analysis`);
+      chain.push(`${baseWithLo} primary source document archive${hintSuffix}`);
+      chain.push(`${baseWithLo} historian analysis${hintSuffix}`);
     }
     if (topicKw.length > 0) {
-      chain.push(`${base} primary source document`);
-      chain.push(`${base} historian perspective scholarly`);
-      chain.push(`${base} contemporary account`);
+      chain.push(`${base} primary source document${hintSuffix}`);
+      chain.push(`${base} historian perspective scholarly${hintSuffix}`);
+      chain.push(`${base} contemporary account${hintSuffix}`);
     }
     if (topicKw.length >= 2) {
       chain.push(`${topicKw.slice(0, 2).join(" ")} primary source`);
     }
   }
   return Array.from(new Set(chain));
+}
+
+/** Exposed for callers that need the syllabus-relevance vocabulary. */
+export function syllabusKeywordsFor(topic: string, learningOutcomes: string[] = []): string[] {
+  return [...extractKeywords(topic, 8), ...extractKeywords(learningOutcomes.join(" "), 10)];
 }
 
 // Backwards-compat single-query helper (kept for any older callers).
