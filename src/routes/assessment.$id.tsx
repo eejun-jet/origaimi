@@ -426,17 +426,65 @@ function EditorPage() {
                 const prevSec = i > 0 ? sectionAtPosition(sectionedBlueprint, i - 1) : null;
                 const showHeader = sec && (i === 0 || sec.letter !== prevSec?.letter);
                 const skillLabel = sec ? getSbqSkill(sec.sbq_skill)?.label : null;
+                // For SBQ sections, the shared source pool A–E is identical on every
+                // sub-question (see generator). Show it ONCE under the section header
+                // and hide it on each individual question card to mirror SEAB layout.
+                const isSbqSection = sec?.question_type === "source_based";
+                const sectionSources = isSbqSection && q.source_excerpt
+                  ? parseSharedSourcePool(q.source_excerpt)
+                  : null;
                 return (
                   <div key={q.id} className="space-y-3">
                     {showHeader && (
-                      <div className="rounded-lg border border-primary/30 bg-primary-soft/20 px-4 py-2">
-                        <p className="text-sm font-semibold">
-                          Section {sec.letter}
-                          {skillLabel ? ` — Source-Based (${skillLabel})` : sec.name ? ` — ${sec.name}` : ""}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {sec.num_questions} question{sec.num_questions === 1 ? "" : "s"} · {sec.marks} marks
-                        </p>
+                      <div className="space-y-3">
+                        <div className="rounded-lg border border-primary/30 bg-primary-soft/20 px-4 py-2">
+                          <p className="text-sm font-semibold">
+                            Section {sec.letter}
+                            {skillLabel ? ` — Source-Based (${skillLabel})` : sec.name ? ` — ${sec.name}` : ""}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {sec.num_questions} question{sec.num_questions === 1 ? "" : "s"} · {sec.marks} marks
+                          </p>
+                        </div>
+                        {sectionSources && sectionSources.length > 0 && (
+                          <div className="rounded-xl border border-border bg-card p-5">
+                            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                              Sources for this section
+                            </p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Refer to these sources when answering Section {sec.letter}.
+                            </p>
+                            <div className="mt-4 space-y-4">
+                              {sectionSources.map((src) => (
+                                <div
+                                  key={src.label}
+                                  className="rounded-lg border-l-4 border-primary bg-muted/40 p-4"
+                                >
+                                  <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">
+                                    Source {src.label}
+                                  </div>
+                                  <p className="mt-2 font-paper text-sm italic leading-relaxed text-foreground whitespace-pre-wrap">
+                                    {src.text}
+                                  </p>
+                                </div>
+                              ))}
+                              {q.source_url && (
+                                <p className="text-xs text-muted-foreground">
+                                  Primary citation:{" "}
+                                  <a
+                                    href={q.source_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="break-all font-medium text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary"
+                                  >
+                                    {(() => { try { return new URL(q.source_url).hostname.replace(/^www\./, ""); } catch { return q.source_url; } })()}
+                                    <span aria-hidden="true"> ↗</span>
+                                  </a>
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                     <QuestionCard
@@ -452,6 +500,7 @@ function EditorPage() {
                       onMove={(d) => moveQ(q.id, d)}
                       onRegenerate={(ins) => regenerate(q.id, ins)}
                       onBank={() => saveToBank(q)}
+                      hideSourceBlock={isSbqSection}
                     />
                   </div>
                 );
