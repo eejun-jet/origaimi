@@ -128,18 +128,6 @@ function Dashboard() {
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {filtered.map((a) => (
-                <AssessmentCard key={a.id} a={a} />
-              ))}
-            </div>
-          )}
-        </div>
-      </main>
-    </div>
-  );
-}
-
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {filtered.map((a) => (
                 <AssessmentCard key={a.id} a={a} onDelete={handleDelete} />
               ))}
             </div>
