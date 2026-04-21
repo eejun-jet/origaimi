@@ -2,6 +2,7 @@
 // Cascade: past-paper repository → Firecrawl (allow-listed) → Nano Banana Pro AI generation → null.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.0";
+import { tavilySearch, hasTavily } from "../_shared/tavily.ts";
 
 const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY") ?? "";
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY") ?? "";
@@ -198,8 +199,55 @@ async function resolveStorageUrl(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Step 2: Firecrawl search for a labelled figure on the web.
+// Step 2: Web search for a labelled figure (Tavily first, Firecrawl fallback).
 // ─────────────────────────────────────────────────────────────────────────────
+
+async function fromTavilyImages(
+  kind: Exclude<ScienceMathKind, null>,
+  topic: string,
+  learningOutcomes: string[],
+): Promise<DiagramResult | null> {
+  if (!hasTavily()) return null;
+  const lo = learningOutcomes[0] ?? "";
+  const subjectWord = kind === "general_science" ? "science" : kind;
+  const query = `${topic} ${lo} ${subjectWord} diagram labelled exam`.trim();
+
+  const { images, results } = await tavilySearch(query, {
+    includeDomains: ALLOW_DOMAINS_SCIENCE_MATH,
+    excludeDomains: DENY_DOMAINS,
+    maxResults: 10,
+    includeImages: true,
+    includeImageDescriptions: true,
+  });
+
+  // Prefer images whose URL is on the allow-list and looks like a real raster/svg.
+  const ranked = images
+    .filter((im) => /\.(png|jpe?g|gif|svg|webp)(\?|#|$)/i.test(im.url))
+    .filter((im) => !isDenied(im.url))
+    .map((im) => {
+      let score = 0;
+      if (isOnAllowList(im.url)) score += 5;
+      const blob = ((im.description ?? "") + " " + im.url).toLowerCase();
+      const topicWords = topic.toLowerCase().split(/\s+/);
+      for (const w of topicWords) if (w.length > 3 && blob.includes(w)) score += 2;
+      if (/diagram|figure|fig\.|circuit|graph|chart|model|setup|apparatus/.test(blob)) score += 3;
+      if (/logo|icon|avatar|sprite|banner|ad/.test(blob)) score -= 5;
+      return { im, score };
+    })
+    .sort((a, b) => b.score - a.score);
+
+  if (ranked.length === 0) return null;
+  const best = ranked[0].im;
+  // Find a matching textual result for citation context.
+  const host = hostnameOf(best.url);
+  const sourcePage = results.find((r) => hostnameOf(r.url) === host)?.url ?? best.url;
+  return {
+    url: best.url,
+    source: "web",
+    citation: `${publisherOf(sourcePage)} — ${sourcePage}`,
+    caption: best.description || `${topic} diagram`,
+  };
+}
 
 async function fromFirecrawl(
   kind: Exclude<ScienceMathKind, null>,
@@ -258,6 +306,17 @@ async function fromFirecrawl(
     }
   }
   return null;
+}
+
+/** Web tier: try Tavily image search first, then Firecrawl scrape-and-pick. */
+async function fromWeb(
+  kind: Exclude<ScienceMathKind, null>,
+  topic: string,
+  learningOutcomes: string[],
+): Promise<DiagramResult | null> {
+  const t = await fromTavilyImages(kind, topic, learningOutcomes);
+  if (t) return t;
+  return fromFirecrawl(kind, topic, learningOutcomes);
 }
 
 /** Pick the largest <img> matching topic keywords; fall back to first image. */
@@ -392,9 +451,9 @@ export async function fetchDiagram(opts: {
     if (r) return r;
   } catch (e) { console.warn("[diagrams] past_papers stage error", e); }
 
-  // 2. Firecrawl web
+  // 2. Web (Tavily images → Firecrawl fallback)
   try {
-    const r = await fromFirecrawl(opts.kind, opts.topic, opts.learningOutcomes);
+    const r = await fromWeb(opts.kind, opts.topic, opts.learningOutcomes);
     if (r) return r;
   } catch (e) { console.warn("[diagrams] web stage error", e); }
 
