@@ -599,10 +599,17 @@ function NewAssessment() {
                 blueprint={blueprint}
                 totalMarks={totalMarks}
                 blueprintSum={blueprintSum}
-                paperAOs={docAOs.filter((a) => !a.paperId || a.paperId === selected?.paper.id)}
+                paperAOs={(() => {
+                  const bound = docAOs.filter((a) => a.paperId === selected?.paper.id);
+                  return bound.length > 0 ? bound : docAOs.filter((a) => !a.paperId);
+                })()}
+                aosAreSyllabusWide={docAOs.filter((a) => a.paperId === selected?.paper.id).length === 0 && docAOs.some((a) => !a.paperId)}
                 onUpdate={updateBlueprintRow}
               />
-              <CoverageStrips blueprint={blueprint} aos={docAOs.filter((a) => !a.paperId || a.paperId === selected?.paper.id)} />
+              <CoverageStrips blueprint={blueprint} aos={(() => {
+                const bound = docAOs.filter((a) => a.paperId === selected?.paper.id);
+                return bound.length > 0 ? bound : docAOs.filter((a) => !a.paperId);
+              })()} />
             </div>
           )}
 
@@ -796,12 +803,14 @@ function BlueprintTable({
   totalMarks,
   blueprintSum,
   paperAOs,
+  aosAreSyllabusWide,
   onUpdate,
 }: {
   blueprint: Blueprint;
   totalMarks: number;
   blueprintSum: number;
   paperAOs: AssessmentObjective[];
+  aosAreSyllabusWide?: boolean;
   onUpdate: (i: number, patch: Partial<BlueprintRow>) => void;
 }) {
   const groups = useMemo(() => {
@@ -842,6 +851,11 @@ function BlueprintTable({
 
   return (
     <div className="space-y-4">
+      {aosAreSyllabusWide && paperAOs.length > 0 && (
+        <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">Note:</span> AOs for this syllabus are weighted across the whole paper, not tied to individual questions. Use the tags below to indicate which AO each row is <em>primarily</em> targeting — the generator will balance the overall mix.
+        </div>
+      )}
       {groups.map(([sectionName, rows]) => (
         <div key={sectionName} className="overflow-hidden rounded-lg border border-border">
           {groups.length > 1 && (
