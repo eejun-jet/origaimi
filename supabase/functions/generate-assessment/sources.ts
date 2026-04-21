@@ -9,19 +9,37 @@ import { tavilySearch, hasTavily } from "../_shared/tavily.ts";
 
 const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY") ?? "";
 
-// Allow-list for History / Social Studies (primary / news / heritage).
+// Allow-list for History / Social Studies. Strongly biased toward PRIMARY
+// SOURCES (archives, government records, museum collections, contemporary
+// news reportage, speeches, treaties, official documents) and SECONDARY
+// SOURCES that present a HISTORIAN'S PERSPECTIVE (academic essays, scholarly
+// articles, edited reference works). General journalism and tertiary
+// reference sites are kept only as a last-resort fallback.
 const ALLOW_DOMAINS_HUMANITIES = [
-  // Singapore primary / heritage
-  "nas.gov.sg", "nlb.gov.sg", "roots.gov.sg", "eresources.nlb.gov.sg",
-  "mindef.gov.sg", "gov.sg",
-  // Singapore news
+  // --- PRIMARY SOURCES: Singapore archives & heritage ---
+  "nas.gov.sg",                 // National Archives of Singapore
+  "eresources.nlb.gov.sg",      // NLB digitised newspapers, oral history
+  "nlb.gov.sg",                 // National Library Board (Infopedia, BiblioAsia)
+  "roots.gov.sg",               // National Heritage Board collections
+  "mindef.gov.sg", "gov.sg",    // Singapore government statements / records
+  // --- PRIMARY SOURCES: International archives, museums, official records ---
+  "nationalarchives.gov.uk", "bl.uk",         // UK National Archives, British Library
+  "archives.gov", "loc.gov",                  // US National Archives, Library of Congress
+  "iwm.org.uk", "awm.gov.au", "ushmm.org",    // Imperial War Museum, AWM, USHMM
+  "un.org",                                    // UN treaties, resolutions, speeches
+  "avalon.law.yale.edu",                       // Avalon Project — primary documents
+  "founders.archives.gov",                     // Founding-era US documents
+  "fordham.edu",                               // Internet History Sourcebooks (primary docs)
+  "wilsoncenter.org",                          // Cold War International History Project (declassified docs)
+  // --- SECONDARY SOURCES: historians' perspectives, scholarly analysis ---
+  "jstor.org",                  // peer-reviewed historical scholarship
+  "historytoday.com",           // historian-authored essays
+  "historyextra.com",           // BBC History Magazine, historian commentary
+  "oxfordre.com",               // Oxford Research Encyclopedias
+  "britannica.com",             // edited reference, often historian-authored
+  // --- Contemporary news reportage (treated as primary for recent events) ---
   "straitstimes.com", "channelnewsasia.com", "todayonline.com",
-  // International news / reference
-  "bbc.co.uk", "reuters.com", "apnews.com", "britannica.com",
-  "history.com", "historytoday.com",
-  // International archives / museums
-  "bl.uk", "iwm.org.uk", "nationalarchives.gov.uk", "loc.gov", "un.org",
-  "archives.gov", "awm.gov.au", "ushmm.org",
+  "bbc.co.uk", "reuters.com", "apnews.com",
 ];
 
 // Allow-list for English (literary / journalistic / public-domain prose & non-fiction).
