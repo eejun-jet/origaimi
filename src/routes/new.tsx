@@ -399,6 +399,24 @@ function NewAssessment() {
                     From <span className="font-medium text-foreground">{selected!.paper.paperCode ?? selected!.doc.syllabusCode}</span>
                     {selected!.paper.componentName ? ` · ${selected!.paper.componentName}` : ""}.
                   </p>
+                  {availableSections.length > 1 && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Section</Label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {availableSections.map((s) => (
+                          <button
+                            key={s}
+                            type="button"
+                            onClick={() => setActiveSection(s)}
+                            className={`rounded-full border px-3 py-1 text-xs transition-colors ${activeSection === s ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted"}`}
+                          >
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground">This paper draws from multiple sections — pick which discipline to assess.</p>
+                    </div>
+                  )}
                   {topicsLoading ? (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" /> Loading topics…
@@ -517,9 +535,14 @@ function NewAssessment() {
             <div className="space-y-6">
               <div>
                 <h2 className="font-paper text-xl font-semibold">Question types</h2>
-                <p className="mt-1 text-sm text-muted-foreground">Pick the mix you want in the paper.</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Pick the mix you want in the paper.
+                  {assessmentMode !== "written" && (
+                    <span className="ml-1">Defaults tuned for <span className="font-medium capitalize text-foreground">{assessmentMode}</span> assessment.</span>
+                  )}
+                </p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {QUESTION_TYPES.map((t) => {
+                  {visibleQuestionTypes.map((t) => {
                     const on = qTypes.includes(t.id);
                     return (
                       <button key={t.id} type="button" onClick={() => setQTypes(toggle(qTypes, t.id))}
