@@ -1,61 +1,81 @@
 
-# Multi-paper syllabus support
+# Wire the wizard to your real syllabuses
 
-The 2261 PDF proves a single syllabus document can contain multiple papers (Paper 1 Social Studies + Paper 2 History) under one umbrella code. The current schema and parser collapse them into one bag. Fix that before bulk upload.
+Right now the assessment wizard reads from a hardcoded topic map. Once you've parsed even one syllabus (like 2261), those rich, code-tagged topics sit unused. This change makes the wizard **syllabus-first** — teachers pick a real uploaded syllabus, then a paper, then topics flow in automatically with their MOE codes intact.
 
-## Schema changes
+## The new wizard flow
 
-**New table `syllabus_papers`** sits between `syllabus_documents` and `syllabus_topics`:
+**Step 1 — Pick your syllabus paper** (replaces "Subject + Level" dropdowns)
 
+A grouped picker showing every parsed syllabus in your library:
 ```text
-syllabus_papers
-  id                uuid pk
-  source_doc_id     uuid → syllabus_documents
-  paper_number      text   -- "1", "2" (verbatim from doc)
-  paper_code        text   -- "2261/01" (composed: syllabus_code + "/" + zero-padded paper_number)
-  component_name    text   -- "Social Studies", "History"
-  marks             int    -- 50
-  weighting_percent int    -- 50
-  duration_minutes  int    -- 105 (parsed from "1 hr 45 min")
-  topic_theme       text   -- "The Making of the 20th Century Modern World, 1910s–1991" (nullable)
-  position          int
-```
+2261 Combined Humanities (2026)
+  ├─ Paper 1 · 2261/01 · Social Studies (50m, 1h45)
+  └─ Paper 2 · 2261/02 · History (50m, 1h50)
 
-**`syllabus_topics` gets a new column**:
+6091 Physics (2025)
+  └─ Paper 1 · 6091/01 (40m, 1h15)
+```
+Selecting a paper auto-fills subject, level, and prefills duration + total marks from the syllabus metadata. Teacher can override.
+
+**Step 2 — Assessment type & basics**
+Title, assessment type (Topical / Mid-year / Prelim / Weighted Assessment / Alternative Assessment), duration, total marks. New types added to match what you mentioned:
+- `weighted_assessment` — WA1, WA2, WA3
+- `alternative_assessment` — performance task, project, oral, practical
+- `end_of_year` — EYE
+- (existing) Formative, Topical, Mid-year, Prelim, Mock
+
+**Step 3 — Topics from the syllabus**
+Shows the actual parsed topic tree for the selected paper, with codes as muted prefixes:
 ```text
-+ paper_id  uuid → syllabus_papers  (nullable — for single-paper syllabuses)
+☐ 1.1 · Living in a Diverse Society
+☐ 1.2 · Working for the Good of Society
+☐ 2.1 · Bonding Singapore
 ```
-`source_doc_id` stays for traceability. `paper_id` is what the wizard filters on.
+Hierarchy preserved — parent topics expand to show sub-strands. Multi-select.
 
-## Parser changes (`parse-syllabus` edge function)
+**Step 4 — TOS (Table of Specifications)**
+Auto-generated from selected topics, same as today. Each row now also stores `topic_code` so it flows through to questions and exports.
 
-The AI tool schema gains a `papers` array. The system prompt is updated to:
+**Step 5 — Question types & sources** — unchanged.
 
-1. Detect multi-paper structure by scanning for an examination-format table on the cover/intro (e.g. "Paper No. | Component | Marks | Weighting | Duration").
-2. Emit one entry in `papers[]` per paper found. If the doc is single-paper, emit one entry with `paper_number: "1"`.
-3. For each topic, emit `paper_number` so we can resolve it back to the right `syllabus_papers` row on insert.
-4. Compose `paper_code` server-side: `${syllabus_code}/${paper_number.padStart(2, "0")}` — never let the AI invent it.
+**Step 6 — References & instructions** — unchanged.
 
-## UI changes
+**Step 7 — Generate** — unchanged, but the AI prompt now receives the syllabus code, paper code, and learning outcome codes per topic for tighter grounding.
 
-**Upload page (`/admin/syllabus`)** — no change. User still uploads one file.
+## Schema additions
 
-**Review page (`/admin/syllabus/$id`)** — gains a paper switcher at the top:
+`assessments` table gets three nullable columns (additive, no breakage):
+```text
++ syllabus_doc_id   uuid  -- which syllabus document
++ syllabus_paper_id uuid  -- which paper within it
++ syllabus_code     text  -- denormalised for fast display ("2261/02")
 ```
-[ Paper 1 · 2261/01 · Social Studies (50m, 1h45) ]  [ Paper 2 · 2261/02 · History (50m, 1h50) ]
-```
-Clicking a tab filters the topic list to that paper's topics. Editable fields per paper (component name, marks, duration) so the user can correct misparses.
+Existing draft assessments without these stay valid — the wizard just treats them as legacy.
 
-**Down the line** (separate task — flagging not building): the wizard's subject/level picker becomes a syllabus + paper picker. "Combined Humanities 2261 → Paper 2 (History)".
+`assessments.blueprint` JSON gains an optional `topic_code` field per row. Old rows without it still render.
+
+## Fallback behaviour
+
+If the user has **zero parsed syllabuses**, the wizard falls back to the current hardcoded `SUBJECTS / LEVELS / topicsFor()` flow with a banner: *"Upload a syllabus to unlock code-tagged topics."* This keeps the app usable while your library grows.
+
+## What this unlocks immediately
+
+- **Real MOE alignment** — topics, codes, and learning outcomes from the actual document
+- **Multi-paper aware** — pick Paper 2 of 2261 and only get History topics, not Social Studies
+- **Better AI generation** — prompt includes `Aligned to MOE 2261/02 §1.2` so questions cite the right reference
+- **Coach-ready** — TOS Alignment Meter can later compare generated questions against the exact learning outcomes from the syllabus
 
 ## Out of scope this round
 
-- Auto-detecting alternative-paper structures (e.g. core vs extended for IGCSE) — current MOE syllabuses don't use this pattern
-- Cross-paper topic linking (some Math syllabuses share content across Paper 1 and Paper 2) — handle case-by-case if it comes up
-- Bulk upload — still one file at a time
+- Cross-paper assessments (e.g. a mock that pulls from both Paper 1 and Paper 2 of the same syllabus) — currently one paper per assessment
+- Auto-suggesting marks distribution based on the syllabus's own weighting table — manual for now, easy follow-up
+- Past-paper question pulling from the bank filtered by syllabus code — separate feature
 
-## Migration impact
+## Technical notes
 
-- New table + new column = additive, no data loss
-- Existing parsed docs (none yet beyond test data) can be re-run through the parser to backfill `paper_id`
-- Topics with `paper_id = null` still work — wizard treats them as "applies to whole syllabus"
+- New file `src/lib/syllabus-data.ts` with helpers: `loadSyllabusLibrary()`, `loadPaperTopics(paperId)` — both query Supabase directly from the client (RLS already open in trial mode).
+- `src/routes/new.tsx` — Step 1 becomes the syllabus picker; `availableTopics` derived from `loadPaperTopics` instead of `topicsFor()`. Hardcoded fallback kept.
+- `src/lib/syllabus.ts` — keep as fallback, add new `EXTENDED_ASSESSMENT_TYPES` with WA / Alternative / EYE.
+- `supabase/functions/generate-assessment/index.ts` — accept new optional fields (`syllabusCode`, `paperCode`, blueprint rows with `topic_code`, `learning_outcomes`); inject them into the prompt as grounding context.
+- Migration: add three nullable columns to `assessments`.
