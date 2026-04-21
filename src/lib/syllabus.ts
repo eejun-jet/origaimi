@@ -15,7 +15,10 @@ export const LEVELS = [
 export const ASSESSMENT_TYPES = [
   { id: "formative", label: "Formative quiz" },
   { id: "topical", label: "Topical test" },
+  { id: "weighted_assessment", label: "Weighted Assessment (WA)" },
+  { id: "alternative_assessment", label: "Alternative Assessment" },
   { id: "mid_year", label: "Mid-year exam" },
+  { id: "end_of_year", label: "End-of-Year Exam (EYE)" },
   { id: "prelim", label: "Prelim" },
   { id: "mock", label: "Mock paper" },
 ] as const;
