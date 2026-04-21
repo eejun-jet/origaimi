@@ -49,12 +49,19 @@ function SyllabusAdmin() {
   const [subject, setSubject] = useState<string>("");
   const [level, setLevel] = useState<string>("");
 
+  const [paperCounts, setPaperCounts] = useState<Record<string, number>>({});
+
   const load = async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from("syllabus_documents")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const [{ data }, { data: papers }] = await Promise.all([
+      supabase.from("syllabus_documents").select("*").order("created_at", { ascending: false }),
+      supabase.from("syllabus_papers").select("source_doc_id"),
+    ]);
+    const counts: Record<string, number> = {};
+    for (const p of (papers as { source_doc_id: string }[] | null) ?? []) {
+      counts[p.source_doc_id] = (counts[p.source_doc_id] ?? 0) + 1;
+    }
+    setPaperCounts(counts);
     setDocs((data as SyllabusDoc[]) ?? []);
     setLoading(false);
   };
