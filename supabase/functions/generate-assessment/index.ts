@@ -279,6 +279,7 @@ Deno.serve(async (req) => {
         source_url = null;
       }
 
+      const diag = diagramByIndex[i];
       return {
         assessment_id: assessmentId,
         user_id: userId,
@@ -295,6 +296,10 @@ Deno.serve(async (req) => {
         source_excerpt,
         source_url,
         notes,
+        diagram_url: diag?.url ?? null,
+        diagram_source: diag?.source ?? null,
+        diagram_citation: diag?.citation ?? null,
+        diagram_caption: diag?.caption ?? null,
       };
     });
 
@@ -306,7 +311,12 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ ok: true, questionCount: rows.length, groundedCount: groundedSources.filter(Boolean).length }), {
+    return new Response(JSON.stringify({
+      ok: true,
+      questionCount: rows.length,
+      groundedCount: groundedSources.filter(Boolean).length,
+      diagramCount: diagramByIndex.filter(Boolean).length,
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
