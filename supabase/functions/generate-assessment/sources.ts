@@ -241,12 +241,15 @@ async function firecrawlScrape(url: string): Promise<{ markdown: string; title: 
 
 /** Search + scrape + extract a usable 100–180 word excerpt. Returns null on total failure.
  *  When `usedHosts` is provided, results from already-used hostnames are skipped so each
- *  generated assessment ends up with at most one source per site. */
+ *  generated assessment ends up with at most one source per site.
+ *  When `usedUrls` is provided, exact URLs already used are skipped so the same article
+ *  can never be reused even if the host allow-list returns it again. */
 export async function fetchGroundedSource(
   subjectKind: Exclude<SubjectKind, null>,
   topic: string,
   learningOutcomes: string[] = [],
   usedHosts?: Set<string>,
+  usedUrls?: Set<string>,
 ): Promise<GroundedSource | null> {
   const allowList = subjectKind === "english" ? ALLOW_DOMAINS_ENGLISH : ALLOW_DOMAINS_HUMANITIES;
   const query = buildQuery(subjectKind, topic, learningOutcomes);
@@ -255,12 +258,14 @@ export async function fetchGroundedSource(
     console.warn("[sources] no allow-listed search results for query:", query);
     return null;
   }
-  // Filter out hosts already used in this assessment so every source comes from a different site.
-  const candidates = usedHosts
-    ? urls.filter((u) => !usedHosts.has(hostnameOf(u)))
-    : urls;
+  // Filter out hosts/URLs already used in this assessment so every source is unique.
+  const candidates = urls.filter((u) => {
+    if (usedUrls && usedUrls.has(u)) return false;
+    if (usedHosts && usedHosts.has(hostnameOf(u))) return false;
+    return true;
+  });
   if (candidates.length === 0) {
-    console.warn("[sources] all candidate URLs are from already-used hosts for query:", query);
+    console.warn("[sources] all candidate URLs are from already-used hosts/URLs for query:", query);
     return null;
   }
   for (const url of candidates.slice(0, 5)) {
@@ -271,6 +276,7 @@ export async function fetchGroundedSource(
       if (!excerpt) continue;
       const host = hostnameOf(url);
       if (usedHosts) usedHosts.add(host);
+      if (usedUrls) usedUrls.add(url);
       return {
         excerpt,
         source_url: url,

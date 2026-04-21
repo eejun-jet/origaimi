@@ -161,20 +161,27 @@ Deno.serve(async (req) => {
 
     // Pre-fetch grounded sources for History / Social Studies (SBQ) and English
     // (comprehension or source-based) rows.
+    // For Humanities: EVERY question gets exactly one unique source, regardless of
+    // the question type the model would have chosen. Questions without a successfully
+    // fetched source are dropped after generation.
     const subjectKind = classifySubject(subject);
     const wantsSourceBased = Array.isArray(questionTypes) && questionTypes.includes("source_based");
     const wantsComprehension = Array.isArray(questionTypes) && questionTypes.includes("comprehension");
     const sourceGate =
-      (subjectKind === "humanities" && wantsSourceBased) ||
+      subjectKind === "humanities" ||
       (subjectKind === "english" && (wantsComprehension || wantsSourceBased));
     const groundedSources: (GroundedSource | null)[] = [];
     if (sourceGate && subjectKind) {
       console.log("[generate] source-grounding enabled for subject:", subject, "kind:", subjectKind);
       const usedHosts = new Set<string>();
+      const usedUrls = new Set<string>();
       for (const row of blueprint as BlueprintRow[]) {
         try {
-          const src = await fetchGroundedSource(subjectKind, row.topic, row.learning_outcomes ?? [], usedHosts);
+          const src = await fetchGroundedSource(subjectKind, row.topic, row.learning_outcomes ?? [], usedHosts, usedUrls);
           groundedSources.push(src);
+          if (subjectKind === "humanities" && !src) {
+            console.warn("[generate] humanities row has no source, will be dropped:", row.topic);
+          }
         } catch (e) {
           console.warn("[generate] source fetch failed for row", row.topic, e);
           groundedSources.push(null);
@@ -274,28 +281,45 @@ Deno.serve(async (req) => {
     }
 
     // Insert all questions
+    let droppedHumanitiesNoSource = 0;
     const rows = questions.map((q, i) => {
       const expected = expectedByIndex[i] ?? null;
       let source_excerpt: string | null = q.source_excerpt ?? null;
       let source_url: string | null = q.source_url ?? null;
       let notes: string | null = null;
-      const needsSource = q.question_type === "source_based" || q.question_type === "comprehension";
+      let question_type: string = q.question_type;
 
-      if (!needsSource) {
-        // Structured / long / MCQ / short_answer / practical → no source attached, ever.
-        source_excerpt = null;
-        source_url = null;
-      } else if (expected) {
-        // Anti-hallucination: require exact verbatim excerpt back.
-        if (source_excerpt !== expected) {
-          source_excerpt = expected;
-          source_url = groundedSources[i]?.source_url ?? source_url;
+      // Humanities invariant: every question MUST have exactly one unique source.
+      if (subjectKind === "humanities") {
+        if (!expected) {
+          // Drop this question — no source could be retrieved.
+          droppedHumanitiesNoSource++;
+          return null;
+        }
+        question_type = "source_based";
+        source_excerpt = expected;
+        source_url = groundedSources[i]?.source_url ?? null;
+        if (q.source_excerpt !== expected) {
           notes = "Source excerpt enforced from retrieved citation (model attempted to alter it).";
         }
-      } else if (sourceGate) {
-        notes = "Source retrieval failed for this row — please attach a passage manually.";
-        source_excerpt = null;
-        source_url = null;
+      } else {
+        const needsSource = question_type === "source_based" || question_type === "comprehension";
+        if (!needsSource) {
+          // Structured / long / MCQ / short_answer / practical → no source attached, ever.
+          source_excerpt = null;
+          source_url = null;
+        } else if (expected) {
+          // Anti-hallucination: require exact verbatim excerpt back.
+          if (source_excerpt !== expected) {
+            source_excerpt = expected;
+            source_url = groundedSources[i]?.source_url ?? source_url;
+            notes = "Source excerpt enforced from retrieved citation (model attempted to alter it).";
+          }
+        } else if (sourceGate) {
+          notes = "Source retrieval failed for this row — please attach a passage manually.";
+          source_excerpt = null;
+          source_url = null;
+        }
       }
 
       const diag = diagramByIndex[i];
@@ -303,7 +327,7 @@ Deno.serve(async (req) => {
         assessment_id: assessmentId,
         user_id: userId,
         position: i,
-        question_type: q.question_type,
+        question_type,
         topic: q.topic ?? null,
         bloom_level: q.bloom_level ?? null,
         difficulty: q.difficulty ?? null,
@@ -320,7 +344,13 @@ Deno.serve(async (req) => {
         diagram_citation: diag?.citation ?? null,
         diagram_caption: diag?.caption ?? null,
       };
-    });
+    }).filter((r): r is NonNullable<typeof r> => r !== null)
+      // Re-number positions after dropping rows
+      .map((r, i) => ({ ...r, position: i }));
+
+    if (droppedHumanitiesNoSource > 0) {
+      console.warn(`[generate] dropped ${droppedHumanitiesNoSource} humanities question(s) with no retrievable source`);
+    }
 
     if (rows.length > 0) {
       const { error: insErr } = await supabase.from("assessment_questions").insert(rows);
