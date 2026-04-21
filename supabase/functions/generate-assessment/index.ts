@@ -212,6 +212,23 @@ function buildSectionUserPrompt(opts: {
 
   const sectionLabel = section.name ? `Section ${section.letter} — ${section.name}` : `Section ${section.letter}`;
 
+  // SBQ skill block (History/Social Studies SBQ sections only).
+  const skill = section.sbq_skill ? SBQ_SKILLS[section.sbq_skill] : null;
+  const skillBlock = skill
+    ? `
+
+SBQ SKILL TYPE: ${skill.label}
+${skill.promptHeader}
+
+REQUIRED MARK SCHEME LEVELS for this skill:
+${skill.markScheme}
+
+${skill.locked
+  ? `This skill is FIXED at ${skill.default} marks. Generate exactly 1 question worth ${skill.default} marks that uses ALL provided sources (Source A, Source B, …) as evidence.`
+  : `Each question in this section must be worth one of: ${skill.marks.join(", ")} marks.`}
+${skill.minSources >= 2 ? `This skill REQUIRES at least ${skill.minSources} sources presented together (label them Source A, Source B${skill.minSources >= 3 ? ", Source C" : ""}${skill.minSources >= 4 ? ", Source D" : ""}, …) inside the SAME question stem.` : ""}`
+    : "";
+
   return `${grounding}You are drafting ${sectionLabel} of "${opts.title}" (${opts.level} ${opts.subject}, ${opts.assessmentType}, ${opts.durationMinutes} min, ${opts.totalMarks} total marks across ${opts.totalSections} sections).
 
 THIS SECTION:
@@ -221,6 +238,7 @@ THIS SECTION:
   - ${marksGuide}
   - Bloom's level focus: ${section.bloom ?? "Apply"} (use other levels only if the topic clearly demands it)
   ${section.instructions ? `- Section instructions for the rubric: ${section.instructions}` : ""}
+${skillBlock}
 
 ALLOWED TOPICS (pick from these only — DO NOT invent topics outside this pool):
 ${topicLines}
