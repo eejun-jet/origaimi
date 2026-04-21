@@ -332,24 +332,30 @@ ${blocks}
         : ` — must be worth one of: ${s.marks.join(", ")} marks`;
       let srcNote: string;
       if (isHumanitiesSBQ) {
-        if (s.id === "assertion") srcNote = ` (uses ALL Sources ${poolLabelList} from the shared pool)`;
-        else if (s.minSources >= 2) srcNote = ` (uses any ${s.minSources} sources from the shared pool, e.g. Sources A and B)`;
-        else srcNote = ` (uses ONE source from the shared pool — name it explicitly, e.g. Source A or Source B)`;
+        const partLetter = String.fromCharCode(97 + i); // a, b, c...
+        const boundSource = String.fromCharCode(65 + (i % Math.max(1, poolLabels.length))); // A, B, C...
+        if (s.id === "assertion") srcNote = ` — uses ALL Sources ${poolLabelList} from the shared pool. Stem MUST start with "Study Sources ${poolLabelList}."`;
+        else if (s.minSources >= 2) {
+          const second = String.fromCharCode(65 + ((i + 1) % Math.max(1, poolLabels.length)));
+          srcNote = ` — uses EXACTLY TWO sources: Sources ${boundSource} and ${second}. Stem MUST start with "Study Sources ${boundSource} and ${second}."`;
+        } else {
+          srcNote = ` — uses ONLY Source ${boundSource} (one source). Stem MUST start with "Study Source ${boundSource}." Part (${partLetter}).`;
+        }
       } else {
         srcNote = s.minSources >= 2 ? ` (uses at least ${s.minSources} sources labelled Source A, B${s.minSources >= 3 ? ", C" : ""}…)` : ` (uses Source A)`;
       }
-      return `  - Question ${i + 1}: ${s.label}${lockedNote}${srcNote}`;
+      return `  - Question ${i + 1} (part ${String.fromCharCode(97 + i)}): ${s.label}${lockedNote}${srcNote}`;
     }).join("\n");
 
     skillBlock = `
 
-SBQ SKILL ASSIGNMENTS (apply each skill's format and mark scheme to the assigned question):
+SBQ SKILL ASSIGNMENTS (apply each skill's format and mark scheme to the assigned part):
 ${skillSummaries}
 
-PER-QUESTION SKILL MAPPING (you MUST follow this exact mapping):
+PER-PART SKILL & SOURCE-BINDING MAPPING (you MUST follow this exact mapping — DO NOT swap sources between parts):
 ${assignments}
 
-IMPORTANT: For Assertion questions, the hypothesis MUST be testable against ALL sources (each should plausibly support OR challenge it). For single-source skills, name the chosen source explicitly in the stem. Do NOT mix skill formats across questions.`;
+IMPORTANT: For Assertion parts, the hypothesis MUST be testable against ALL sources (each should plausibly support OR challenge it). For single-source parts, the bound source is FIXED above — name it explicitly in the stem. Do NOT mix skill formats across parts. Do NOT bind two different single-source parts to the same source.`;
   }
 
   return `${grounding}You are drafting ${sectionLabel} of "${opts.title}" (${opts.level} ${opts.subject}, ${opts.assessmentType}, ${opts.durationMinutes} min, ${opts.totalMarks} total marks across ${opts.totalSections} sections).
