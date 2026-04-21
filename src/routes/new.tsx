@@ -316,12 +316,20 @@ function NewAssessment() {
                     </SelectContent>
                   </Select>
                   {selected && (
-                    <p className="text-xs text-muted-foreground">
-                      Auto-filled subject, level, duration & marks from{" "}
-                      <span className="font-medium text-foreground">
-                        {selected.paper.paperCode ?? selected.doc.syllabusCode}
-                      </span>. You can override below.
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-xs text-muted-foreground">
+                        Auto-filled from{" "}
+                        <span className="font-medium text-foreground">
+                          {selected.paper.paperCode ?? selected.doc.syllabusCode}
+                        </span>.
+                      </p>
+                      {selected.paper.assessmentMode && selected.paper.assessmentMode !== "written" && (
+                        <Badge variant="outline" className="capitalize">{selected.paper.assessmentMode}</Badge>
+                      )}
+                      {selected.paper.section && (
+                        <Badge variant="secondary">{selected.paper.section}</Badge>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
