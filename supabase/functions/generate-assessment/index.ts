@@ -703,38 +703,44 @@ Deno.serve(async (req) => {
         for (let qi = 0; qi < section.num_questions; qi++) sourcesForSection.push([null]);
       }
 
-      // Build prompt + call AI for this section only.
-      const messages: Array<{ role: string; content: string }> = [
-        { role: "system", content: buildSystemPrompt(subject, level, paperCode) },
-      ];
-      if (exemplarBlock) messages.push({ role: "system", content: exemplarBlock });
-      messages.push({
-        role: "user",
-        content: buildSectionUserPrompt({
-          title, subject, level, assessmentType, totalMarks, durationMinutes,
-          section, sectionIndex: si, totalSections: sections.length,
-          syllabusCode, paperCode, groundedSources: sourcesForSection,
-          sharedSourcePool: isHumanitiesSBQ ? sharedSourcePool : undefined,
-          subjectKind, instructions,
-        }),
-      });
+      let questions: any[] = [];
+      if (isHumanitiesSBQ && sharedSourcePool.length > 0) {
+        console.log(`[generate] section ${section.letter}: using deterministic SBQ builder to avoid long AI timeout`);
+        questions = buildDeterministicSbqQuestions(section, sharedSourcePool, perQSkillsForFetch);
+      } else {
+        // Build prompt + call AI for this section only.
+        const messages: Array<{ role: string; content: string }> = [
+          { role: "system", content: buildSystemPrompt(subject, level, paperCode) },
+        ];
+        if (exemplarBlock) messages.push({ role: "system", content: exemplarBlock });
+        messages.push({
+          role: "user",
+          content: buildSectionUserPrompt({
+            title, subject, level, assessmentType, totalMarks, durationMinutes,
+            section, sectionIndex: si, totalSections: sections.length,
+            syllabusCode, paperCode, groundedSources: sourcesForSection,
+            sharedSourcePool: isHumanitiesSBQ ? sharedSourcePool : undefined,
+            subjectKind, instructions,
+          }),
+        });
 
-      const ai = await callAI(messages);
-      if (!ai.ok) {
-        console.error(`[generate] section ${section.letter} AI error`, ai.status, (ai.errText ?? "").slice(0, 300));
-        sectionFailures++;
-        continue;
+        const ai = await callAI(messages);
+        if (!ai.ok) {
+          console.error(`[generate] section ${section.letter} AI error`, ai.status, (ai.errText ?? "").slice(0, 300));
+          sectionFailures++;
+          continue;
+        }
+        const toolCall = ai.json?.choices?.[0]?.message?.tool_calls?.[0];
+        if (!toolCall) {
+          console.error(`[generate] section ${section.letter}: no tool call`, JSON.stringify(ai.json).slice(0, 300));
+          sectionFailures++;
+          continue;
+        }
+        let parsed: { questions?: any[] };
+        try { parsed = JSON.parse(toolCall.function.arguments); }
+        catch { sectionFailures++; continue; }
+        questions = parsed.questions ?? [];
       }
-      const toolCall = ai.json?.choices?.[0]?.message?.tool_calls?.[0];
-      if (!toolCall) {
-        console.error(`[generate] section ${section.letter}: no tool call`, JSON.stringify(ai.json).slice(0, 300));
-        sectionFailures++;
-        continue;
-      }
-      let parsed: { questions?: any[] };
-      try { parsed = JSON.parse(toolCall.function.arguments); }
-      catch { sectionFailures++; continue; }
-      const questions = parsed.questions ?? [];
 
       // Per-question post-processing: enforce source attachment, drop unsupported.
       for (let qi = 0; qi < questions.length; qi++) {
