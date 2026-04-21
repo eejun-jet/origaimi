@@ -31,6 +31,7 @@ type BlueprintRow = {
   bloom: string;
   marks: number;
   topic_code?: string | null;
+  section?: string | null;
   learning_outcomes?: string[];
   ao_codes?: string[];
   outcome_categories?: string[];
@@ -158,6 +159,7 @@ function NewAssessment() {
         bloom: t.suggestedBlooms[0] ?? "Apply",
         marks: per,
         topic_code: t.topicCode,
+        section: t.section ?? null,
         learning_outcomes: t.learningOutcomes,
         ao_codes: t.aoCodes,
         outcome_categories: t.outcomeCategories,
