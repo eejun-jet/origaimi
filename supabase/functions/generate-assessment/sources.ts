@@ -287,16 +287,58 @@ function isJunkSentence(s: string): boolean {
 
 /** Compute simple keyword-overlap relevance between an excerpt and the syllabus
  *  topic + learning outcomes. Used to drop scrapes that have nothing to do with
- *  the topic the teacher actually selected. */
-function relevanceScore(excerpt: string, topicKeywords: string[]): number {
-  if (topicKeywords.length === 0) return 1;
+ *  the topic the teacher actually selected. Returns both the proportional score
+ *  and the number of distinct keywords matched so callers can apply a strict
+ *  AND-gate (proportion AND raw hits) rather than the previous OR-gate which
+ *  let off-topic but keyword-dense pages slip through. */
+function relevanceMetrics(
+  excerpt: string,
+  topicKeywords: string[],
+): { score: number; hits: number; matched: string[] } {
+  if (topicKeywords.length === 0) return { score: 1, hits: 0, matched: [] };
   const lc = excerpt.toLowerCase();
-  let hits = 0;
+  const matched: string[] = [];
   for (const kw of topicKeywords) {
     if (kw.length < 3) continue;
-    if (lc.includes(kw)) hits++;
+    if (lc.includes(kw)) matched.push(kw);
   }
-  return hits / Math.max(1, topicKeywords.length);
+  return {
+    score: matched.length / Math.max(1, topicKeywords.length),
+    hits: matched.length,
+    matched,
+  };
+}
+
+/** Heuristic richness check: a "rich" excerpt for source-based analysis must
+ *  read like analytical / narrative prose, not a list of captions, headlines,
+ *  or metadata. We require:
+ *   - Enough sentences (≥ 4) of reasonable average length (≥ 12 words avg)
+ *   - At least one analytical / argumentative cue word (because, however,
+ *     therefore, although, despite, claimed, argued, suggests, evidence, etc.)
+ *   - Low ratio of ALL-CAPS / Title-Case-heavy fragments (catalogue signature)
+ *  Returns a reason string when rejected so logs explain why. */
+function richnessReason(excerpt: string): string | null {
+  const text = excerpt.trim();
+  const sentences = (text.match(/[^.!?]+[.!?]+/g) ?? []).map((s) => s.trim()).filter(Boolean);
+  if (sentences.length < 4) return `too-few-sentences(${sentences.length})`;
+  const totalWords = countWords(text);
+  const avg = totalWords / sentences.length;
+  if (avg < 12) return `avg-sentence-too-short(${avg.toFixed(1)}w)`;
+
+  const ANALYTICAL_CUES = /\b(because|however|therefore|thus|although|though|despite|whereas|while|meanwhile|claim(ed|s)?|argu(e|ed|es)|suggests?|implies?|reveals?|demonstrates?|shows?|illustrates?|evidence|effect|cause|consequence|result(ed|ing|s)?|impact(ed|ing|s)?|influenc(e|ed|ing)|policy|government|nation|war|colonial|independence|movement|reform|protest|treaty|agreement|crisis|conflict|reaction|response|opinion|view|believe[ds]?)\b/i;
+  if (!ANALYTICAL_CUES.test(text)) return "no-analytical-cues";
+
+  // Catalogue / listing signature: many fragments dominated by Title Case nouns
+  // (e.g. "Office of War Information Black-and-White Negatives").
+  const titleHeavy = sentences.filter((s) => {
+    const words = countWords(s);
+    if (words < 6) return false;
+    const caps = (s.match(/\b[A-Z][a-z]+/g) ?? []).length;
+    return caps / words > 0.45;
+  }).length;
+  if (titleHeavy / sentences.length > 0.4) return "catalogue-listing-signature";
+
+  return null;
 }
 
 /** Extract a sentence-bounded contiguous excerpt of 100–200 words from markdown.
