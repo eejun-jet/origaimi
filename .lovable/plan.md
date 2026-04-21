@@ -1,38 +1,50 @@
 
 
-# Add N-level (G2) support to the level list
+# Add P6 Foundation level + upload PSLE syllabuses
 
-Singapore G2/N-level syllabuses use distinct codes (2125, 2126, 2127, 5105/5106/5107, 1190, 4045) and run across Sec 3N → Sec 5N. Right now the level dropdown only goes up to Sec 4 (O-level / G3 convention), so tagging these uploads cleanly needs the list extended.
+PSLE has two parallel tracks at P6: Standard (codes 0001/0001/0009) and Foundation (codes 0031/0038/0039). To keep them distinguishable in the wizard picker, add a `P6 Foundation` level tag — same pattern as `Sec 4` vs `Sec 4N`.
 
 ## Change
 
-In `src/lib/syllabus.ts`, extend `LEVELS`:
+Extend `LEVELS` in `src/lib/syllabus.ts`:
 
 ```text
-"P1"…"P6", "Sec 1", "Sec 2",
-"Sec 3", "Sec 4",            ← G3 / O-level (existing)
-"Sec 3N", "Sec 4N", "Sec 5N", ← G2 / N-level (new)
-"JC1", "JC2",                ← A-level (new, was missing)
+"P1", "P2", "P3", "P4", "P5", "P6",
+"P6 Foundation",                       ← new
+"Sec 1", "Sec 2",
+"Sec 3", "Sec 4",
+"Sec 3N", "Sec 4N", "Sec 5N",
+"JC1", "JC2",
 ```
 
-Notes:
-- The N(A) track runs Sec 1N → Sec 5N but only Sec 3N–5N actually sit national papers, so those three are the meaningful tags.
-- Adding JC1/JC2 closes a gap I noticed — mentioned in earlier plans but never landed in the `LEVELS` array.
+## Upload guidance (after change lands)
 
-## Where this shows up
+Upload through `/admin/syllabus`:
 
-- **Upload form** (`/admin/syllabus`) — level dropdown when registering a new syllabus PDF.
-- **Wizard fallback** (`/new`) — only used when no parsed syllabus exists; safe to extend.
-- **Wizard syllabus picker** — unaffected; level is read from the parsed document, this just controls what tags are valid.
+| File | Title | Code | Subject | Level |
+|---|---|---|---|---|
+| PSLE_EL_0001 | PSLE English | 0001 | English Language | P6 |
+| PSLE_Math_0001 | PSLE Mathematics | 0001 | Mathematics | P6 |
+| PSLE_Sci_0009 | PSLE Science | 0009 | Science | P6 |
+| Foundation_EL_0031 | PSLE Foundation English | 0031 | English Language | P6 Foundation |
+| Foundation_Math_0038 | PSLE Foundation Mathematics | 0038 | Mathematics | P6 Foundation |
+| Foundation_Sci_0039 | PSLE Foundation Science | 0039 | Science | P6 Foundation |
+
+The duplicate `0001` code on English and Math is expected — SEAB scopes codes within a level group, and our schema has no uniqueness constraint on `syllabus_code`, so both upload cleanly and display as separate documents.
+
+## What this exercises
+
+- **PSLE English (0001)** likely has Paper 1 (Writing), Paper 2 (Language Use & Comprehension), Paper 3 (Listening), Paper 4 (Oral) — should produce 4 papers tagged with `assessment_mode` of `written`/`written`/`listening`/`oral`. Good real-world test of the mode-aware question-type defaults built earlier.
+- **PSLE Science (0009)** is a single paper combining MCQ + open-ended — single-paper, no sections.
+- **Foundation papers** are structurally simpler than Standard — fewer sub-papers, mostly written.
 
 ## Out of scope
 
-- Auto-detecting N-level from the document filename or cover page during parse — the AI prompt already extracts a `level` field; it'll write "N(A)" or "Secondary 4 Normal (Academic)" verbatim. We keep the human-curated tag list clean and let the admin pick the right one on upload.
-- Filtering the wizard picker by level — not needed yet; once you have ~20 syllabuses we can add a level filter chip row above the picker.
+- Auto-detecting Foundation vs Standard from the filename — admin tags it at upload time.
+- Mother Tongue PSLE syllabuses (Chinese/Malay/Tamil + their Foundation variants) — flag for a follow-up upload batch.
+- Filtering the wizard picker by level — defer until you have ~20+ syllabuses.
 
 ## Files touched
 
-- `src/lib/syllabus.ts` — extend `LEVELS` array (single edit, ~3 lines)
-
-After this lands, upload the 6 N-level PDFs through `/admin/syllabus` tagging them as Sec 4N (or the appropriate year), and the parser handles the rest. 5105/5106/5107 will exercise the multi-track logic the same way 5086 does.
+- `src/lib/syllabus.ts` — add `"P6 Foundation"` to `LEVELS` (1-line edit)
 
