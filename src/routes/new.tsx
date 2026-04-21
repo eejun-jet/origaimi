@@ -640,6 +640,12 @@ function NewAssessment() {
                     We pull a 100–180 word excerpt from approved sites (NAS, NLB, Roots, Straits Times, BBC, Reuters, British Library, National Archives UK, etc.) — never Wikipedia, blogs, or AI-fabricated sources. Each question shows a clickable citation.
                   </p>
                 )}
+                {(qTypes.includes("comprehension") || qTypes.includes("source_based")) && /\benglish\b/i.test(subject) && (
+                  <p className="mt-3 rounded-md border border-primary/30 bg-primary/5 p-3 text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">English passages will be grounded in real, cited prose.</span>{" "}
+                    We pull a 100–180 word excerpt from approved sources (Project Gutenberg, Standard Ebooks, Poetry Foundation, BBC, The Guardian, Smithsonian, National Geographic, Granta, Lit Hub, Straits Times, etc.) — never Wikipedia, blogs, or AI-fabricated content. Each question shows a clickable citation.
+                  </p>
+                )}
               </div>
               <div>
                 <h2 className="font-paper text-xl font-semibold">Item sources</h2>

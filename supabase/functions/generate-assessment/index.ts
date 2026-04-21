@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.0";
-import { fetchGroundedSource, isHumanitiesSubject, type GroundedSource } from "./sources.ts";
+import { fetchGroundedSource, classifySubject, type GroundedSource } from "./sources.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -41,10 +41,10 @@ ${alignLine}
 Each question must include a clear stem, a precise answer, and a marking scheme that breaks down marks where appropriate.
 Use Bloom's taxonomy levels rigorously.
 When a "GROUNDED SOURCE" block is provided for a question, you MUST:
-  - Place the verbatim source text inside the question stem under a "Source A" heading.
+  - Place the verbatim source text inside the question stem under a "Source A" heading (or "Passage" for English comprehension).
   - NOT paraphrase, summarise, translate, or alter the source text in any way.
   - Add a citation line directly under the source: \`Source: {publisher} — {url}\`.
-  - Write your sub-questions to refer to "Source A".
+  - Write your sub-questions to refer to the passage / Source A.
   - NEVER fabricate sources, attributions, or URLs of your own.`;
 }
 
@@ -157,15 +157,20 @@ Deno.serve(async (req) => {
     } = body;
     const userId = bodyUserId ?? "00000000-0000-0000-0000-000000000001";
 
-    // Pre-fetch grounded sources for History / Social Studies SBQ rows.
+    // Pre-fetch grounded sources for History / Social Studies (SBQ) and English
+    // (comprehension or source-based) rows.
+    const subjectKind = classifySubject(subject);
     const wantsSourceBased = Array.isArray(questionTypes) && questionTypes.includes("source_based");
-    const sourceGate = isHumanitiesSubject(subject) && wantsSourceBased;
+    const wantsComprehension = Array.isArray(questionTypes) && questionTypes.includes("comprehension");
+    const sourceGate =
+      (subjectKind === "humanities" && wantsSourceBased) ||
+      (subjectKind === "english" && (wantsComprehension || wantsSourceBased));
     const groundedSources: (GroundedSource | null)[] = [];
-    if (sourceGate) {
-      console.log("[generate] source-grounding enabled for subject:", subject);
+    if (sourceGate && subjectKind) {
+      console.log("[generate] source-grounding enabled for subject:", subject, "kind:", subjectKind);
       for (const row of blueprint as BlueprintRow[]) {
         try {
-          const src = await fetchGroundedSource(row.topic, row.learning_outcomes ?? []);
+          const src = await fetchGroundedSource(subjectKind, row.topic, row.learning_outcomes ?? []);
           groundedSources.push(src);
         } catch (e) {
           console.warn("[generate] source fetch failed for row", row.topic, e);
@@ -232,8 +237,8 @@ Deno.serve(async (req) => {
           source_url = groundedSources[i]?.source_url ?? source_url;
           notes = "Source excerpt enforced from retrieved citation (model attempted to alter it).";
         }
-      } else if (sourceGate && q.question_type === "source_based") {
-        notes = "Source retrieval failed for this row — please attach a source manually.";
+      } else if (sourceGate && (q.question_type === "source_based" || q.question_type === "comprehension")) {
+        notes = "Source retrieval failed for this row — please attach a passage manually.";
         source_excerpt = null;
         source_url = null;
       }

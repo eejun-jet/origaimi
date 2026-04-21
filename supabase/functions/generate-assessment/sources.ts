@@ -1,12 +1,14 @@
-// Source-grounding helpers for History / Social Studies SBQs.
-// Uses Firecrawl (search + scrape) via the connector's API key, restricted
-// to a curated allow-list of legitimate primary / news / heritage domains.
+// Source-grounding helpers for History / Social Studies SBQs and English
+// comprehension / visual text passages. Uses Firecrawl (search + scrape) via
+// the connector's API key, restricted to a curated allow-list of legitimate
+// primary / news / heritage / literary domains.
 //
 // Returns null if no usable 100–180 word excerpt can be extracted.
 
 const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY") ?? "";
 
-const ALLOW_DOMAINS = [
+// Allow-list for History / Social Studies (primary / news / heritage).
+const ALLOW_DOMAINS_HUMANITIES = [
   // Singapore primary / heritage
   "nas.gov.sg", "nlb.gov.sg", "roots.gov.sg", "eresources.nlb.gov.sg",
   "mindef.gov.sg", "gov.sg",
@@ -18,13 +20,33 @@ const ALLOW_DOMAINS = [
   "bl.uk", "iwm.org.uk", "nationalarchives.gov.uk", "loc.gov", "un.org",
 ];
 
+// Allow-list for English (literary / journalistic / public-domain prose & non-fiction).
+// Bias toward sources whose passages teachers can legitimately use as comprehension
+// or visual text stimulus material.
+const ALLOW_DOMAINS_ENGLISH = [
+  // Public-domain literature and verified texts
+  "gutenberg.org", "standardebooks.org", "poetryfoundation.org", "poets.org",
+  // Long-form journalism & reportage (well-edited prose)
+  "bbc.co.uk", "theguardian.com", "nytimes.com", "reuters.com", "apnews.com",
+  "channelnewsasia.com", "straitstimes.com", "todayonline.com",
+  "nationalgeographic.com", "smithsonianmag.com", "theatlantic.com",
+  "newyorker.com", "aeon.co", "longreads.com",
+  // Short fiction / essays
+  "narrativemagazine.com", "granta.com", "lithub.com",
+  // Singapore literary / cultural
+  "nlb.gov.sg", "roots.gov.sg",
+];
+
 const DENY_DOMAINS = [
   "wikipedia.org", "wikiwand.com", "quora.com", "reddit.com",
-  "medium.com", "blogspot.com", "wordpress.com",
+  "medium.com", "blogspot.com", "wordpress.com", "substack.com",
+  "tumblr.com", "pinterest.com",
 ];
 
 const MIN_WORDS = 100;
 const MAX_WORDS = 180;
+
+export type SubjectKind = "humanities" | "english" | null;
 
 export type GroundedSource = {
   excerpt: string;
@@ -33,16 +55,44 @@ export type GroundedSource = {
   publisher: string;
 };
 
-export function isHumanitiesSubject(subject: string | null | undefined): boolean {
-  if (!subject) return false;
+export function classifySubject(subject: string | null | undefined): SubjectKind {
+  if (!subject) return null;
   const s = subject.toLowerCase();
-  return s.includes("history") || s.includes("social studies") || s.includes("humanities");
+  if (s.includes("history") || s.includes("social studies") || s.includes("humanities")) {
+    return "humanities";
+  }
+  // Match "English", "English Language", "EL", but avoid "Mathematics" etc.
+  if (/\benglish\b/.test(s) || s.trim() === "el") return "english";
+  return null;
 }
 
-export function buildQuery(topic: string, learningOutcomes: string[] = []): string {
+export function isHumanitiesSubject(subject: string | null | undefined): boolean {
+  return classifySubject(subject) === "humanities";
+}
+
+export function isEnglishSubject(subject: string | null | undefined): boolean {
+  return classifySubject(subject) === "english";
+}
+
+/** Question types that benefit from a grounded passage. */
+export function questionTypeNeedsSource(qt: string | null | undefined): boolean {
+  if (!qt) return false;
+  return qt === "source_based" || qt === "comprehension";
+}
+
+export function buildQuery(
+  subjectKind: Exclude<SubjectKind, null>,
+  topic: string,
+  learningOutcomes: string[] = [],
+): string {
   const lo = learningOutcomes[0] ?? "";
   const base = `${topic} ${lo}`.trim();
-  // Bias toward primary-source language so we get archival / news content.
+  if (subjectKind === "english") {
+    // Bias toward narrative / descriptive / journalistic prose suitable for
+    // comprehension and visual text questions.
+    return `${base} short passage prose excerpt`;
+  }
+  // Humanities: bias toward archival / news content.
   return `${base} primary source historical account`;
 }
 
@@ -50,11 +100,11 @@ function hostnameOf(url: string): string {
   try { return new URL(url).hostname.toLowerCase(); } catch { return ""; }
 }
 
-function isAllowed(url: string): boolean {
+function isAllowed(url: string, allowList: string[]): boolean {
   const h = hostnameOf(url);
   if (!h) return false;
   if (DENY_DOMAINS.some((d) => h.endsWith(d) || h.includes(d))) return false;
-  return ALLOW_DOMAINS.some((d) => h === d || h.endsWith("." + d) || h.endsWith(d));
+  return allowList.some((d) => h === d || h.endsWith("." + d) || h.endsWith(d));
 }
 
 function publisherOf(url: string): string {
@@ -102,7 +152,7 @@ function extractExcerpt(markdown: string): string | null {
   return null;
 }
 
-async function firecrawlSearch(query: string): Promise<string[]> {
+async function firecrawlSearch(query: string, allowList: string[]): Promise<string[]> {
   if (!FIRECRAWL_API_KEY) return [];
   const resp = await fetch("https://api.firecrawl.dev/v2/search", {
     method: "POST",
@@ -124,7 +174,7 @@ async function firecrawlSearch(query: string): Promise<string[]> {
     const url = r?.url ?? r?.link;
     if (typeof url === "string") urls.push(url);
   }
-  return urls.filter(isAllowed).slice(0, 5);
+  return urls.filter((u) => isAllowed(u, allowList)).slice(0, 5);
 }
 
 async function firecrawlScrape(url: string): Promise<{ markdown: string; title: string } | null> {
@@ -151,11 +201,13 @@ async function firecrawlScrape(url: string): Promise<{ markdown: string; title: 
 
 /** Search + scrape + extract a usable 100–180 word excerpt. Returns null on total failure. */
 export async function fetchGroundedSource(
+  subjectKind: Exclude<SubjectKind, null>,
   topic: string,
   learningOutcomes: string[] = [],
 ): Promise<GroundedSource | null> {
-  const query = buildQuery(topic, learningOutcomes);
-  const urls = await firecrawlSearch(query);
+  const allowList = subjectKind === "english" ? ALLOW_DOMAINS_ENGLISH : ALLOW_DOMAINS_HUMANITIES;
+  const query = buildQuery(subjectKind, topic, learningOutcomes);
+  const urls = await firecrawlSearch(query, allowList);
   if (urls.length === 0) {
     console.warn("[sources] no allow-listed search results for query:", query);
     return null;
