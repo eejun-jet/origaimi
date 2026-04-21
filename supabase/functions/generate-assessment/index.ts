@@ -496,9 +496,39 @@ Deno.serve(async (req) => {
       const effectiveSkillDefs = effectiveSkillIds.map((id) => SBQ_SKILLS[id]).filter(Boolean);
       const perQSkillsForFetch = assignSkillsToQuestions(effectiveSkillDefs, section.num_questions);
 
-      // Pre-fetch grounded sources. Outer index = question slot, inner = source slot.
+      // For HUMANITIES SBQ sections: build ONE shared pool of Sources A–E that
+      // all sub-questions in the section reference. The section is anchored on
+      // ONE key inquiry question for ONE topic, mirroring SEAB SBQ paper format.
+      const isHumanitiesSBQ = subjectKind === "humanities" && section.question_type === "source_based";
+      const sharedSourcePool: GroundedSource[] = [];
       const sourcesForSection: (GroundedSource | null)[][] = [];
-      if (needsSourcePerQ && subjectKind) {
+
+      if (isHumanitiesSBQ) {
+        // Pool size = max minSources across selected skills, capped at 5, min 4
+        // (so single-source skills like Inference still have room to choose A or B).
+        const maxMinSources = effectiveSkillDefs.reduce((m, s) => Math.max(m, s.minSources), 0);
+        const poolSize = Math.min(5, Math.max(4, maxMinSources));
+        const sectionTopic = section.topic_pool[0] ?? null;
+        if (sectionTopic) {
+          for (let i = 0; i < poolSize; i++) {
+            try {
+              const src = await fetchGroundedSource(
+                subjectKind, sectionTopic.topic, sectionTopic.learning_outcomes ?? [],
+                usedHosts, usedUrls,
+              );
+              if (src) sharedSourcePool.push(src);
+            } catch (e) {
+              console.warn("[generate] shared source fetch failed for", sectionTopic.topic, e);
+            }
+          }
+        }
+        console.log(`[generate] section ${section.letter} SBQ pool: ${sharedSourcePool.length} sources (target ${poolSize})`);
+        // Every question slot references the SAME shared pool.
+        for (let qi = 0; qi < section.num_questions; qi++) {
+          sourcesForSection.push(sharedSourcePool.slice());
+        }
+      } else if (needsSourcePerQ && subjectKind) {
+        // Non-SBQ humanities or English comprehension: per-question source.
         for (let qi = 0; qi < section.num_questions; qi++) {
           const t = pickTopic(section, qi);
           const qSkill = perQSkillsForFetch[qi];
