@@ -304,41 +304,48 @@ export async function fetchGroundedSource(
   usedUrls?: Set<string>,
 ): Promise<GroundedSource | null> {
   const allowList = subjectKind === "english" ? ALLOW_DOMAINS_ENGLISH : ALLOW_DOMAINS_HUMANITIES;
-  const query = buildQuery(subjectKind, topic, learningOutcomes);
-  const urls = await searchUrls(query, allowList);
-  if (urls.length === 0) {
-    console.warn("[sources] no allow-listed search results for query:", query);
+  const queries = buildQueryChain(subjectKind, topic, learningOutcomes);
+  if (queries.length === 0) {
+    console.warn("[sources] could not build any search query for topic:", topic);
     return null;
   }
-  // Filter out hosts/URLs already used in this assessment so every source is unique.
-  const candidates = urls.filter((u) => {
-    if (usedUrls && usedUrls.has(u)) return false;
-    if (usedHosts && usedHosts.has(hostnameOf(u))) return false;
-    return true;
-  });
-  if (candidates.length === 0) {
-    console.warn("[sources] all candidate URLs are from already-used hosts/URLs for query:", query);
-    return null;
-  }
-  for (const url of candidates.slice(0, 5)) {
-    try {
-      const scraped = await firecrawlScrape(url);
-      if (!scraped) continue;
-      const excerpt = extractExcerpt(scraped.markdown);
-      if (!excerpt) continue;
-      const host = hostnameOf(url);
-      if (usedHosts) usedHosts.add(host);
-      if (usedUrls) usedUrls.add(url);
-      return {
-        excerpt,
-        source_url: url,
-        source_title: scraped.title || publisherOf(url),
-        publisher: publisherOf(url),
-      };
-    } catch (e) {
-      console.warn("[sources] scrape error for", url, e);
+
+  // Walk the query chain (most specific → most general) until we get hits.
+  for (const query of queries) {
+    const urls = await searchUrls(query, allowList);
+    if (urls.length === 0) {
+      console.warn("[sources] no allow-listed results for query:", query);
+      continue;
     }
+    const candidates = urls.filter((u) => {
+      if (usedUrls && usedUrls.has(u)) return false;
+      if (usedHosts && usedHosts.has(hostnameOf(u))) return false;
+      return true;
+    });
+    if (candidates.length === 0) {
+      console.warn("[sources] all candidates already used for query:", query);
+      continue;
+    }
+    for (const url of candidates.slice(0, 5)) {
+      try {
+        const scraped = await firecrawlScrape(url);
+        if (!scraped) continue;
+        const excerpt = extractExcerpt(scraped.markdown);
+        if (!excerpt) continue;
+        const host = hostnameOf(url);
+        if (usedHosts) usedHosts.add(host);
+        if (usedUrls) usedUrls.add(url);
+        return {
+          excerpt,
+          source_url: url,
+          source_title: scraped.title || publisherOf(url),
+          publisher: publisherOf(url),
+        };
+      } catch (e) {
+        console.warn("[sources] scrape error for", url, e);
+      }
+    }
+    console.warn("[sources] no usable excerpt extracted for query:", query);
   }
-  console.warn("[sources] no usable excerpt extracted for query:", query);
   return null;
 }
