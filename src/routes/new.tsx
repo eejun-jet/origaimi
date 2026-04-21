@@ -630,7 +630,11 @@ function paperLabel(p: SyllabusLibraryPaper) {
   const bits = [`Paper ${p.paperNumber}`];
   if (p.paperCode) bits.push(p.paperCode);
   if (p.componentName) bits.push(p.componentName);
+  if (p.section) bits.push(p.section);
   const meta: string[] = [];
+  if (p.assessmentMode && p.assessmentMode !== "written") {
+    meta.push(p.assessmentMode.charAt(0).toUpperCase() + p.assessmentMode.slice(1));
+  }
   if (p.marks) meta.push(`${p.marks}m`);
   if (p.durationMinutes) {
     const h = Math.floor(p.durationMinutes / 60);
