@@ -479,11 +479,19 @@ async function callAI(
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+  let statusAssessmentId: string | null = null;
+  let statusClient: ReturnType<typeof createClient> | null = null;
+  const markAssessmentStatus = async (status: string) => {
+    if (!statusClient || !statusAssessmentId) return;
+    await statusClient.from("assessments").update({ status }).eq("id", statusAssessmentId);
+  };
+
   try {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
+    statusClient = supabase;
 
     const body = await req.json();
     const {
@@ -492,12 +500,15 @@ Deno.serve(async (req) => {
       userId: bodyUserId,
       syllabusCode, paperCode,
     } = body;
+    statusAssessmentId = assessmentId;
+    await markAssessmentStatus("generating");
     const userId = bodyUserId ?? "00000000-0000-0000-0000-000000000001";
 
     const fallbackTypes = Array.isArray(questionTypes) ? questionTypes : [];
     const sections = toSections(blueprint, "structured", fallbackTypes);
     if (sections.length === 0) {
-      return new Response(JSON.stringify({ error: "Blueprint has no sections" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        await markAssessmentStatus("generation_failed");
+        return new Response(JSON.stringify({ error: "Blueprint has no sections" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const subjectKind = classifySubject(subject);
