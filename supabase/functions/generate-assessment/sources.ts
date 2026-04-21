@@ -408,24 +408,34 @@ async function firecrawlScrape(url: string): Promise<{ markdown: string; title: 
   return { markdown, title };
 }
 
-/** Search + scrape + extract a usable 100–180 word excerpt. Returns null on total failure.
- *  When `usedHosts` is provided, results from already-used hostnames are skipped so each
- *  generated assessment ends up with at most one source per site.
- *  When `usedUrls` is provided, exact URLs already used are skipped so the same article
- *  can never be reused even if the host allow-list returns it again. */
+/** Search + scrape + extract a usable, syllabus-relevant 100–200 word excerpt.
+ *  Returns null on total failure.
+ *  - `usedHosts` / `usedUrls` prevent the same site/article being reused.
+ *  - `queryHint` lets callers vary search context across multiple fetches for
+ *    the same topic (e.g. building an SBQ pool of Sources A–E).
+ *  - The excerpt MUST overlap the syllabus topic + learning-outcome vocabulary
+ *    (>= 25% keyword hit rate); otherwise we treat it as off-topic and skip. */
 export async function fetchGroundedSource(
   subjectKind: Exclude<SubjectKind, null>,
   topic: string,
   learningOutcomes: string[] = [],
   usedHosts?: Set<string>,
   usedUrls?: Set<string>,
+  queryHint?: string,
 ): Promise<GroundedSource | null> {
   const allowList = subjectKind === "english" ? ALLOW_DOMAINS_ENGLISH : ALLOW_DOMAINS_HUMANITIES;
-  const queries = buildQueryChain(subjectKind, topic, learningOutcomes);
+  const queries = buildQueryChain(subjectKind, topic, learningOutcomes, queryHint);
   if (queries.length === 0) {
     console.warn("[sources] could not build any search query for topic:", topic);
     return null;
   }
+
+  // Vocabulary used for relevance gating: the topic plus ALL learning outcomes.
+  const topicVocab = syllabusKeywordsFor(topic, learningOutcomes);
+  // Threshold tuned empirically: at least a quarter of the syllabus terms
+  // (or at minimum 2 distinct terms) must appear in the excerpt.
+  const MIN_RELEVANCE = 0.25;
+  const MIN_RELEVANCE_HITS = 2;
 
   // Walk the query chain (most specific → most general) until we get hits.
   for (const query of queries) {
@@ -449,6 +459,17 @@ export async function fetchGroundedSource(
         if (!scraped) continue;
         const excerpt = extractExcerpt(scraped.markdown);
         if (!excerpt) continue;
+
+        // Relevance gate: drop excerpts that don't actually discuss the syllabus
+        // topic. Without this we get e.g. an FSA photo catalogue listing for a
+        // Singapore-history query just because firecrawl scraped well.
+        const score = relevanceScore(excerpt, topicVocab);
+        const hits = topicVocab.filter((k) => k.length >= 3 && excerpt.toLowerCase().includes(k)).length;
+        if (score < MIN_RELEVANCE && hits < MIN_RELEVANCE_HITS) {
+          console.warn(`[sources] dropped off-topic excerpt (score=${score.toFixed(2)}, hits=${hits}) from ${url}`);
+          continue;
+        }
+
         const host = hostnameOf(url);
         if (usedHosts) usedHosts.add(host);
         if (usedUrls) usedUrls.add(url);
