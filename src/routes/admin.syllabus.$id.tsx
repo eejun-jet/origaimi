@@ -121,6 +121,7 @@ function SyllabusReview() {
         strand: null, sub_strand: null, title: "New topic",
         learning_outcomes: [], suggested_blooms: [],
         depth: 2, position: prev.length,
+        section: null,
       },
     ]);
   };
@@ -154,6 +155,10 @@ function SyllabusReview() {
           weighting_percent: p.weighting_percent,
           duration_minutes: p.duration_minutes,
           topic_theme: p.topic_theme,
+          section: p.section,
+          track_tags: p.track_tags ?? [],
+          is_optional: p.is_optional,
+          assessment_mode: p.assessment_mode,
         }).eq("id", p.id);
         if (pErr) throw pErr;
       }
@@ -178,6 +183,7 @@ function SyllabusReview() {
           position: i,
           subject: doc.subject,
           level: doc.level,
+          section: t.section,
         }));
         const { error: insErr } = await supabase.from("syllabus_topics").insert(rows);
         if (insErr) throw insErr;
