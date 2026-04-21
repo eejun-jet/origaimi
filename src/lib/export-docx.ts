@@ -236,7 +236,9 @@ export async function exportAssessmentDocx(
   grouped.forEach(({ section, items }) => {
     if (items.length === 0) return;
     if (section) {
-      ms.push(p(`Section ${section.letter}${section.name ? " — " + section.name : ""}`, { bold: true, size: 24, spacingAfter: 80 }));
+      const skillLabel = getSbqSkill(section.sbq_skill)?.label;
+      const suffix = skillLabel ? ` — Source-Based (${skillLabel})` : (section.name ? " — " + section.name : "");
+      ms.push(p(`Section ${section.letter}${suffix}`, { bold: true, size: 24, spacingAfter: 80 }));
     }
     items.forEach((q) => {
       msQ += 1;
