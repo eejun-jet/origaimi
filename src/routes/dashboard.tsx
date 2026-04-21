@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, FileText, Search } from "lucide-react";
+import { Plus, FileText, Search, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { SUBJECTS, LEVELS } from "@/lib/syllabus";
 
 export const Route = createFileRoute("/dashboard")({
@@ -34,16 +35,33 @@ function Dashboard() {
   const [subjectFilter, setSubjectFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
+  const load = async () => {
+    setFetching(true);
+    const { data } = await supabase
+      .from("assessments")
+      .select("id,title,subject,level,status,total_marks,duration_minutes,updated_at")
+      .order("updated_at", { ascending: false });
+    setItems((data as Assessment[]) ?? []);
+    setFetching(false);
+  };
+
   useEffect(() => {
-    (async () => {
-      const { data } = await supabase
-        .from("assessments")
-        .select("id,title,subject,level,status,total_marks,duration_minutes,updated_at")
-        .order("updated_at", { ascending: false });
-      setItems((data as Assessment[]) ?? []);
-      setFetching(false);
-    })();
+    load();
   }, [user]);
+
+  const handleDelete = async (a: Assessment) => {
+    if (!confirm(`Delete "${a.title}"? This will also remove its questions and version history.`)) return;
+    // Cascade-delete dependent rows first (no FK cascade is set in trial mode).
+    await supabase.from("assessment_questions").delete().eq("assessment_id", a.id);
+    await supabase.from("assessment_versions").delete().eq("assessment_id", a.id);
+    const { error } = await supabase.from("assessments").delete().eq("id", a.id);
+    if (error) {
+      toast.error(`Delete failed: ${error.message}`);
+      return;
+    }
+    setItems((prev) => prev.filter((x) => x.id !== a.id));
+    toast.success("Assessment deleted");
+  };
 
   const filtered = items.filter((a) => {
     if (search && !a.title.toLowerCase().includes(search.toLowerCase())) return false;
@@ -110,7 +128,7 @@ function Dashboard() {
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {filtered.map((a) => (
-                <AssessmentCard key={a.id} a={a} />
+                <AssessmentCard key={a.id} a={a} onDelete={handleDelete} />
               ))}
             </div>
           )}
@@ -120,35 +138,45 @@ function Dashboard() {
   );
 }
 
-function AssessmentCard({ a }: { a: Assessment }) {
+function AssessmentCard({ a, onDelete }: { a: Assessment; onDelete: (a: Assessment) => void }) {
   return (
-    <Link
-      to="/assessment/$id"
-      params={{ id: a.id }}
-      className="group block rounded-xl border border-border bg-card p-5 transition-all hover:border-primary/40 hover:shadow-sm"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-soft text-primary">
-          <FileText className="h-5 w-5" />
+    <div className="group relative rounded-xl border border-border bg-card p-5 transition-all hover:border-primary/40 hover:shadow-sm">
+      <Link
+        to="/assessment/$id"
+        params={{ id: a.id }}
+        className="block"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-soft text-primary">
+            <FileText className="h-5 w-5" />
+          </div>
+          <StatusBadge status={a.status} />
         </div>
-        <StatusBadge status={a.status} />
-      </div>
-      <h3 className="mt-4 line-clamp-2 font-medium text-foreground group-hover:text-primary">
-        {a.title}
-      </h3>
-      <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-        <span>{a.subject}</span>
-        <span>·</span>
-        <span>{a.level}</span>
-        <span>·</span>
-        <span>{a.total_marks} marks</span>
-        <span>·</span>
-        <span>{a.duration_minutes} min</span>
-      </div>
-      <div className="mt-3 text-xs text-muted-foreground">
-        Updated {new Date(a.updated_at).toLocaleDateString()}
-      </div>
-    </Link>
+        <h3 className="mt-4 line-clamp-2 pr-8 font-medium text-foreground group-hover:text-primary">
+          {a.title}
+        </h3>
+        <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          <span>{a.subject}</span>
+          <span>·</span>
+          <span>{a.level}</span>
+          <span>·</span>
+          <span>{a.total_marks} marks</span>
+          <span>·</span>
+          <span>{a.duration_minutes} min</span>
+        </div>
+        <div className="mt-3 text-xs text-muted-foreground">
+          Updated {new Date(a.updated_at).toLocaleDateString()}
+        </div>
+      </Link>
+      <button
+        type="button"
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(a); }}
+        aria-label={`Delete ${a.title}`}
+        className="absolute bottom-3 right-3 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground opacity-0 transition hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 focus:opacity-100"
+      >
+        <Trash2 className="h-3.5 w-3.5" /> Delete
+      </button>
+    </div>
   );
 }
 
