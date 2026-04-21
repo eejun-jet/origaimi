@@ -29,8 +29,59 @@ type Section = {
   marks: number;
   num_questions: number;
   bloom?: string;
+  sbq_skill?: string;
   topic_pool: SectionTopic[];
   instructions?: string;
+};
+
+// SBQ skill definitions mirrored from src/lib/sections.ts
+type SbqSkillDef = {
+  id: string;
+  label: string;
+  marks: number[];
+  default: number;
+  locked: boolean;
+  minSources: number;
+  promptHeader: string;
+  markScheme: string;
+};
+
+const SBQ_SKILLS: Record<string, SbqSkillDef> = {
+  inference: {
+    id: "inference", label: "Inference", marks: [5, 6, 7, 8], default: 6, locked: false, minSources: 1,
+    promptHeader: `Write an INFERENCE question. Format: "What can you infer from Source A about [topic]? Explain your answer using details from the source." The student must make an inference (not literal recall) and support it with a quoted detail from Source A.`,
+    markScheme: `L1 (1m): Lifts a detail from the source without inferring. L2 (2-3m): Makes a valid inference but lacks supporting evidence from the source. L3 (4-5m): Makes a valid inference with supporting evidence quoted from Source A. L4 (6+m): Makes two well-supported inferences, each with quoted evidence from Source A.`,
+  },
+  purpose: {
+    id: "purpose", label: "Purpose", marks: [5, 6, 7, 8], default: 6, locked: false, minSources: 1,
+    promptHeader: `Write a PURPOSE question. Format: "Why do you think [author/source] [produced / published / wrote] Source A? Explain your answer using details of the source and your contextual knowledge." The student must identify the author's intended purpose (persuade, warn, glorify, justify, etc.).`,
+    markScheme: `L1 (1m): Describes content only, no purpose. L2 (2-3m): States a purpose but does not justify with provenance OR content. L3 (4-5m): States a purpose and supports it with EITHER provenance (who, when, audience) OR specific content evidence. L4 (6+m): States a purpose and supports it with BOTH provenance AND content evidence, plus contextual knowledge.`,
+  },
+  comparison: {
+    id: "comparison", label: "Comparison", marks: [5, 6, 7, 8], default: 6, locked: false, minSources: 2,
+    promptHeader: `Write a COMPARISON question that requires TWO sources (Source A and Source B). Format: "How similar are Sources A and B? Explain your answer." The student must compare both message AND tone/provenance.`,
+    markScheme: `L1 (1-2m): Identifies surface similarities/differences only (e.g. both are about X). L2 (3-4m): Identifies similarities OR differences in message with evidence from both sources. L3 (5-6m): Identifies BOTH similarities AND differences in message, with evidence from both. L4 (7-8m): Compares message AND tone/provenance, with quoted evidence from both sources, and reaches a judgement on overall similarity.`,
+  },
+  utility: {
+    id: "utility", label: "Utility", marks: [6, 7, 8], default: 7, locked: false, minSources: 1,
+    promptHeader: `Write a UTILITY question. Format: "How useful is Source A as evidence about [topic]? Explain your answer." The student must evaluate utility from BOTH the content AND the provenance, and acknowledge limitations.`,
+    markScheme: `L1 (1-2m): States useful/not useful without justification. L2 (3-4m): Evaluates utility based on content OR provenance only. L3 (5-6m): Evaluates utility based on content AND provenance with evidence. L4 (7-8m): Evaluates utility based on content AND provenance, acknowledges limitations, and reaches an overall judgement.`,
+  },
+  reliability: {
+    id: "reliability", label: "Reliability", marks: [6, 7, 8], default: 7, locked: false, minSources: 1,
+    promptHeader: `Write a RELIABILITY question. Format: "How reliable is Source A as evidence about [topic]? Explain your answer." The student must cross-reference content against contextual knowledge AND analyse provenance for bias.`,
+    markScheme: `L1 (1-2m): States reliable/unreliable without justification. L2 (3-4m): Evaluates reliability via content cross-reference OR provenance only. L3 (5-6m): Evaluates reliability via content cross-reference AND provenance/bias. L4 (7-8m): Evaluates reliability via content cross-reference, provenance, and bias, with a balanced overall judgement.`,
+  },
+  surprise: {
+    id: "surprise", label: "Surprise", marks: [5, 6, 7, 8], default: 6, locked: false, minSources: 1,
+    promptHeader: `Write a SURPRISE question. Format: "Are you surprised by Source A? Explain your answer." The student must explain what IS surprising AND what is NOT surprising, both grounded in contextual knowledge.`,
+    markScheme: `L1 (1m): States surprised/not surprised without justification. L2 (2-3m): Explains surprise OR non-surprise using either source content or contextual knowledge. L3 (4-5m): Explains surprise AND non-surprise using contextual knowledge. L4 (6+m): Explains BOTH surprise and non-surprise with detailed contextual knowledge and source evidence, reaching a balanced judgement.`,
+  },
+  assertion: {
+    id: "assertion", label: "Assertion (Hypothesis)", marks: [8], default: 8, locked: true, minSources: 3,
+    promptHeader: `Write an ASSERTION (HYPOTHESIS) question worth EXACTLY 8 marks. Format: "'[State a clear historical hypothesis about the topic]'. How far do Sources A, B, C [and D, etc.] support this assertion? Use ALL the sources to explain your answer." The hypothesis must be a debatable claim. The student must use EVERY source provided, evaluating which support and which challenge the hypothesis.`,
+    markScheme: `L1 (1-2m): Uses one or two sources only, asserts agree/disagree without evaluation. L2 (3-4m): Uses most sources, identifies which support/challenge but no judgement on weight. L3 (5-6m): Uses ALL sources, identifies support and challenge with evidence, but limited evaluation of source quality. L4 (7-8m): Uses ALL sources, evaluates both support and challenge with evidence, weighs source quality (provenance/bias), and reaches a substantiated overall judgement on how far the assertion is supported.`,
+  },
 };
 
 type LegacyBlueprintRow = {
