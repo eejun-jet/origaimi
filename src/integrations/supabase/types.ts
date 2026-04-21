@@ -270,6 +270,8 @@ export type Database = {
           parse_error: string | null
           parse_status: string
           question_types: string[] | null
+          questions_json: Json | null
+          style_summary: string | null
           subject: string | null
           title: string
           topics: string[] | null
@@ -289,6 +291,8 @@ export type Database = {
           parse_error?: string | null
           parse_status?: string
           question_types?: string[] | null
+          questions_json?: Json | null
+          style_summary?: string | null
           subject?: string | null
           title: string
           topics?: string[] | null
@@ -308,6 +312,8 @@ export type Database = {
           parse_error?: string | null
           parse_status?: string
           question_types?: string[] | null
+          questions_json?: Json | null
+          style_summary?: string | null
           subject?: string | null
           title?: string
           topics?: string[] | null
