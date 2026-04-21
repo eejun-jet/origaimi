@@ -15,9 +15,20 @@ export const SBQ_SKILLS = [
 
 export type SbqSkill = typeof SBQ_SKILLS[number]["id"];
 
+export const MAX_SBQ_SKILLS = 5;
+
 export function getSbqSkill(id: string | undefined | null) {
   if (!id) return null;
   return SBQ_SKILLS.find((s) => s.id === id) ?? null;
+}
+
+/** Returns the effective skill array for a section, migrating legacy single-skill on the fly. */
+export function getSectionSkills(section: { sbq_skills?: SbqSkill[] | null; sbq_skill?: SbqSkill | null }): SbqSkill[] {
+  if (Array.isArray(section.sbq_skills) && section.sbq_skills.length > 0) {
+    return section.sbq_skills.slice(0, MAX_SBQ_SKILLS);
+  }
+  if (section.sbq_skill) return [section.sbq_skill];
+  return [];
 }
 
 export function isHumanitiesSubject(subject: string | null | undefined): boolean {
@@ -42,7 +53,8 @@ export type Section = {
   marks: number;         // total marks for this section
   num_questions: number; // how many questions to generate in this section
   bloom?: string;        // primary Bloom's level for the section
-  sbq_skill?: SbqSkill;  // for History/Social Studies SBQ sections
+  sbq_skill?: SbqSkill;  // legacy: single skill (kept for backward compat)
+  sbq_skills?: SbqSkill[]; // for History/Social Studies SBQ sections (0–5 skills)
   topic_pool: SectionTopic[];
   instructions?: string;
 };

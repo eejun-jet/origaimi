@@ -30,6 +30,7 @@ type Section = {
   num_questions: number;
   bloom?: string;
   sbq_skill?: string;
+  sbq_skills?: string[];
   topic_pool: SectionTopic[];
   instructions?: string;
 };
@@ -83,6 +84,48 @@ const SBQ_SKILLS: Record<string, SbqSkillDef> = {
     markScheme: `L1 (1-2m): Uses one or two sources only, asserts agree/disagree without evaluation. L2 (3-4m): Uses most sources, identifies which support/challenge but no judgement on weight. L3 (5-6m): Uses ALL sources, identifies support and challenge with evidence, but limited evaluation of source quality. L4 (7-8m): Uses ALL sources, evaluates both support and challenge with evidence, weighs source quality (provenance/bias), and reaches a substantiated overall judgement on how far the assertion is supported.`,
   },
 };
+
+// Resolve effective skill IDs for a section, supporting new sbq_skills array
+// and legacy single sbq_skill. Caps at 5 and filters unknown ids.
+function resolveEffectiveSkills(section: Section): string[] {
+  const raw = Array.isArray(section.sbq_skills) && section.sbq_skills.length > 0
+    ? section.sbq_skills
+    : (section.sbq_skill ? [section.sbq_skill] : []);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const id of raw) {
+    if (!id || seen.has(id) || !SBQ_SKILLS[id]) continue;
+    seen.add(id);
+    out.push(id);
+    if (out.length >= 5) break;
+  }
+  return out;
+}
+
+// Distribute selected skills across the section's question slots.
+// Assertion (locked) always takes exactly 1 slot if selected; remaining slots
+// are filled round-robin from the other selected skills.
+function assignSkillsToQuestions(skills: SbqSkillDef[], numQuestions: number): (SbqSkillDef | null)[] {
+  if (skills.length === 0 || numQuestions <= 0) {
+    return Array(numQuestions).fill(null);
+  }
+  const assertion = skills.find((s) => s.id === "assertion");
+  const others = skills.filter((s) => s.id !== "assertion");
+  const slots: (SbqSkillDef | null)[] = [];
+  if (assertion) {
+    // Assertion takes the LAST slot (so earlier slots use single sources).
+    for (let i = 0; i < numQuestions - 1; i++) {
+      const pick = others.length > 0 ? others[i % others.length] : assertion;
+      slots.push(pick);
+    }
+    slots.push(assertion);
+  } else {
+    for (let i = 0; i < numQuestions; i++) {
+      slots.push(others[i % others.length]);
+    }
+  }
+  return slots;
+}
 
 type LegacyBlueprintRow = {
   topic: string;
@@ -216,22 +259,32 @@ function buildSectionUserPrompt(opts: {
 
   const sectionLabel = section.name ? `Section ${section.letter} — ${section.name}` : `Section ${section.letter}`;
 
-  // SBQ skill block (History/Social Studies SBQ sections only).
-  const skill = section.sbq_skill ? SBQ_SKILLS[section.sbq_skill] : null;
-  const skillBlock = skill
-    ? `
+  // SBQ skills block (History/Social Studies SBQ sections only). Supports 0–5 skills
+  // distributed across the questions in this section.
+  const effectiveSkillIds = resolveEffectiveSkills(section);
+  const effectiveSkills = effectiveSkillIds.map((id) => SBQ_SKILLS[id]).filter(Boolean);
+  const perQuestionSkills = assignSkillsToQuestions(effectiveSkills, section.num_questions);
 
-SBQ SKILL TYPE: ${skill.label}
-${skill.promptHeader}
+  let skillBlock = "";
+  if (effectiveSkills.length > 0) {
+    const skillSummaries = effectiveSkills.map((s) => `- ${s.label}: ${s.promptHeader}\n  Mark scheme: ${s.markScheme}`).join("\n\n");
+    const assignments = perQuestionSkills.map((s, i) => {
+      if (!s) return `  - Question ${i + 1}: generic SBQ (no specific skill assigned)`;
+      const lockedNote = s.locked ? ` — MUST be exactly ${s.default} marks and use ALL provided sources` : ` — must be worth one of: ${s.marks.join(", ")} marks`;
+      const srcNote = s.minSources >= 2 ? ` (uses at least ${s.minSources} sources labelled Source A, B${s.minSources >= 3 ? ", C" : ""}…)` : ` (uses Source A)`;
+      return `  - Question ${i + 1}: ${s.label}${lockedNote}${srcNote}`;
+    }).join("\n");
 
-REQUIRED MARK SCHEME LEVELS for this skill:
-${skill.markScheme}
+    skillBlock = `
 
-${skill.locked
-  ? `This skill is FIXED at ${skill.default} marks. Generate exactly 1 question worth ${skill.default} marks that uses ALL provided sources (Source A, Source B, …) as evidence.`
-  : `Each question in this section must be worth one of: ${skill.marks.join(", ")} marks.`}
-${skill.minSources >= 2 ? `This skill REQUIRES at least ${skill.minSources} sources presented together (label them Source A, Source B${skill.minSources >= 3 ? ", Source C" : ""}${skill.minSources >= 4 ? ", Source D" : ""}, …) inside the SAME question stem.` : ""}`
-    : "";
+SBQ SKILL ASSIGNMENTS (apply each skill's format and mark scheme to the assigned question):
+${skillSummaries}
+
+PER-QUESTION SKILL MAPPING (you MUST follow this exact mapping):
+${assignments}
+
+IMPORTANT: For Assertion questions, use ALL sources provided for that question slot. For single-source skills, use Source A only. Do NOT mix skill formats across questions.`;
+  }
 
   return `${grounding}You are drafting ${sectionLabel} of "${opts.title}" (${opts.level} ${opts.subject}, ${opts.assessmentType}, ${opts.durationMinutes} min, ${opts.totalMarks} total marks across ${opts.totalSections} sections).
 
@@ -431,14 +484,18 @@ Deno.serve(async (req) => {
 
       // Determine sources per question. SBQ skills like comparison/assertion need
       // multiple sources packed INTO a single question stem (Source A, B, C…).
-      const sbqSkill = section.sbq_skill ? SBQ_SKILLS[section.sbq_skill] : null;
-      const sourcesPerQ = sbqSkill ? Math.max(1, sbqSkill.minSources) : 1;
+      // With multi-skill support, each question can have its own minSources.
+      const effectiveSkillIds = resolveEffectiveSkills(section);
+      const effectiveSkillDefs = effectiveSkillIds.map((id) => SBQ_SKILLS[id]).filter(Boolean);
+      const perQSkillsForFetch = assignSkillsToQuestions(effectiveSkillDefs, section.num_questions);
 
       // Pre-fetch grounded sources. Outer index = question slot, inner = source slot.
       const sourcesForSection: (GroundedSource | null)[][] = [];
       if (needsSourcePerQ && subjectKind) {
         for (let qi = 0; qi < section.num_questions; qi++) {
           const t = pickTopic(section, qi);
+          const qSkill = perQSkillsForFetch[qi];
+          const sourcesPerQ = qSkill ? Math.max(1, qSkill.minSources) : 1;
           const slot: (GroundedSource | null)[] = [];
           if (!t) {
             for (let i = 0; i < sourcesPerQ; i++) slot.push(null);
