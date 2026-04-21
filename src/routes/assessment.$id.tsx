@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ArrowLeft, Loader2, RefreshCw, Trash2, BookmarkPlus, Sparkles, ChevronUp, ChevronDown, X } from "lucide-react";
 import { BLOOMS } from "@/lib/syllabus";
+import { toSectioned } from "@/lib/sections";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/assessment/$id")({
@@ -56,7 +57,7 @@ type Assessment = {
   total_marks: number;
   duration_minutes: number;
   status: string;
-  blueprint: { topic: string; bloom: string; marks: number }[];
+  blueprint: unknown;
 };
 
 function EditorPage() {
@@ -262,10 +263,14 @@ function EditorPage() {
     );
   }
 
+  const sectionedBlueprint = toSectioned(assessment.blueprint);
+
   // Blueprint compliance: marks per Bloom level
   const targetByBloom: Record<string, number> = {};
-  assessment.blueprint?.forEach((b) => {
-    targetByBloom[b.bloom] = (targetByBloom[b.bloom] ?? 0) + b.marks;
+  sectionedBlueprint.sections.forEach((section) => {
+    const bloom = section.bloom?.trim();
+    if (!bloom) return;
+    targetByBloom[bloom] = (targetByBloom[bloom] ?? 0) + section.marks;
   });
   const actualByBloom: Record<string, number> = {};
   questions.forEach((q) => {
