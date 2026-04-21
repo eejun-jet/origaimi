@@ -599,10 +599,17 @@ function NewAssessment() {
                 blueprint={blueprint}
                 totalMarks={totalMarks}
                 blueprintSum={blueprintSum}
-                paperAOs={docAOs.filter((a) => !a.paperId || a.paperId === selected?.paper.id)}
+                paperAOs={(() => {
+                  const bound = docAOs.filter((a) => a.paperId === selected?.paper.id);
+                  return bound.length > 0 ? bound : docAOs.filter((a) => !a.paperId);
+                })()}
+                aosAreSyllabusWide={docAOs.filter((a) => a.paperId === selected?.paper.id).length === 0 && docAOs.some((a) => !a.paperId)}
                 onUpdate={updateBlueprintRow}
               />
-              <CoverageStrips blueprint={blueprint} aos={docAOs.filter((a) => !a.paperId || a.paperId === selected?.paper.id)} />
+              <CoverageStrips blueprint={blueprint} aos={(() => {
+                const bound = docAOs.filter((a) => a.paperId === selected?.paper.id);
+                return bound.length > 0 ? bound : docAOs.filter((a) => !a.paperId);
+              })()} />
             </div>
           )}
 
