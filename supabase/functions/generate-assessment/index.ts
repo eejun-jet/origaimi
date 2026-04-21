@@ -29,8 +29,59 @@ type Section = {
   marks: number;
   num_questions: number;
   bloom?: string;
+  sbq_skill?: string;
   topic_pool: SectionTopic[];
   instructions?: string;
+};
+
+// SBQ skill definitions mirrored from src/lib/sections.ts
+type SbqSkillDef = {
+  id: string;
+  label: string;
+  marks: number[];
+  default: number;
+  locked: boolean;
+  minSources: number;
+  promptHeader: string;
+  markScheme: string;
+};
+
+const SBQ_SKILLS: Record<string, SbqSkillDef> = {
+  inference: {
+    id: "inference", label: "Inference", marks: [5, 6, 7, 8], default: 6, locked: false, minSources: 1,
+    promptHeader: `Write an INFERENCE question. Format: "What can you infer from Source A about [topic]? Explain your answer using details from the source." The student must make an inference (not literal recall) and support it with a quoted detail from Source A.`,
+    markScheme: `L1 (1m): Lifts a detail from the source without inferring. L2 (2-3m): Makes a valid inference but lacks supporting evidence from the source. L3 (4-5m): Makes a valid inference with supporting evidence quoted from Source A. L4 (6+m): Makes two well-supported inferences, each with quoted evidence from Source A.`,
+  },
+  purpose: {
+    id: "purpose", label: "Purpose", marks: [5, 6, 7, 8], default: 6, locked: false, minSources: 1,
+    promptHeader: `Write a PURPOSE question. Format: "Why do you think [author/source] [produced / published / wrote] Source A? Explain your answer using details of the source and your contextual knowledge." The student must identify the author's intended purpose (persuade, warn, glorify, justify, etc.).`,
+    markScheme: `L1 (1m): Describes content only, no purpose. L2 (2-3m): States a purpose but does not justify with provenance OR content. L3 (4-5m): States a purpose and supports it with EITHER provenance (who, when, audience) OR specific content evidence. L4 (6+m): States a purpose and supports it with BOTH provenance AND content evidence, plus contextual knowledge.`,
+  },
+  comparison: {
+    id: "comparison", label: "Comparison", marks: [5, 6, 7, 8], default: 6, locked: false, minSources: 2,
+    promptHeader: `Write a COMPARISON question that requires TWO sources (Source A and Source B). Format: "How similar are Sources A and B? Explain your answer." The student must compare both message AND tone/provenance.`,
+    markScheme: `L1 (1-2m): Identifies surface similarities/differences only (e.g. both are about X). L2 (3-4m): Identifies similarities OR differences in message with evidence from both sources. L3 (5-6m): Identifies BOTH similarities AND differences in message, with evidence from both. L4 (7-8m): Compares message AND tone/provenance, with quoted evidence from both sources, and reaches a judgement on overall similarity.`,
+  },
+  utility: {
+    id: "utility", label: "Utility", marks: [6, 7, 8], default: 7, locked: false, minSources: 1,
+    promptHeader: `Write a UTILITY question. Format: "How useful is Source A as evidence about [topic]? Explain your answer." The student must evaluate utility from BOTH the content AND the provenance, and acknowledge limitations.`,
+    markScheme: `L1 (1-2m): States useful/not useful without justification. L2 (3-4m): Evaluates utility based on content OR provenance only. L3 (5-6m): Evaluates utility based on content AND provenance with evidence. L4 (7-8m): Evaluates utility based on content AND provenance, acknowledges limitations, and reaches an overall judgement.`,
+  },
+  reliability: {
+    id: "reliability", label: "Reliability", marks: [6, 7, 8], default: 7, locked: false, minSources: 1,
+    promptHeader: `Write a RELIABILITY question. Format: "How reliable is Source A as evidence about [topic]? Explain your answer." The student must cross-reference content against contextual knowledge AND analyse provenance for bias.`,
+    markScheme: `L1 (1-2m): States reliable/unreliable without justification. L2 (3-4m): Evaluates reliability via content cross-reference OR provenance only. L3 (5-6m): Evaluates reliability via content cross-reference AND provenance/bias. L4 (7-8m): Evaluates reliability via content cross-reference, provenance, and bias, with a balanced overall judgement.`,
+  },
+  surprise: {
+    id: "surprise", label: "Surprise", marks: [5, 6, 7, 8], default: 6, locked: false, minSources: 1,
+    promptHeader: `Write a SURPRISE question. Format: "Are you surprised by Source A? Explain your answer." The student must explain what IS surprising AND what is NOT surprising, both grounded in contextual knowledge.`,
+    markScheme: `L1 (1m): States surprised/not surprised without justification. L2 (2-3m): Explains surprise OR non-surprise using either source content or contextual knowledge. L3 (4-5m): Explains surprise AND non-surprise using contextual knowledge. L4 (6+m): Explains BOTH surprise and non-surprise with detailed contextual knowledge and source evidence, reaching a balanced judgement.`,
+  },
+  assertion: {
+    id: "assertion", label: "Assertion (Hypothesis)", marks: [8], default: 8, locked: true, minSources: 3,
+    promptHeader: `Write an ASSERTION (HYPOTHESIS) question worth EXACTLY 8 marks. Format: "'[State a clear historical hypothesis about the topic]'. How far do Sources A, B, C [and D, etc.] support this assertion? Use ALL the sources to explain your answer." The hypothesis must be a debatable claim. The student must use EVERY source provided, evaluating which support and which challenge the hypothesis.`,
+    markScheme: `L1 (1-2m): Uses one or two sources only, asserts agree/disagree without evaluation. L2 (3-4m): Uses most sources, identifies which support/challenge but no judgement on weight. L3 (5-6m): Uses ALL sources, identifies support and challenge with evidence, but limited evaluation of source quality. L4 (7-8m): Uses ALL sources, evaluates both support and challenge with evidence, weighs source quality (provenance/bias), and reaches a substantiated overall judgement on how far the assertion is supported.`,
+  },
 };
 
 type LegacyBlueprintRow = {
@@ -122,7 +173,7 @@ function buildSectionUserPrompt(opts: {
   durationMinutes: number; totalMarks: number;
   section: Section; sectionIndex: number; totalSections: number;
   syllabusCode?: string | null; paperCode?: string | null;
-  groundedSources: (GroundedSource | null)[]; // index-aligned with section.num_questions
+  groundedSources: (GroundedSource | null)[][]; // [questionIdx][sourceIdx]
   instructions?: string;
 }) {
   const { section } = opts;
@@ -139,14 +190,18 @@ function buildSectionUserPrompt(opts: {
     return `  ${i + 1}. ${t.topic}${code}${los}${aos}`;
   }).join("\n");
 
-  const sourceBlocks = opts.groundedSources.map((src, i) => {
-    if (!src) return "";
-    return `\n  Question ${i + 1} GROUNDED SOURCE (use verbatim, do not modify):
+  const sourceBlocks = opts.groundedSources.map((slot, qi) => {
+    const valid = slot.filter((s): s is GroundedSource => !!s);
+    if (valid.length === 0) return "";
+    const blocks = valid.map((src, si) => {
+      const label = String.fromCharCode(65 + si); // A, B, C…
+      return `  [Question ${qi + 1} · Source ${label}] (use VERBATIM, do not modify):
   ---
   ${src.excerpt}
   ---
-  Citation: Source: ${src.publisher} — ${src.source_url}
-  Set source_excerpt to the exact text between the dashes above. Set source_url to ${src.source_url}.`;
+  Citation: Source: ${src.publisher} — ${src.source_url}`;
+    }).join("\n\n");
+    return `\n${blocks}\n  Set source_excerpt for question ${qi + 1} to the EXACT text of Source A above (or, if multiple sources, concatenate them as "Source A: …\\n\\nSource B: …"). Set source_url to the URL of Source A.`;
   }).join("\n");
 
   const grounding = opts.paperCode
@@ -161,6 +216,23 @@ function buildSectionUserPrompt(opts: {
 
   const sectionLabel = section.name ? `Section ${section.letter} — ${section.name}` : `Section ${section.letter}`;
 
+  // SBQ skill block (History/Social Studies SBQ sections only).
+  const skill = section.sbq_skill ? SBQ_SKILLS[section.sbq_skill] : null;
+  const skillBlock = skill
+    ? `
+
+SBQ SKILL TYPE: ${skill.label}
+${skill.promptHeader}
+
+REQUIRED MARK SCHEME LEVELS for this skill:
+${skill.markScheme}
+
+${skill.locked
+  ? `This skill is FIXED at ${skill.default} marks. Generate exactly 1 question worth ${skill.default} marks that uses ALL provided sources (Source A, Source B, …) as evidence.`
+  : `Each question in this section must be worth one of: ${skill.marks.join(", ")} marks.`}
+${skill.minSources >= 2 ? `This skill REQUIRES at least ${skill.minSources} sources presented together (label them Source A, Source B${skill.minSources >= 3 ? ", Source C" : ""}${skill.minSources >= 4 ? ", Source D" : ""}, …) inside the SAME question stem.` : ""}`
+    : "";
+
   return `${grounding}You are drafting ${sectionLabel} of "${opts.title}" (${opts.level} ${opts.subject}, ${opts.assessmentType}, ${opts.durationMinutes} min, ${opts.totalMarks} total marks across ${opts.totalSections} sections).
 
 THIS SECTION:
@@ -170,6 +242,7 @@ THIS SECTION:
   - ${marksGuide}
   - Bloom's level focus: ${section.bloom ?? "Apply"} (use other levels only if the topic clearly demands it)
   ${section.instructions ? `- Section instructions for the rubric: ${section.instructions}` : ""}
+${skillBlock}
 
 ALLOWED TOPICS (pick from these only — DO NOT invent topics outside this pool):
 ${topicLines}
@@ -356,22 +429,34 @@ Deno.serve(async (req) => {
         (section.question_type === "source_based" || section.question_type === "comprehension");
       const needsSourcePerQ = isHumanitiesNonEssay || isEnglishSourcey;
 
-      // Pre-fetch grounded sources for each question slot.
-      const sourcesForSection: (GroundedSource | null)[] = [];
+      // Determine sources per question. SBQ skills like comparison/assertion need
+      // multiple sources packed INTO a single question stem (Source A, B, C…).
+      const sbqSkill = section.sbq_skill ? SBQ_SKILLS[section.sbq_skill] : null;
+      const sourcesPerQ = sbqSkill ? Math.max(1, sbqSkill.minSources) : 1;
+
+      // Pre-fetch grounded sources. Outer index = question slot, inner = source slot.
+      const sourcesForSection: (GroundedSource | null)[][] = [];
       if (needsSourcePerQ && subjectKind) {
         for (let qi = 0; qi < section.num_questions; qi++) {
           const t = pickTopic(section, qi);
-          if (!t) { sourcesForSection.push(null); continue; }
-          try {
-            const src = await fetchGroundedSource(subjectKind, t.topic, t.learning_outcomes ?? [], usedHosts, usedUrls);
-            sourcesForSection.push(src);
-          } catch (e) {
-            console.warn("[generate] source fetch failed for", t.topic, e);
-            sourcesForSection.push(null);
+          const slot: (GroundedSource | null)[] = [];
+          if (!t) {
+            for (let i = 0; i < sourcesPerQ; i++) slot.push(null);
+          } else {
+            for (let i = 0; i < sourcesPerQ; i++) {
+              try {
+                const src = await fetchGroundedSource(subjectKind, t.topic, t.learning_outcomes ?? [], usedHosts, usedUrls);
+                slot.push(src);
+              } catch (e) {
+                console.warn("[generate] source fetch failed for", t.topic, e);
+                slot.push(null);
+              }
+            }
           }
+          sourcesForSection.push(slot);
         }
       } else {
-        for (let qi = 0; qi < section.num_questions; qi++) sourcesForSection.push(null);
+        for (let qi = 0; qi < section.num_questions; qi++) sourcesForSection.push([null]);
       }
 
       // Build prompt + call AI for this section only.
@@ -408,7 +493,9 @@ Deno.serve(async (req) => {
       // Per-question post-processing: enforce source attachment, drop unsupported.
       for (let qi = 0; qi < questions.length; qi++) {
         const q = questions[qi];
-        const expectedSrc = sourcesForSection[qi];
+        const expectedSlot = sourcesForSection[qi] ?? [];
+        const validSources = expectedSlot.filter((s): s is GroundedSource => !!s);
+        const expectedSrc = validSources[0] ?? null;
         let question_type: string = section.question_type; // FORCE section's type
         let source_excerpt: string | null = q.source_excerpt ?? null;
         let source_url: string | null = q.source_url ?? null;
@@ -420,11 +507,24 @@ Deno.serve(async (req) => {
             droppedNoSource++;
             continue;
           }
+          // For multi-source SBQ skills (comparison/assertion), enforce that we got enough.
+          if (sbqSkill && validSources.length < sbqSkill.minSources) {
+            console.warn(`[generate] section ${section.letter} q${qi + 1}: ${sbqSkill.label} needs ${sbqSkill.minSources} sources, got ${validSources.length} — dropping`);
+            droppedNoSource++;
+            continue;
+          }
           // Force source_based for humanities so the editor renders the passage UI.
           if (subjectKind === "humanities") question_type = "source_based";
-          source_excerpt = expectedSrc.excerpt;
+          // Build a combined excerpt for multi-source questions.
+          if (validSources.length > 1) {
+            source_excerpt = validSources
+              .map((s, i) => `Source ${String.fromCharCode(65 + i)}: ${s.excerpt}`)
+              .join("\n\n");
+          } else {
+            source_excerpt = expectedSrc.excerpt;
+          }
           source_url = expectedSrc.source_url;
-          if (q.source_excerpt !== expectedSrc.excerpt) {
+          if (validSources.length === 1 && q.source_excerpt !== expectedSrc.excerpt) {
             notes = "Source excerpt enforced from retrieved citation (model attempted to alter it).";
           }
           groundedCount++;

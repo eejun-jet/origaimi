@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ArrowLeft, Loader2, RefreshCw, Trash2, BookmarkPlus, Sparkles, ChevronUp, ChevronDown, X, Download } from "lucide-react";
 import { BLOOMS } from "@/lib/syllabus";
-import { toSectioned } from "@/lib/sections";
+import { toSectioned, sectionAtPosition, getSbqSkill } from "@/lib/sections";
 import { exportAssessmentDocx } from "@/lib/export-docx";
 import { toast } from "sonner";
 
@@ -421,23 +421,41 @@ function EditorPage() {
                 </p>
               </div>
             ) : (
-              questions.map((q, i) => (
-                <QuestionCard
-                  key={q.id}
-                  q={q}
-                  index={i + 1}
-                  isLast={i === questions.length - 1}
-                  isFirst={i === 0}
-                  isRegen={regenId === q.id}
-                  selected={selectedIds.has(q.id)}
-                  onToggleSelect={() => toggleSelect(q.id)}
-                  onUpdate={(patch) => updateQ(q.id, patch)}
-                  onDelete={() => setConfirmDelete({ ids: [q.id], label: `Q${i + 1}` })}
-                  onMove={(d) => moveQ(q.id, d)}
-                  onRegenerate={(ins) => regenerate(q.id, ins)}
-                  onBank={() => saveToBank(q)}
-                />
-              ))
+              questions.map((q, i) => {
+                const sec = sectionAtPosition(sectionedBlueprint, i);
+                const prevSec = i > 0 ? sectionAtPosition(sectionedBlueprint, i - 1) : null;
+                const showHeader = sec && (i === 0 || sec.letter !== prevSec?.letter);
+                const skillLabel = sec ? getSbqSkill(sec.sbq_skill)?.label : null;
+                return (
+                  <div key={q.id} className="space-y-3">
+                    {showHeader && (
+                      <div className="rounded-lg border border-primary/30 bg-primary-soft/20 px-4 py-2">
+                        <p className="text-sm font-semibold">
+                          Section {sec.letter}
+                          {skillLabel ? ` — Source-Based (${skillLabel})` : sec.name ? ` — ${sec.name}` : ""}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {sec.num_questions} question{sec.num_questions === 1 ? "" : "s"} · {sec.marks} marks
+                        </p>
+                      </div>
+                    )}
+                    <QuestionCard
+                      q={q}
+                      index={i + 1}
+                      isLast={i === questions.length - 1}
+                      isFirst={i === 0}
+                      isRegen={regenId === q.id}
+                      selected={selectedIds.has(q.id)}
+                      onToggleSelect={() => toggleSelect(q.id)}
+                      onUpdate={(patch) => updateQ(q.id, patch)}
+                      onDelete={() => setConfirmDelete({ ids: [q.id], label: `Q${i + 1}` })}
+                      onMove={(d) => moveQ(q.id, d)}
+                      onRegenerate={(ins) => regenerate(q.id, ins)}
+                      onBank={() => saveToBank(q)}
+                    />
+                  </div>
+                );
+              })
             )}
           </div>
 

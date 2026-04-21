@@ -3,6 +3,29 @@
 // Old flat blueprints (an array of {topic, bloom, marks}) are migrated to a
 // single virtual section on read so existing assessments keep working.
 
+export const SBQ_SKILLS = [
+  { id: "inference", label: "Inference", marks: [5, 6, 7, 8], default: 6, locked: false },
+  { id: "purpose", label: "Purpose", marks: [5, 6, 7, 8], default: 6, locked: false },
+  { id: "comparison", label: "Comparison", marks: [5, 6, 7, 8], default: 6, locked: false },
+  { id: "utility", label: "Utility", marks: [6, 7, 8], default: 7, locked: false },
+  { id: "reliability", label: "Reliability", marks: [6, 7, 8], default: 7, locked: false },
+  { id: "surprise", label: "Surprise", marks: [5, 6, 7, 8], default: 6, locked: false },
+  { id: "assertion", label: "Assertion (Hypothesis)", marks: [8], default: 8, locked: true },
+] as const;
+
+export type SbqSkill = typeof SBQ_SKILLS[number]["id"];
+
+export function getSbqSkill(id: string | undefined | null) {
+  if (!id) return null;
+  return SBQ_SKILLS.find((s) => s.id === id) ?? null;
+}
+
+export function isHumanitiesSubject(subject: string | null | undefined): boolean {
+  if (!subject) return false;
+  const s = subject.toLowerCase();
+  return s.includes("history") || s.includes("social studies") || s.includes("humanities");
+}
+
 export type SectionTopic = {
   topic: string;
   topic_code?: string | null;
@@ -19,6 +42,7 @@ export type Section = {
   marks: number;         // total marks for this section
   num_questions: number; // how many questions to generate in this section
   bloom?: string;        // primary Bloom's level for the section
+  sbq_skill?: SbqSkill;  // for History/Social Studies SBQ sections
   topic_pool: SectionTopic[];
   instructions?: string;
 };
