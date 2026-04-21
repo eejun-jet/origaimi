@@ -425,22 +425,34 @@ Deno.serve(async (req) => {
         (section.question_type === "source_based" || section.question_type === "comprehension");
       const needsSourcePerQ = isHumanitiesNonEssay || isEnglishSourcey;
 
-      // Pre-fetch grounded sources for each question slot.
-      const sourcesForSection: (GroundedSource | null)[] = [];
+      // Determine sources per question. SBQ skills like comparison/assertion need
+      // multiple sources packed INTO a single question stem (Source A, B, C…).
+      const sbqSkill = section.sbq_skill ? SBQ_SKILLS[section.sbq_skill] : null;
+      const sourcesPerQ = sbqSkill ? Math.max(1, sbqSkill.minSources) : 1;
+
+      // Pre-fetch grounded sources. Outer index = question slot, inner = source slot.
+      const sourcesForSection: (GroundedSource | null)[][] = [];
       if (needsSourcePerQ && subjectKind) {
         for (let qi = 0; qi < section.num_questions; qi++) {
           const t = pickTopic(section, qi);
-          if (!t) { sourcesForSection.push(null); continue; }
-          try {
-            const src = await fetchGroundedSource(subjectKind, t.topic, t.learning_outcomes ?? [], usedHosts, usedUrls);
-            sourcesForSection.push(src);
-          } catch (e) {
-            console.warn("[generate] source fetch failed for", t.topic, e);
-            sourcesForSection.push(null);
+          const slot: (GroundedSource | null)[] = [];
+          if (!t) {
+            for (let i = 0; i < sourcesPerQ; i++) slot.push(null);
+          } else {
+            for (let i = 0; i < sourcesPerQ; i++) {
+              try {
+                const src = await fetchGroundedSource(subjectKind, t.topic, t.learning_outcomes ?? [], usedHosts, usedUrls);
+                slot.push(src);
+              } catch (e) {
+                console.warn("[generate] source fetch failed for", t.topic, e);
+                slot.push(null);
+              }
+            }
           }
+          sourcesForSection.push(slot);
         }
       } else {
-        for (let qi = 0; qi < section.num_questions; qi++) sourcesForSection.push(null);
+        for (let qi = 0; qi < section.num_questions; qi++) sourcesForSection.push([null]);
       }
 
       // Build prompt + call AI for this section only.
