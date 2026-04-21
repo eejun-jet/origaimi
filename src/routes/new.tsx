@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import {
-  SUBJECTS, LEVELS, ASSESSMENT_TYPES, QUESTION_TYPES, QUESTION_TYPES_BY_MODE, ITEM_SOURCES, BLOOMS, topicsFor,
+  SUBJECTS, LEVELS, ASSESSMENT_TYPES, QUESTION_TYPES, QUESTION_TYPES_BY_MODE, ITEM_SOURCES, topicsFor,
 } from "@/lib/syllabus";
 import {
   loadSyllabusLibrary, loadPaperTopics, loadDocTopics, loadDocAssessmentObjectives,
