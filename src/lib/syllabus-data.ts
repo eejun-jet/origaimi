@@ -124,7 +124,7 @@ function mapTopicRow(t: {
   suggested_blooms: string[] | null;
   section: string | null;
 }): PaperTopic {
-  return ({
+  return {
     id: t.id,
     topicCode: t.topic_code,
     parentCode: t.parent_code,
@@ -136,5 +136,5 @@ function mapTopicRow(t: {
     learningOutcomes: t.learning_outcomes ?? [],
     suggestedBlooms: t.suggested_blooms ?? [],
     section: t.section,
-  }));
+  };
 }
