@@ -9,6 +9,10 @@ export type SyllabusLibraryPaper = {
   durationMinutes: number | null;
   weightingPercent: number | null;
   topicTheme: string | null;
+  section: string | null;
+  trackTags: string[];
+  isOptional: boolean;
+  assessmentMode: string | null;
 };
 
 export type SyllabusLibraryDoc = {
@@ -26,7 +30,7 @@ export async function loadSyllabusLibrary(): Promise<SyllabusLibraryDoc[]> {
   const { data: docs, error: docsErr } = await supabase
     .from("syllabus_documents")
     .select("id, title, syllabus_code, subject, level, syllabus_year, parse_status")
-    .eq("parse_status", "ready")
+    .in("parse_status", ["parsed", "published", "ready"])
     .order("syllabus_code", { ascending: true });
   if (docsErr) throw docsErr;
   if (!docs || docs.length === 0) return [];
@@ -34,7 +38,7 @@ export async function loadSyllabusLibrary(): Promise<SyllabusLibraryDoc[]> {
   const ids = docs.map((d) => d.id);
   const { data: papers, error: papersErr } = await supabase
     .from("syllabus_papers")
-    .select("id, source_doc_id, paper_number, paper_code, component_name, marks, duration_minutes, weighting_percent, topic_theme, position")
+    .select("id, source_doc_id, paper_number, paper_code, component_name, marks, duration_minutes, weighting_percent, topic_theme, position, section, track_tags, is_optional, assessment_mode")
     .in("source_doc_id", ids)
     .order("position", { ascending: true });
   if (papersErr) throw papersErr;
@@ -58,6 +62,10 @@ export async function loadSyllabusLibrary(): Promise<SyllabusLibraryDoc[]> {
         durationMinutes: p.duration_minutes,
         weightingPercent: p.weighting_percent,
         topicTheme: p.topic_theme,
+        section: p.section,
+        trackTags: (p.track_tags ?? []) as string[],
+        isOptional: !!p.is_optional,
+        assessmentMode: p.assessment_mode,
       })),
   }));
 }
@@ -73,12 +81,13 @@ export type PaperTopic = {
   subStrand: string | null;
   learningOutcomes: string[];
   suggestedBlooms: string[];
+  section: string | null;
 };
 
 export async function loadPaperTopics(paperId: string): Promise<PaperTopic[]> {
   const { data, error } = await supabase
     .from("syllabus_topics")
-    .select("id, topic_code, parent_code, title, depth, position, strand, sub_strand, learning_outcomes, suggested_blooms")
+    .select("id, topic_code, parent_code, title, depth, position, strand, sub_strand, learning_outcomes, suggested_blooms, section")
     .eq("paper_id", paperId)
     .order("position", { ascending: true });
   if (error) throw error;
@@ -93,5 +102,6 @@ export async function loadPaperTopics(paperId: string): Promise<PaperTopic[]> {
     subStrand: t.sub_strand,
     learningOutcomes: t.learning_outcomes ?? [],
     suggestedBlooms: t.suggested_blooms ?? [],
+    section: t.section,
   }));
 }
