@@ -55,9 +55,21 @@ type Topic = {
   title: string;
   learning_outcomes: string[];
   suggested_blooms: string[];
+  outcome_categories: string[];
+  ao_codes: string[];
   depth: number;
   position: number;
   section: string | null;
+};
+
+type AO = {
+  id: string;
+  paper_id: string | null;
+  code: string;
+  title: string | null;
+  description: string | null;
+  weighting_percent: number | null;
+  position: number;
 };
 
 const ALL_PAPERS = "__all__";
