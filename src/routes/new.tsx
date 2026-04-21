@@ -86,8 +86,7 @@ function NewAssessment() {
   const [paperTopics, setPaperTopics] = useState<PaperTopic[]>([]);
   const [docAOs, setDocAOs] = useState<AssessmentObjective[]>([]);
   const [topicsLoading, setTopicsLoading] = useState(false);
-  const [bandFilter, setBandFilter] = useState<"primary" | "secondary">("primary");
-  const [streamFilter, setStreamFilter] = useState<"standard" | "foundation" | "g3" | "g2">("standard");
+  const [streamFilter, setStreamFilter] = useState<Stream>("standard");
 
   useEffect(() => {
     let cancelled = false;
