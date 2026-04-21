@@ -173,7 +173,7 @@ function buildSectionUserPrompt(opts: {
   durationMinutes: number; totalMarks: number;
   section: Section; sectionIndex: number; totalSections: number;
   syllabusCode?: string | null; paperCode?: string | null;
-  groundedSources: (GroundedSource | null)[]; // index-aligned with section.num_questions
+  groundedSources: (GroundedSource | null)[][]; // [questionIdx][sourceIdx]
   instructions?: string;
 }) {
   const { section } = opts;
@@ -190,14 +190,18 @@ function buildSectionUserPrompt(opts: {
     return `  ${i + 1}. ${t.topic}${code}${los}${aos}`;
   }).join("\n");
 
-  const sourceBlocks = opts.groundedSources.map((src, i) => {
-    if (!src) return "";
-    return `\n  Question ${i + 1} GROUNDED SOURCE (use verbatim, do not modify):
+  const sourceBlocks = opts.groundedSources.map((slot, qi) => {
+    const valid = slot.filter((s): s is GroundedSource => !!s);
+    if (valid.length === 0) return "";
+    const blocks = valid.map((src, si) => {
+      const label = String.fromCharCode(65 + si); // A, B, C…
+      return `  [Question ${qi + 1} · Source ${label}] (use VERBATIM, do not modify):
   ---
   ${src.excerpt}
   ---
-  Citation: Source: ${src.publisher} — ${src.source_url}
-  Set source_excerpt to the exact text between the dashes above. Set source_url to ${src.source_url}.`;
+  Citation: Source: ${src.publisher} — ${src.source_url}`;
+    }).join("\n\n");
+    return `\n${blocks}\n  Set source_excerpt for question ${qi + 1} to the EXACT text of Source A above (or, if multiple sources, concatenate them as "Source A: …\\n\\nSource B: …"). Set source_url to the URL of Source A.`;
   }).join("\n");
 
   const grounding = opts.paperCode
