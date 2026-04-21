@@ -14,7 +14,7 @@ import {
   SUBJECTS, LEVELS, ASSESSMENT_TYPES, QUESTION_TYPES, QUESTION_TYPES_BY_MODE, ITEM_SOURCES, BLOOMS, topicsFor,
 } from "@/lib/syllabus";
 import {
-  loadSyllabusLibrary, loadPaperTopics,
+  loadSyllabusLibrary, loadPaperTopics, loadDocTopics,
   type SyllabusLibraryDoc, type SyllabusLibraryPaper, type PaperTopic,
 } from "@/lib/syllabus-data";
 import { ChevronLeft, ChevronRight, Sparkles, Loader2, BookOpen, Upload } from "lucide-react";
