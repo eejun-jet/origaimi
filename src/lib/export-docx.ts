@@ -21,7 +21,7 @@ import {
   PageNumber,
 } from "docx";
 import { saveAs } from "file-saver";
-import { toSectioned, type Section } from "@/lib/sections";
+import { toSectioned, getSbqSkill, type Section } from "@/lib/sections";
 
 export type ExportQuestion = {
   position: number;
@@ -199,16 +199,15 @@ export async function exportAssessmentDocx(
     if (items.length === 0) return;
     if (section) {
       const sectionMarks = items.reduce((acc, q) => acc + q.marks, 0);
+      const skillLabel = getSbqSkill(section.sbq_skill)?.label;
+      const headerSuffix = skillLabel ? ` — Source-Based Question (${skillLabel})` : (section.name ? ` — ${section.name}` : "");
       body.push(
         new Paragraph({
           alignment: AlignmentType.CENTER,
           spacing: { before: 240, after: 120 },
-          children: [new TextRun({ text: `Section ${section.letter}`, bold: true, size: 32, font: ARIAL })],
+          children: [new TextRun({ text: `Section ${section.letter}${headerSuffix}`, bold: true, size: 32, font: ARIAL })],
         }),
       );
-      if (section.name) {
-        body.push(p(section.name, { bold: true, align: AlignmentType.CENTER, size: 24, spacingAfter: 80 }));
-      }
       body.push(
         p(`[${sectionMarks} marks]`, { align: AlignmentType.CENTER, size: 22, spacingAfter: 120 }),
       );
