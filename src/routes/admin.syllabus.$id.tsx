@@ -620,10 +620,16 @@ function SyllabusReview() {
                       </ul>
                     </div>
                   )}
-                  {(t.suggested_blooms?.length ?? 0) > 0 && (
+                  {((t.suggested_blooms?.length ?? 0) > 0 || (t.outcome_categories?.length ?? 0) > 0 || (t.ao_codes?.length ?? 0) > 0) && (
                     <div className="flex flex-wrap gap-1 sm:col-span-12">
-                      {t.suggested_blooms.map((b) => (
-                        <Badge key={b} variant="outline" className="text-xs">{b}</Badge>
+                      {(t.suggested_blooms ?? []).map((b) => (
+                        <Badge key={`b-${b}`} variant="outline" className="text-xs">{b}</Badge>
+                      ))}
+                      {(t.outcome_categories ?? []).map((c) => (
+                        <Badge key={`c-${c}`} variant="secondary" className="text-xs capitalize">{c}</Badge>
+                      ))}
+                      {(t.ao_codes ?? []).map((a) => (
+                        <Badge key={`a-${a}`} className="bg-primary/15 text-xs font-mono text-primary hover:bg-primary/20">{a}</Badge>
                       ))}
                     </div>
                   )}
