@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { ArrowLeft, Save, Trash2, Plus, Loader2 } from "lucide-react";
 
@@ -37,6 +38,10 @@ type Paper = {
   duration_minutes: number | null;
   topic_theme: string | null;
   position: number;
+  section: string | null;
+  track_tags: string[] | null;
+  is_optional: boolean;
+  assessment_mode: string | null;
 };
 
 type Topic = {
@@ -52,6 +57,7 @@ type Topic = {
   suggested_blooms: string[];
   depth: number;
   position: number;
+  section: string | null;
 };
 
 const ALL_PAPERS = "__all__";
@@ -115,6 +121,7 @@ function SyllabusReview() {
         strand: null, sub_strand: null, title: "New topic",
         learning_outcomes: [], suggested_blooms: [],
         depth: 2, position: prev.length,
+        section: null,
       },
     ]);
   };
@@ -148,6 +155,10 @@ function SyllabusReview() {
           weighting_percent: p.weighting_percent,
           duration_minutes: p.duration_minutes,
           topic_theme: p.topic_theme,
+          section: p.section,
+          track_tags: p.track_tags ?? [],
+          is_optional: p.is_optional,
+          assessment_mode: p.assessment_mode,
         }).eq("id", p.id);
         if (pErr) throw pErr;
       }
@@ -172,6 +183,7 @@ function SyllabusReview() {
           position: i,
           subject: doc.subject,
           level: doc.level,
+          section: t.section,
         }));
         const { error: insErr } = await supabase.from("syllabus_topics").insert(rows);
         if (insErr) throw insErr;
@@ -305,6 +317,10 @@ function SyllabusReview() {
                     Paper {p.paper_number}
                     {p.paper_code && <span className="ml-1.5 opacity-70">· {p.paper_code}</span>}
                     {p.component_name && <span className="ml-1.5 font-sans opacity-90">· {p.component_name}</span>}
+                    {p.section && <span className="ml-1.5 font-sans opacity-90">· {p.section}</span>}
+                    {p.assessment_mode && p.assessment_mode !== "written" && (
+                      <span className="ml-1.5 rounded-full bg-background/20 px-1.5 font-sans text-[10px] uppercase">{p.assessment_mode}</span>
+                    )}
                     <span className="ml-2 opacity-60">({count})</span>
                   </Button>
                 );
@@ -355,6 +371,38 @@ function SyllabusReview() {
                   <div>
                     <Label className="text-xs">Weighting %</Label>
                     <Input type="number" value={p.weighting_percent ?? ""} onChange={(e) => updatePaper(idx, { weighting_percent: e.target.value ? parseInt(e.target.value, 10) : null })} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Section</Label>
+                    <Input value={p.section ?? ""} onChange={(e) => updatePaper(idx, { section: e.target.value || null })} placeholder="Physics / Chemistry / Biology" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Mode</Label>
+                    <Select value={p.assessment_mode ?? "written"} onValueChange={(v) => updatePaper(idx, { assessment_mode: v })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="written">Written</SelectItem>
+                        <SelectItem value="oral">Oral</SelectItem>
+                        <SelectItem value="listening">Listening</SelectItem>
+                        <SelectItem value="practical">Practical</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <Label className="text-xs">Track tags (comma-separated)</Label>
+                    <Input
+                      className="font-mono text-xs"
+                      value={(p.track_tags ?? []).join(", ")}
+                      onChange={(e) =>
+                        updatePaper(idx, {
+                          track_tags: e.target.value
+                            .split(",")
+                            .map((s) => s.trim().toLowerCase())
+                            .filter(Boolean),
+                        })
+                      }
+                      placeholder="physics, chemistry, biology"
+                    />
                   </div>
                   {p.topic_theme && (
                     <div className="sm:col-span-6">
@@ -427,6 +475,14 @@ function SyllabusReview() {
                     <Button variant="ghost" size="sm" onClick={() => removeTopic(originalIdx)}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
+                  </div>
+                  <div className="sm:col-span-3">
+                    <Label className="text-xs">Section</Label>
+                    <Input
+                      value={t.section ?? ""}
+                      onChange={(e) => updateTopic(originalIdx, { section: e.target.value || null })}
+                      placeholder="Physics / Chemistry / Biology"
+                    />
                   </div>
                   {/* Paper assignment selector */}
                   {papers.length > 1 && (

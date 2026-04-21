@@ -389,44 +389,56 @@ export type Database = {
       }
       syllabus_papers: {
         Row: {
+          assessment_mode: string | null
           component_name: string | null
           created_at: string
           duration_minutes: number | null
           id: string
+          is_optional: boolean
           marks: number | null
           paper_code: string | null
           paper_number: string
           position: number
+          section: string | null
           source_doc_id: string
           topic_theme: string | null
+          track_tags: string[] | null
           updated_at: string
           weighting_percent: number | null
         }
         Insert: {
+          assessment_mode?: string | null
           component_name?: string | null
           created_at?: string
           duration_minutes?: number | null
           id?: string
+          is_optional?: boolean
           marks?: number | null
           paper_code?: string | null
           paper_number: string
           position?: number
+          section?: string | null
           source_doc_id: string
           topic_theme?: string | null
+          track_tags?: string[] | null
           updated_at?: string
           weighting_percent?: number | null
         }
         Update: {
+          assessment_mode?: string | null
           component_name?: string | null
           created_at?: string
           duration_minutes?: number | null
           id?: string
+          is_optional?: boolean
           marks?: number | null
           paper_code?: string | null
           paper_number?: string
           position?: number
+          section?: string | null
           source_doc_id?: string
           topic_theme?: string | null
+          track_tags?: string[] | null
           updated_at?: string
           weighting_percent?: number | null
         }
@@ -451,6 +463,7 @@ export type Database = {
           paper_id: string | null
           parent_code: string | null
           position: number
+          section: string | null
           source_doc_id: string
           strand: string | null
           sub_strand: string | null
@@ -470,6 +483,7 @@ export type Database = {
           paper_id?: string | null
           parent_code?: string | null
           position?: number
+          section?: string | null
           source_doc_id: string
           strand?: string | null
           sub_strand?: string | null
@@ -489,6 +503,7 @@ export type Database = {
           paper_id?: string | null
           parent_code?: string | null
           position?: number
+          section?: string | null
           source_doc_id?: string
           strand?: string | null
           sub_strand?: string | null

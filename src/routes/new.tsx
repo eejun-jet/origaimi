@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import {
-  SUBJECTS, LEVELS, ASSESSMENT_TYPES, QUESTION_TYPES, ITEM_SOURCES, BLOOMS, topicsFor,
+  SUBJECTS, LEVELS, ASSESSMENT_TYPES, QUESTION_TYPES, QUESTION_TYPES_BY_MODE, ITEM_SOURCES, BLOOMS, topicsFor,
 } from "@/lib/syllabus";
 import {
   loadSyllabusLibrary, loadPaperTopics,
@@ -96,11 +96,29 @@ function NewAssessment() {
 
   // Step 2 — topic selection
   const fallbackTopics = useMemo(() => topicsFor(subject, level), [subject, level]);
-  // For syllabus mode, only pick leaf-ish topics (depth >= 1) for selection
-  const selectableSyllabusTopics = useMemo(
-    () => paperTopics.filter((t) => t.depth >= 1 || paperTopics.every((x) => x.depth === 0)),
-    [paperTopics],
-  );
+
+  // Section sub-selector (for multi-track papers like Combined Science 5086)
+  const availableSections = useMemo(() => {
+    if (!selected) return [];
+    const tags = selected.paper.trackTags ?? [];
+    if (tags.length > 1) return tags.map((t) => t.charAt(0).toUpperCase() + t.slice(1));
+    const fromTopics = Array.from(new Set(paperTopics.map((t) => t.section).filter((s): s is string => !!s)));
+    return fromTopics.length > 1 ? fromTopics : [];
+  }, [selected, paperTopics]);
+  const [activeSection, setActiveSection] = useState<string | null>(null);
+  useEffect(() => {
+    if (availableSections.length > 0) setActiveSection(availableSections[0]);
+    else setActiveSection(selected?.paper.section ?? null);
+  }, [availableSections, selected]);
+
+  // For syllabus mode, only pick leaf-ish topics, optionally filtered by active section
+  const selectableSyllabusTopics = useMemo(() => {
+    let pool = paperTopics.filter((t) => t.depth >= 1 || paperTopics.every((x) => x.depth === 0));
+    if (availableSections.length > 0 && activeSection) {
+      pool = pool.filter((t) => !t.section || t.section.toLowerCase() === activeSection.toLowerCase());
+    }
+    return pool;
+  }, [paperTopics, availableSections, activeSection]);
 
   const [selectedTopicIds, setSelectedTopicIds] = useState<string[]>([]);
   const [topics, setTopics] = useState<string[]>([]); // fallback (non-syllabus) topic names
@@ -108,7 +126,7 @@ function NewAssessment() {
   useEffect(() => {
     setSelectedTopicIds([]);
     setTopics([]);
-  }, [selectedPaperKey, subject, level]);
+  }, [selectedPaperKey, subject, level, activeSection]);
 
   // Step 3 — blueprint
   const [blueprint, setBlueprint] = useState<Blueprint>([]);
@@ -131,8 +149,21 @@ function NewAssessment() {
     }
   }, [useSyllabus, selectedTopicIds, topics, totalMarks, selectableSyllabusTopics]);
 
-  // Step 4
+  // Step 4 — question types & sources (mode-aware defaults)
+  const assessmentMode = selected?.paper.assessmentMode ?? "written";
+  const visibleQuestionTypes = useMemo(() => {
+    const allowedIds = QUESTION_TYPES_BY_MODE[assessmentMode] ?? QUESTION_TYPES_BY_MODE.written;
+    // For written mode show everything except oral/listening-only types; for non-written hide written-only.
+    if (assessmentMode === "written") {
+      return QUESTION_TYPES.filter((t) => !["spoken_response", "listening_mcq", "note_taking"].includes(t.id));
+    }
+    return QUESTION_TYPES.filter((t) => allowedIds.includes(t.id));
+  }, [assessmentMode]);
   const [qTypes, setQTypes] = useState<string[]>(["mcq", "short_answer", "structured"]);
+  useEffect(() => {
+    const defaults = QUESTION_TYPES_BY_MODE[assessmentMode] ?? ["mcq", "short_answer", "structured"];
+    setQTypes(defaults);
+  }, [assessmentMode]);
   const [sources, setSources] = useState<string[]>(["ai"]);
 
   // Step 5
@@ -285,12 +316,20 @@ function NewAssessment() {
                     </SelectContent>
                   </Select>
                   {selected && (
-                    <p className="text-xs text-muted-foreground">
-                      Auto-filled subject, level, duration & marks from{" "}
-                      <span className="font-medium text-foreground">
-                        {selected.paper.paperCode ?? selected.doc.syllabusCode}
-                      </span>. You can override below.
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-xs text-muted-foreground">
+                        Auto-filled from{" "}
+                        <span className="font-medium text-foreground">
+                          {selected.paper.paperCode ?? selected.doc.syllabusCode}
+                        </span>.
+                      </p>
+                      {selected.paper.assessmentMode && selected.paper.assessmentMode !== "written" && (
+                        <Badge variant="outline" className="capitalize">{selected.paper.assessmentMode}</Badge>
+                      )}
+                      {selected.paper.section && (
+                        <Badge variant="secondary">{selected.paper.section}</Badge>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
@@ -360,6 +399,24 @@ function NewAssessment() {
                     From <span className="font-medium text-foreground">{selected!.paper.paperCode ?? selected!.doc.syllabusCode}</span>
                     {selected!.paper.componentName ? ` · ${selected!.paper.componentName}` : ""}.
                   </p>
+                  {availableSections.length > 1 && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Section</Label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {availableSections.map((s) => (
+                          <button
+                            key={s}
+                            type="button"
+                            onClick={() => setActiveSection(s)}
+                            className={`rounded-full border px-3 py-1 text-xs transition-colors ${activeSection === s ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted"}`}
+                          >
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground">This paper draws from multiple sections — pick which discipline to assess.</p>
+                    </div>
+                  )}
                   {topicsLoading ? (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" /> Loading topics…
@@ -478,9 +535,14 @@ function NewAssessment() {
             <div className="space-y-6">
               <div>
                 <h2 className="font-paper text-xl font-semibold">Question types</h2>
-                <p className="mt-1 text-sm text-muted-foreground">Pick the mix you want in the paper.</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Pick the mix you want in the paper.
+                  {assessmentMode !== "written" && (
+                    <span className="ml-1">Defaults tuned for <span className="font-medium capitalize text-foreground">{assessmentMode}</span> assessment.</span>
+                  )}
+                </p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {QUESTION_TYPES.map((t) => {
+                  {visibleQuestionTypes.map((t) => {
                     const on = qTypes.includes(t.id);
                     return (
                       <button key={t.id} type="button" onClick={() => setQTypes(toggle(qTypes, t.id))}
@@ -568,7 +630,11 @@ function paperLabel(p: SyllabusLibraryPaper) {
   const bits = [`Paper ${p.paperNumber}`];
   if (p.paperCode) bits.push(p.paperCode);
   if (p.componentName) bits.push(p.componentName);
+  if (p.section) bits.push(p.section);
   const meta: string[] = [];
+  if (p.assessmentMode && p.assessmentMode !== "written") {
+    meta.push(p.assessmentMode.charAt(0).toUpperCase() + p.assessmentMode.slice(1));
+  }
   if (p.marks) meta.push(`${p.marks}m`);
   if (p.durationMinutes) {
     const h = Math.floor(p.durationMinutes / 60);
