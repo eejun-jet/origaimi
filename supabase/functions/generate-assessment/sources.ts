@@ -286,7 +286,9 @@ function relevanceScore(excerpt: string, topicKeywords: string[]): number {
   return hits / Math.max(1, topicKeywords.length);
 }
 
-/** Extract a sentence-bounded contiguous excerpt of 100–180 word from markdown. */
+/** Extract a sentence-bounded contiguous excerpt of 100–200 words from markdown.
+ *  Requires at least 3 prose sentences in the window so we never return a list
+ *  of catalogue captions glued together. */
 function extractExcerpt(markdown: string): string | null {
   if (!markdown) return null;
   // Strip markdown noise: code blocks, images, links syntax, headings markers, tables.
@@ -303,21 +305,23 @@ function extractExcerpt(markdown: string): string | null {
   // Split into sentences, then drop boilerplate/CTA/nav junk.
   const rawSentences = cleaned.match(/[^.!?]+[.!?]+(?:\s|$)/g) ?? [];
   const sentences = rawSentences.filter((s) => !isJunkSentence(s));
-  if (sentences.length === 0) return null;
+  if (sentences.length < 3) return null;
 
   // Greedy window: keep adding sentences until we exceed MAX_WORDS,
-  // then back off; if window ≥ MIN_WORDS, return it. Slide forward otherwise.
+  // then back off; require ≥3 sentences AND ≥MIN_WORDS for a valid excerpt.
   for (let i = 0; i < sentences.length; i++) {
     let buf = "";
+    let count = 0;
     for (let j = i; j < sentences.length; j++) {
       const next = (buf + " " + sentences[j]).trim();
       const w = countWords(next);
       if (w > MAX_WORDS) {
-        if (countWords(buf) >= MIN_WORDS) return buf.trim();
-        break; // window starting at i can't satisfy; advance i
+        if (count >= 3 && countWords(buf) >= MIN_WORDS) return buf.trim();
+        break;
       }
       buf = next;
-      if (w >= MIN_WORDS && w <= MAX_WORDS) return buf.trim();
+      count++;
+      if (w >= MIN_WORDS && w <= MAX_WORDS && count >= 3) return buf.trim();
     }
   }
   return null;
