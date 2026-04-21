@@ -548,6 +548,7 @@ function NewAssessment() {
                   </tfoot>
                 </table>
               </div>
+              <CoverageStrips blueprint={blueprint} aos={docAOs.filter((a) => !a.paperId || a.paperId === selected?.paper.id)} />
             </div>
           )}
 
