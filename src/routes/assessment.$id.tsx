@@ -19,9 +19,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Loader2, RefreshCw, Trash2, BookmarkPlus, Sparkles, ChevronUp, ChevronDown, X } from "lucide-react";
+import { ArrowLeft, Loader2, RefreshCw, Trash2, BookmarkPlus, Sparkles, ChevronUp, ChevronDown, X, Download } from "lucide-react";
 import { BLOOMS } from "@/lib/syllabus";
 import { toSectioned } from "@/lib/sections";
+import { exportAssessmentDocx } from "@/lib/export-docx";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/assessment/$id")({
@@ -58,6 +59,7 @@ type Assessment = {
   duration_minutes: number;
   status: string;
   blueprint: unknown;
+  instructions: string | null;
 };
 
 function EditorPage() {
@@ -298,6 +300,45 @@ function EditorPage() {
             </div>
           </div>
           <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1"
+              disabled={questions.length === 0}
+              onClick={async () => {
+                try {
+                  await exportAssessmentDocx(
+                    {
+                      title: assessment.title,
+                      subject: assessment.subject,
+                      level: assessment.level,
+                      total_marks: assessment.total_marks,
+                      duration_minutes: assessment.duration_minutes,
+                      instructions: assessment.instructions,
+                      blueprint: assessment.blueprint,
+                    },
+                    questions.map((q) => ({
+                      position: q.position,
+                      question_type: q.question_type,
+                      topic: q.topic,
+                      bloom_level: q.bloom_level,
+                      difficulty: q.difficulty,
+                      marks: q.marks,
+                      stem: q.stem,
+                      options: q.options,
+                      answer: q.answer,
+                      mark_scheme: q.mark_scheme,
+                    })),
+                  );
+                  toast.success("Downloaded .docx");
+                } catch (e) {
+                  toast.error("Export failed");
+                  console.error(e);
+                }
+              }}
+            >
+              <Download className="h-4 w-4" /> Download .docx
+            </Button>
             <Select value={assessment.status} onValueChange={setStatus}>
               <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
               <SelectContent>
