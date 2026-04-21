@@ -127,6 +127,69 @@ function assignSkillsToQuestions(skills: SbqSkillDef[], numQuestions: number): (
   return slots;
 }
 
+function buildDeterministicSbqQuestions(section: Section, sources: GroundedSource[], skills: (SbqSkillDef | null)[]): any[] {
+  const topic = section.topic_pool[0]?.topic ?? "the issue";
+  const inquiry = `How far did the developments in ${topic.replace(/\*$/, "")} shape the issue being studied?`;
+  const perQMarks = Math.floor(section.marks / Math.max(1, section.num_questions));
+  const remainder = section.marks - perQMarks * section.num_questions;
+  const labels = sources.map((_, i) => String.fromCharCode(65 + i));
+  const allLabels = labels.join(", ");
+
+  return Array.from({ length: section.num_questions }, (_, i) => {
+    const skill = skills[i] ?? null;
+    const part = String.fromCharCode(97 + i);
+    const marks = skill?.locked ? skill.default : perQMarks + (i < remainder ? 1 : 0);
+    const single = labels[i % Math.max(1, labels.length)] ?? "A";
+    const second = labels[(i + 1) % Math.max(1, labels.length)] ?? "B";
+    const intro = i === 0 ? `${inquiry}\n\n` : "";
+    let prompt: string;
+    let answer: string;
+    let scheme: string;
+
+    if (skill?.id === "comparison") {
+      prompt = `Study Sources ${single} and ${second}. (${part}) How similar are Sources ${single} and ${second} in their views about ${topic}? Explain your answer.`;
+      answer = `A strong answer compares both sources' messages and uses evidence from Sources ${single} and ${second}, then reaches a judgement on similarity.`;
+      scheme = skill.markScheme;
+    } else if (skill?.id === "assertion") {
+      prompt = `Study Sources ${allLabels}. (${part}) "${topic} was shaped mainly by the actions of the major powers involved." How far do Sources ${allLabels} support this assertion? Explain your answer.`;
+      answer = `A strong answer uses every source, groups sources that support and challenge the assertion, evaluates provenance and reaches a balanced judgement.`;
+      scheme = skill.markScheme;
+    } else if (skill?.id === "utility") {
+      prompt = `Study Source ${single}. (${part}) How useful is Source ${single} as evidence about ${topic}? Explain your answer.`;
+      answer = `A strong answer evaluates utility using both the content and provenance of Source ${single}, with a limitation and overall judgement.`;
+      scheme = skill.markScheme;
+    } else if (skill?.id === "reliability") {
+      prompt = `Study Source ${single}. (${part}) How reliable is Source ${single} as evidence about ${topic}? Explain your answer.`;
+      answer = `A strong answer cross-references the content with contextual knowledge and evaluates the provenance or possible bias of Source ${single}.`;
+      scheme = skill.markScheme;
+    } else if (skill?.id === "purpose") {
+      prompt = `Study Source ${single}. (${part}) Why do you think Source ${single} was produced? Explain your answer using details from the source and your contextual knowledge.`;
+      answer = `A strong answer identifies a plausible purpose and supports it with provenance, content evidence and contextual knowledge.`;
+      scheme = skill.markScheme;
+    } else if (skill?.id === "surprise") {
+      prompt = `Study Source ${single}. (${part}) Are you surprised by Source ${single}? Explain your answer.`;
+      answer = `A strong answer explains what is surprising and not surprising using details from Source ${single} and contextual knowledge.`;
+      scheme = skill.markScheme;
+    } else {
+      prompt = `Study Source ${single}. (${part}) What can you infer from Source ${single} about ${topic}? Explain your answer using details from the source.`;
+      answer = `A strong answer makes a valid inference and supports it with precise evidence from Source ${single}.`;
+      scheme = SBQ_SKILLS.inference.markScheme;
+    }
+
+    return {
+      question_type: "source_based",
+      topic,
+      bloom_level: section.bloom ?? "Analyse",
+      difficulty: "medium",
+      marks,
+      stem: intro + prompt,
+      options: null,
+      answer,
+      mark_scheme: scheme,
+    };
+  });
+}
+
 type LegacyBlueprintRow = {
   topic: string;
   bloom?: string;
