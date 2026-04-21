@@ -294,7 +294,7 @@ async function firecrawlSearch(query: string, allowList: string[]): Promise<stri
       Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ query, limit: 10 }),
+    body: JSON.stringify({ query, limit: 15 }),
   });
   if (!resp.ok) {
     console.warn("[sources] firecrawl search failed", resp.status, await resp.text());
@@ -307,7 +307,7 @@ async function firecrawlSearch(query: string, allowList: string[]): Promise<stri
     const url = r?.url ?? r?.link;
     if (typeof url === "string") urls.push(url);
   }
-  return urls.filter((u) => isAllowed(u, allowList)).slice(0, 5);
+  return urls.filter((u) => isAllowed(u, allowList)).slice(0, 10);
 }
 
 /** Try Tavily first (native domain filtering), fall back to Firecrawl. */
@@ -316,13 +316,20 @@ async function searchUrls(query: string, allowList: string[]): Promise<string[]>
     const { results } = await tavilySearch(query, {
       includeDomains: allowList,
       excludeDomains: DENY_DOMAINS,
-      maxResults: 10,
+      maxResults: 15,
     });
     const urls = results.map((r) => r.url).filter((u) => isAllowed(u, allowList));
-    if (urls.length > 0) return urls.slice(0, 5);
+    if (urls.length > 0) return urls.slice(0, 10);
     console.warn("[sources] tavily returned 0 allow-listed results, falling back to firecrawl");
   }
   return firecrawlSearch(query, allowList);
+}
+
+/** Sort humanities URLs so Tier 1 (primary) comes first, then Tier 2 (historian),
+ *  then Tier 3 (general reference / news). For English, preserve search order. */
+function rankUrlsForSubject(subjectKind: SubjectKind, urls: string[]): string[] {
+  if (subjectKind !== "humanities") return urls;
+  return [...urls].sort((a, b) => humanitiesTier(hostnameOf(a)) - humanitiesTier(hostnameOf(b)));
 }
 
 async function firecrawlScrape(url: string): Promise<{ markdown: string; title: string } | null> {
