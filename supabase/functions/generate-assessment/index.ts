@@ -170,9 +170,10 @@ Deno.serve(async (req) => {
     const groundedSources: (GroundedSource | null)[] = [];
     if (sourceGate && subjectKind) {
       console.log("[generate] source-grounding enabled for subject:", subject, "kind:", subjectKind);
+      const usedHosts = new Set<string>();
       for (const row of blueprint as BlueprintRow[]) {
         try {
-          const src = await fetchGroundedSource(subjectKind, row.topic, row.learning_outcomes ?? []);
+          const src = await fetchGroundedSource(subjectKind, row.topic, row.learning_outcomes ?? [], usedHosts);
           groundedSources.push(src);
         } catch (e) {
           console.warn("[generate] source fetch failed for row", row.topic, e);
