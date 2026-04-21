@@ -132,6 +132,7 @@ function SyllabusReview() {
         topic_code: null, parent_code: null, learning_outcome_code: null,
         strand: null, sub_strand: null, title: "New topic",
         learning_outcomes: [], suggested_blooms: [],
+        outcome_categories: ["knowledge"], ao_codes: [],
         depth: 2, position: prev.length,
         section: null,
       },
