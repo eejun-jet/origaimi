@@ -646,22 +646,32 @@ Deno.serve(async (req) => {
         let source_url: string | null = q.source_url ?? null;
         let notes: string | null = null;
 
-        if (needsSourcePerQ) {
-          if (!expectedSrc) {
-            // Could not retrieve a source for a question that requires one — drop it.
+        if (isHumanitiesSBQ) {
+          // SBQ section uses ONE shared pool of Sources A–E. Every sub-question
+          // gets the same concatenated excerpt and the same source URL.
+          if (sharedSourcePool.length === 0) {
+            console.warn(`[generate] section ${section.letter} q${qi + 1}: shared SBQ pool is empty — dropping`);
             droppedNoSource++;
             continue;
           }
-          // For multi-source SBQ skills (comparison/assertion), enforce that we got enough.
+          question_type = "source_based";
+          source_excerpt = sharedSourcePool
+            .map((s, i) => `Source ${String.fromCharCode(65 + i)}: ${s.excerpt}`)
+            .join("\n\n");
+          source_url = sharedSourcePool[0].source_url;
+          groundedCount++;
+        } else if (needsSourcePerQ) {
+          if (!expectedSrc) {
+            droppedNoSource++;
+            continue;
+          }
           const qSkillForCheck = perQSkillsForFetch[qi];
           if (qSkillForCheck && validSources.length < qSkillForCheck.minSources) {
             console.warn(`[generate] section ${section.letter} q${qi + 1}: ${qSkillForCheck.label} needs ${qSkillForCheck.minSources} sources, got ${validSources.length} — dropping`);
             droppedNoSource++;
             continue;
           }
-          // Force source_based for humanities so the editor renders the passage UI.
           if (subjectKind === "humanities") question_type = "source_based";
-          // Build a combined excerpt for multi-source questions.
           if (validSources.length > 1) {
             source_excerpt = validSources
               .map((s, i) => `Source ${String.fromCharCode(65 + i)}: ${s.excerpt}`)
@@ -675,7 +685,6 @@ Deno.serve(async (req) => {
           }
           groundedCount++;
         } else {
-          // Sections that don't need a source must not carry one.
           source_excerpt = null;
           source_url = null;
         }
