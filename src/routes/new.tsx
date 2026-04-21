@@ -851,6 +851,11 @@ function BlueprintTable({
 
   return (
     <div className="space-y-4">
+      {aosAreSyllabusWide && paperAOs.length > 0 && (
+        <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">Note:</span> AOs for this syllabus are weighted across the whole paper, not tied to individual questions. Use the tags below to indicate which AO each row is <em>primarily</em> targeting — the generator will balance the overall mix.
+        </div>
+      )}
       {groups.map(([sectionName, rows]) => (
         <div key={sectionName} className="overflow-hidden rounded-lg border border-border">
           {groups.length > 1 && (
