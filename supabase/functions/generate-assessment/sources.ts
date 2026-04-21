@@ -380,7 +380,7 @@ export async function fetchGroundedSource(
       console.warn("[sources] no allow-listed results for query:", query);
       continue;
     }
-    const candidates = urls.filter((u) => {
+    const candidates = rankUrlsForSubject(subjectKind, urls).filter((u) => {
       if (usedUrls && usedUrls.has(u)) return false;
       if (usedHosts && usedHosts.has(hostnameOf(u))) return false;
       return true;
@@ -389,7 +389,7 @@ export async function fetchGroundedSource(
       console.warn("[sources] all candidates already used for query:", query);
       continue;
     }
-    for (const url of candidates.slice(0, 5)) {
+    for (const url of candidates.slice(0, 8)) {
       try {
         const scraped = await firecrawlScrape(url);
         if (!scraped) continue;
