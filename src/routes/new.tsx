@@ -48,6 +48,7 @@ function NewAssessment() {
   const [libLoading, setLibLoading] = useState(true);
   const [selectedPaperKey, setSelectedPaperKey] = useState<string>(""); // `${docId}:${paperId}`
   const [paperTopics, setPaperTopics] = useState<PaperTopic[]>([]);
+  const [docAOs, setDocAOs] = useState<AssessmentObjective[]>([]);
   const [topicsLoading, setTopicsLoading] = useState(false);
 
   useEffect(() => {
