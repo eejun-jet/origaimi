@@ -211,27 +211,44 @@ Deno.serve(async (req) => {
       syllabusCode, paperCode, groundedSources,
     }) });
 
-    const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-pro",
-        messages,
-        tools: [TOOL],
-        tool_choice: { type: "function", function: { name: "save_assessment" } },
-      }),
+    // Call the AI gateway with retry on transient upstream errors (502/503/504).
+    const aiBody = JSON.stringify({
+      model: "google/gemini-2.5-pro",
+      messages,
+      tools: [TOOL],
+      tool_choice: { type: "function", function: { name: "save_assessment" } },
     });
-
-    if (!aiResp.ok) {
-      const errTxt = await aiResp.text();
-      console.error("AI error", aiResp.status, errTxt);
-      if (aiResp.status === 429) return new Response(JSON.stringify({ error: "Rate limit, please retry" }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      if (aiResp.status === 402) return new Response(JSON.stringify({ error: "AI credits exhausted" }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      return new Response(JSON.stringify({ error: "AI failed", details: errTxt }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    let aiResp: Response | null = null;
+    let lastErrTxt = "";
+    for (let attempt = 0; attempt < 3; attempt++) {
+      aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: aiBody,
+      });
+      if (aiResp.ok) break;
+      lastErrTxt = await aiResp.text().catch(() => "");
+      const transient = aiResp.status === 502 || aiResp.status === 503 || aiResp.status === 504;
+      console.warn(`[generate] AI attempt ${attempt + 1} failed status=${aiResp.status} transient=${transient}`);
+      if (!transient) break;
+      // Exponential backoff: 1s, 2s
+      if (attempt < 2) await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
     }
+
+    if (!aiResp || !aiResp.ok) {
+      const status = aiResp?.status ?? 500;
+      console.error("AI error", status, lastErrTxt.slice(0, 500));
+      if (status === 429) return new Response(JSON.stringify({ error: "Rate limit, please retry" }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      if (status === 402) return new Response(JSON.stringify({ error: "AI credits exhausted" }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      if (status === 502 || status === 503 || status === 504) {
+        return new Response(JSON.stringify({ error: "AI service temporarily unavailable. Please try again in a moment." }), { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      return new Response(JSON.stringify({ error: "AI failed", details: lastErrTxt.slice(0, 500) }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
 
     const aiJson = await aiResp.json();
     const toolCall = aiJson.choices?.[0]?.message?.tool_calls?.[0];
