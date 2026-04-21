@@ -493,7 +493,9 @@ Deno.serve(async (req) => {
       // Per-question post-processing: enforce source attachment, drop unsupported.
       for (let qi = 0; qi < questions.length; qi++) {
         const q = questions[qi];
-        const expectedSrc = sourcesForSection[qi];
+        const expectedSlot = sourcesForSection[qi] ?? [];
+        const validSources = expectedSlot.filter((s): s is GroundedSource => !!s);
+        const expectedSrc = validSources[0] ?? null;
         let question_type: string = section.question_type; // FORCE section's type
         let source_excerpt: string | null = q.source_excerpt ?? null;
         let source_url: string | null = q.source_url ?? null;
@@ -505,11 +507,24 @@ Deno.serve(async (req) => {
             droppedNoSource++;
             continue;
           }
+          // For multi-source SBQ skills (comparison/assertion), enforce that we got enough.
+          if (sbqSkill && validSources.length < sbqSkill.minSources) {
+            console.warn(`[generate] section ${section.letter} q${qi + 1}: ${sbqSkill.label} needs ${sbqSkill.minSources} sources, got ${validSources.length} — dropping`);
+            droppedNoSource++;
+            continue;
+          }
           // Force source_based for humanities so the editor renders the passage UI.
           if (subjectKind === "humanities") question_type = "source_based";
-          source_excerpt = expectedSrc.excerpt;
+          // Build a combined excerpt for multi-source questions.
+          if (validSources.length > 1) {
+            source_excerpt = validSources
+              .map((s, i) => `Source ${String.fromCharCode(65 + i)}: ${s.excerpt}`)
+              .join("\n\n");
+          } else {
+            source_excerpt = expectedSrc.excerpt;
+          }
           source_url = expectedSrc.source_url;
-          if (q.source_excerpt !== expectedSrc.excerpt) {
+          if (validSources.length === 1 && q.source_excerpt !== expectedSrc.excerpt) {
             notes = "Source excerpt enforced from retrieved citation (model attempted to alter it).";
           }
           groundedCount++;
