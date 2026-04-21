@@ -1188,7 +1188,7 @@ function SectionCard({
             })}
           </div>
           {hasAssertion && (
-            <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
+            <p className="mt-2 text-xs text-primary">
               Assertion contributes 1 fixed 8-mark question using all sources; remaining questions split across other selected skills.
             </p>
           )}
