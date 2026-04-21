@@ -476,6 +476,14 @@ function SyllabusReview() {
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
+                  <div className="sm:col-span-3">
+                    <Label className="text-xs">Section</Label>
+                    <Input
+                      value={t.section ?? ""}
+                      onChange={(e) => updateTopic(originalIdx, { section: e.target.value || null })}
+                      placeholder="Physics / Chemistry / Biology"
+                    />
+                  </div>
                   {/* Paper assignment selector */}
                   {papers.length > 1 && (
                     <div className="sm:col-span-12">
