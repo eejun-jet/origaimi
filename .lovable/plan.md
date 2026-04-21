@@ -1,77 +1,38 @@
 
 
-# Multi-track syllabus support + smarter parsing
+# Add N-level (G2) support to the level list
 
-The 5 new syllabuses surface one real new challenge (multi-track papers in 5086) and a few smaller refinements. Plan covers both.
+Singapore G2/N-level syllabuses use distinct codes (2125, 2126, 2127, 5105/5106/5107, 1190, 4045) and run across Sec 3N → Sec 5N. Right now the level dropdown only goes up to Sec 4 (O-level / G3 convention), so tagging these uploads cleanly needs the list extended.
 
-## 1. Multi-track papers (5086 Combined Science)
+## Change
 
-Combined Science 5086 has 5 paper components, but a candidate only sits 4 — which 4 depends on their subject combination (Phy/Chem, Phy/Bio, Chem/Bio).
+In `src/lib/syllabus.ts`, extend `LEVELS`:
 
-**Schema additions** to `syllabus_papers`:
 ```text
-+ section          text   -- "Physics" | "Chemistry" | "Biology" | null
-+ track_tags       text[] -- ["physics", "chemistry"] for cross-section papers
-+ is_optional      bool   -- false (most) | true (rare alternative papers)
+"P1"…"P6", "Sec 1", "Sec 2",
+"Sec 3", "Sec 4",            ← G3 / O-level (existing)
+"Sec 3N", "Sec 4N", "Sec 5N", ← G2 / N-level (new)
+"JC1", "JC2",                ← A-level (new, was missing)
 ```
 
-`syllabus_topics` already has `paper_id`. Add:
-```text
-+ section          text   -- denormalised from paper for fast filtering
-```
+Notes:
+- The N(A) track runs Sec 1N → Sec 5N but only Sec 3N–5N actually sit national papers, so those three are the meaningful tags.
+- Adding JC1/JC2 closes a gap I noticed — mentioned in earlier plans but never landed in the `LEVELS` array.
 
-This lets us model:
-```text
-5086 Paper 1 (MCQ) → section: null, track_tags: ["physics","chemistry","biology"]
-5086 Paper 2       → section: "Physics"
-5086 Paper 3       → section: "Chemistry"
-5086 Paper 4       → section: "Biology"
-5086 Paper 5       → section: null, track_tags: ["physics","chemistry","biology"] (Practical)
-```
+## Where this shows up
 
-**Wizard impact**: when a teacher picks a Combined Science paper, they additionally pick a *section* (Physics/Chemistry/Biology). Topics filter to that section. For single-section papers (Paper 2/3/4) the section is auto-locked.
+- **Upload form** (`/admin/syllabus`) — level dropdown when registering a new syllabus PDF.
+- **Wizard fallback** (`/new`) — only used when no parsed syllabus exists; safe to extend.
+- **Wizard syllabus picker** — unaffected; level is read from the parsed document, this just controls what tags are valid.
 
-## 2. Parser improvements
+## Out of scope
 
-Update `parse-syllabus` system prompt to:
-
-- Detect the **scheme of assessment table** more robustly — already works for 2261/4052/1184, needs to handle the multi-row 5086 layout where one paper draws from multiple sections.
-- Recognise **section headings** like "Paper 1 Social Studies" / "Paper 2 Geography" / "PHYSICS SECTION" and tag downstream topics with `section`.
-- For combined-subject syllabuses (2260, 2262, 2261), set `paper.component_name` from the section heading verbatim ("Social Studies", "Geography", "Literature in English").
-- For oral/listening/practical papers (English P3/P4, Sci P5), set a new `paper.assessment_mode` field: `"written" | "oral" | "listening" | "practical"`. Stored as a column on `syllabus_papers`.
-
-## 3. Wizard polish
-
-- **Step 1 paper picker** gains a section sub-selector when the chosen paper has multiple `track_tags`. Default to first section.
-- **Assessment mode badge** on the picker — "Oral", "Practical", "Listening" — so teachers know what they're building.
-- For **oral/listening** papers, the question-types step pre-selects appropriate types (e.g. "Spoken Response", "Listening MCQ") and hides irrelevant ones (Essay, Structured).
-
-New question types to add to `src/lib/syllabus.ts`:
-```text
-+ { id: "spoken_response", label: "Spoken response" }
-+ { id: "listening_mcq",   label: "Listening MCQ" }
-+ { id: "note_taking",     label: "Note-taking" }
-+ { id: "summary",         label: "Summary writing" }
-```
-
-## 4. Out of scope (flagging only)
-
-- **Shared components across syllabuses**: Paper 1 Social Studies is identical across 2260, 2261, 2262. Today we parse it 3 times. A future "shared component library" could dedupe this; not worth building yet — costs are low.
-- **Subject-combo presets**: e.g. picking "Physics + Chemistry" once and having the wizard always restrict to those tracks. Defer until a teacher asks.
-
-## 5. Migration impact
-
-- Additive only. New columns: `syllabus_papers.section`, `syllabus_papers.track_tags`, `syllabus_papers.is_optional`, `syllabus_papers.assessment_mode`, `syllabus_topics.section`.
-- Existing parsed docs (2261) have all `section = null`, all `track_tags = null` — they continue to work as today.
-- New uploads (4052, 1184, 2260, 2262 are all simple) will mostly leave these new fields null too. Only 5086 exercises the multi-track logic.
+- Auto-detecting N-level from the document filename or cover page during parse — the AI prompt already extracts a `level` field; it'll write "N(A)" or "Secondary 4 Normal (Academic)" verbatim. We keep the human-curated tag list clean and let the admin pick the right one on upload.
+- Filtering the wizard picker by level — not needed yet; once you have ~20 syllabuses we can add a level filter chip row above the picker.
 
 ## Files touched
 
-- `supabase/migrations/...` — add 5 columns
-- `supabase/functions/parse-syllabus/index.ts` — extended tool schema, updated system prompt, server-side paper_code composition already in place
-- `src/integrations/supabase/types.ts` — auto-regenerates
-- `src/lib/syllabus-data.ts` — surface `section`, `trackTags`, `assessmentMode` in the typed objects
-- `src/routes/admin.syllabus.$id.tsx` — show section + mode badges in the paper-switcher tabs; section editor per topic
-- `src/routes/new.tsx` — section sub-selector when multi-track; mode-aware question-type defaults
-- `src/lib/syllabus.ts` — add 4 new question types
+- `src/lib/syllabus.ts` — extend `LEVELS` array (single edit, ~3 lines)
+
+After this lands, upload the 6 N-level PDFs through `/admin/syllabus` tagging them as Sec 4N (or the appropriate year), and the parser handles the rest. 5105/5106/5107 will exercise the multi-track logic the same way 5086 does.
 
