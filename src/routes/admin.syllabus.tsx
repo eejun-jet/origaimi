@@ -246,6 +246,9 @@ function SyllabusAdmin() {
                       {d.exam_board && <span>{d.exam_board}</span>}
                       {d.syllabus_year && <span>{d.syllabus_year}</span>}
                       {d.paper_code && <span>Paper {d.paper_code}</span>}
+                      {(paperCounts[d.id] ?? 0) > 1 && (
+                        <span className="font-medium text-primary">{paperCounts[d.id]} papers</span>
+                      )}
                     </div>
                     {d.parse_error && (
                       <p className="mt-2 rounded bg-destructive/10 p-2 text-xs text-destructive">{d.parse_error}</p>
