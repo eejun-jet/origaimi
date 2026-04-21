@@ -217,22 +217,32 @@ function buildSectionUserPrompt(opts: {
 
   const sectionLabel = section.name ? `Section ${section.letter} — ${section.name}` : `Section ${section.letter}`;
 
-  // SBQ skill block (History/Social Studies SBQ sections only).
-  const skill = section.sbq_skill ? SBQ_SKILLS[section.sbq_skill] : null;
-  const skillBlock = skill
-    ? `
+  // SBQ skills block (History/Social Studies SBQ sections only). Supports 0–5 skills
+  // distributed across the questions in this section.
+  const effectiveSkillIds = resolveEffectiveSkills(section);
+  const effectiveSkills = effectiveSkillIds.map((id) => SBQ_SKILLS[id]).filter(Boolean);
+  const perQuestionSkills = assignSkillsToQuestions(effectiveSkills, section.num_questions);
 
-SBQ SKILL TYPE: ${skill.label}
-${skill.promptHeader}
+  let skillBlock = "";
+  if (effectiveSkills.length > 0) {
+    const skillSummaries = effectiveSkills.map((s) => `- ${s.label}: ${s.promptHeader}\n  Mark scheme: ${s.markScheme}`).join("\n\n");
+    const assignments = perQuestionSkills.map((s, i) => {
+      if (!s) return `  - Question ${i + 1}: generic SBQ (no specific skill assigned)`;
+      const lockedNote = s.locked ? ` — MUST be exactly ${s.default} marks and use ALL provided sources` : ` — must be worth one of: ${s.marks.join(", ")} marks`;
+      const srcNote = s.minSources >= 2 ? ` (uses at least ${s.minSources} sources labelled Source A, B${s.minSources >= 3 ? ", C" : ""}…)` : ` (uses Source A)`;
+      return `  - Question ${i + 1}: ${s.label}${lockedNote}${srcNote}`;
+    }).join("\n");
 
-REQUIRED MARK SCHEME LEVELS for this skill:
-${skill.markScheme}
+    skillBlock = `
 
-${skill.locked
-  ? `This skill is FIXED at ${skill.default} marks. Generate exactly 1 question worth ${skill.default} marks that uses ALL provided sources (Source A, Source B, …) as evidence.`
-  : `Each question in this section must be worth one of: ${skill.marks.join(", ")} marks.`}
-${skill.minSources >= 2 ? `This skill REQUIRES at least ${skill.minSources} sources presented together (label them Source A, Source B${skill.minSources >= 3 ? ", Source C" : ""}${skill.minSources >= 4 ? ", Source D" : ""}, …) inside the SAME question stem.` : ""}`
-    : "";
+SBQ SKILL ASSIGNMENTS (apply each skill's format and mark scheme to the assigned question):
+${skillSummaries}
+
+PER-QUESTION SKILL MAPPING (you MUST follow this exact mapping):
+${assignments}
+
+IMPORTANT: For Assertion questions, use ALL sources provided for that question slot. For single-source skills, use Source A only. Do NOT mix skill formats across questions.`;
+  }
 
   return `${grounding}You are drafting ${sectionLabel} of "${opts.title}" (${opts.level} ${opts.subject}, ${opts.assessmentType}, ${opts.durationMinutes} min, ${opts.totalMarks} total marks across ${opts.totalSections} sections).
 
