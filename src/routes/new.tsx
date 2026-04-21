@@ -735,151 +735,37 @@ function Stepper({ step }: { step: number }) {
   );
 }
 
-const AO_COLORS: Record<string, string> = {
-  AO1: "bg-chart-1",
-  AO2: "bg-chart-2",
-  AO3: "bg-chart-3",
-  AO4: "bg-chart-4",
-  AO5: "bg-chart-5",
-  Unmapped: "bg-muted-foreground/40",
-};
-const CAT_COLORS: Record<string, string> = {
-  knowledge: "bg-chart-1",
-  skills: "bg-chart-2",
-  values: "bg-chart-3",
-  attitudes: "bg-chart-4",
-  Unmapped: "bg-muted-foreground/40",
-};
-
-function BlueprintTable({
-  blueprint,
-  totalMarks,
-  blueprintSum,
-  paperAOs,
-  onUpdate,
+function SegmentedFilter({
+  options,
+  value,
+  onChange,
 }: {
-  blueprint: Blueprint;
-  totalMarks: number;
-  blueprintSum: number;
-  paperAOs: AssessmentObjective[];
-  onUpdate: (i: number, patch: Partial<BlueprintRow>) => void;
+  options: { id: string; label: string }[];
+  value: string;
+  onChange: (v: string) => void;
 }) {
-  // Group rows by section, preserving original index for updates.
-  const groups = useMemo(() => {
-    const map = new Map<string, { row: BlueprintRow; index: number }[]>();
-    blueprint.forEach((row, index) => {
-      const key = row.section?.trim() || "General";
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push({ row, index });
-    });
-    return Array.from(map.entries());
-  }, [blueprint]);
-
-  const aoOptions = useMemo(() => {
-    const seen = new Set<string>();
-    const opts: { code: string; title?: string | null }[] = [];
-    for (const a of paperAOs) {
-      if (seen.has(a.code)) continue;
-      seen.add(a.code);
-      opts.push({ code: a.code, title: a.title });
-    }
-    // Fall back to whatever AOs are already on the topics if none published.
-    if (opts.length === 0) {
-      for (const r of blueprint) {
-        for (const c of r.ao_codes ?? []) {
-          if (seen.has(c)) continue;
-          seen.add(c);
-          opts.push({ code: c });
-        }
-      }
-    }
-    return opts;
-  }, [paperAOs, blueprint]);
-
-  const toggleAO = (rowIndex: number, code: string) => {
-    const current = blueprint[rowIndex]?.ao_codes ?? [];
-    const next = current.includes(code) ? current.filter((c) => c !== code) : [...current, code];
-    onUpdate(rowIndex, { ao_codes: next });
-  };
-
   return (
-    <div className="space-y-4">
-      {groups.map(([sectionName, rows]) => (
-        <div key={sectionName} className="overflow-hidden rounded-lg border border-border">
-          {groups.length > 1 && (
-            <div className="border-b border-border bg-muted/40 px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              {sectionName}
-            </div>
-          )}
-          <table className="w-full text-sm">
-            <thead className="bg-muted/30 text-left text-xs uppercase tracking-wide text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2 w-[45%]">Topic</th>
-                <th className="px-3 py-2">Assessment Objectives</th>
-                <th className="px-3 py-2 text-right w-[90px]">Marks</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(({ row, index }) => {
-                const selected = row.ao_codes ?? [];
-                return (
-                  <tr key={index} className="border-t border-border align-top">
-                    <td className="px-3 py-2">
-                      {row.topic_code && (
-                        <span className="mr-1.5 font-mono text-xs text-muted-foreground">{row.topic_code}</span>
-                      )}
-                      <span>{row.topic.replace(`${row.topic_code} · `, "")}</span>
-                    </td>
-                    <td className="px-3 py-2">
-                      {aoOptions.length === 0 ? (
-                        <span className="text-xs text-muted-foreground">No AOs published for this paper</span>
-                      ) : (
-                        <div className="flex flex-wrap gap-1.5">
-                          {aoOptions.map((ao) => {
-                            const active = selected.includes(ao.code);
-                            return (
-                              <button
-                                type="button"
-                                key={ao.code}
-                                onClick={() => toggleAO(index, ao.code)}
-                                title={ao.title ?? undefined}
-                                className={`rounded-full border px-2 py-0.5 text-xs transition-colors ${
-                                  active
-                                    ? "border-primary bg-primary text-primary-foreground"
-                                    : "border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground"
-                                }`}
-                              >
-                                {ao.code}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <Input
-                        type="number"
-                        min={1}
-                        value={row.marks}
-                        className="ml-auto h-8 w-20 text-right"
-                        onChange={(e) => onUpdate(index, { marks: Number(e.target.value) })}
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      ))}
-      <div className={`flex items-center justify-end gap-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm font-medium ${blueprintSum === totalMarks ? "text-success" : "text-destructive"}`}>
-        <span className="text-muted-foreground">Total marks</span>
-        <span className="tabular-nums">{blueprintSum} / {totalMarks}</span>
-      </div>
+    <div className="inline-flex rounded-md border border-border bg-background p-0.5">
+      {options.map((opt) => {
+        const active = opt.id === value;
+        return (
+          <button
+            key={opt.id}
+            type="button"
+            onClick={() => onChange(opt.id)}
+            className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+              active
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
-
 
 function CoverageStrips({ blueprint, aos }: { blueprint: Blueprint; aos: AssessmentObjective[] }) {
   const aoMarks: Record<string, number> = {};
