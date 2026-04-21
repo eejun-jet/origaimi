@@ -11,13 +11,17 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import {
-  SUBJECTS, LEVELS, ASSESSMENT_TYPES, QUESTION_TYPES, QUESTION_TYPES_BY_MODE, ITEM_SOURCES, topicsFor,
+  SUBJECTS, LEVELS, ASSESSMENT_TYPES, QUESTION_TYPES, QUESTION_TYPES_BY_MODE, BLOOMS, topicsFor,
 } from "@/lib/syllabus";
 import {
   loadSyllabusLibrary, loadPaperTopics, loadDocTopics, loadDocAssessmentObjectives,
   type SyllabusLibraryDoc, type SyllabusLibraryPaper, type PaperTopic, type AssessmentObjective,
 } from "@/lib/syllabus-data";
-import { ChevronLeft, ChevronRight, Sparkles, Loader2, BookOpen, Upload } from "lucide-react";
+import {
+  type Section, type SectionTopic, type SectionedBlueprint,
+  defaultSection, nextSectionLetter, blueprintTotalMarks,
+} from "@/lib/sections";
+import { ChevronLeft, ChevronRight, Sparkles, Loader2, BookOpen, Upload, Plus, Trash2, ChevronUp, ChevronDown } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 
@@ -216,55 +220,96 @@ function NewAssessment() {
     setTopics([]);
   }, [selectedPaperKey, subject, level, activeSection]);
 
-  // Step 3 — blueprint
-  const [blueprint, setBlueprint] = useState<Blueprint>([]);
-  useEffect(() => {
-    if (useSyllabus) {
-      const picked = selectableSyllabusTopics.filter((t) => selectedTopicIds.includes(t.id));
-      if (picked.length === 0) { setBlueprint([]); return; }
-      const per = Math.max(1, Math.floor(totalMarks / picked.length));
-      setBlueprint(picked.map((t) => ({
-        topic: t.topicCode ? `${t.topicCode} · ${t.title}` : t.title,
-        bloom: t.suggestedBlooms[0] ?? "Apply",
-        marks: per,
-        topic_code: t.topicCode,
-        section: t.section ?? null,
-        learning_outcomes: t.learningOutcomes,
-        ao_codes: t.aoCodes,
-        outcome_categories: t.outcomeCategories,
-      })));
-    } else {
-      if (topics.length === 0) { setBlueprint([]); return; }
-      const per = Math.max(1, Math.floor(totalMarks / topics.length));
-      setBlueprint(topics.map((t) => ({ topic: t, bloom: "Apply", marks: per })));
-    }
-  }, [useSyllabus, selectedTopicIds, topics, totalMarks, selectableSyllabusTopics]);
+  // Step 3 — sections (replaces old blueprint + question types steps)
+  const [sections, setSections] = useState<Section[]>([]);
 
-  // Step 4 — question types & sources (mode-aware defaults)
+  // Auto-seed a default Section A when topics are first picked, but only if user
+  // hasn't created sections yet. Also clear sections when the topic pool is reset.
+  useEffect(() => {
+    const pickedTopicsCount = useSyllabus ? selectedTopicIds.length : topics.length;
+    if (pickedTopicsCount === 0) {
+      setSections([]);
+      return;
+    }
+    if (sections.length === 0) {
+      const seedType = (QUESTION_TYPES_BY_MODE[selected?.paper.assessmentMode ?? "written"] ?? ["structured"])[0] ?? "structured";
+      const masterPool: SectionTopic[] = useSyllabus
+        ? selectableSyllabusTopics
+            .filter((t) => selectedTopicIds.includes(t.id))
+            .map((t) => ({
+              topic: t.topicCode ? `${t.topicCode} · ${t.title}` : t.title,
+              topic_code: t.topicCode,
+              learning_outcomes: t.learningOutcomes,
+              ao_codes: t.aoCodes,
+              outcome_categories: t.outcomeCategories,
+            }))
+        : topics.map((t) => ({ topic: t }));
+      setSections([{
+        ...defaultSection("A", totalMarks),
+        question_type: seedType,
+        num_questions: Math.max(1, masterPool.length),
+        topic_pool: masterPool,
+      }]);
+    }
+    // intentionally no `sections` dep — only seed when pool first becomes non-empty
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTopicIds, topics, useSyllabus, selected?.paper.assessmentMode]);
+
+  // The full master pool of topics available to any section (derived from Step 2 selection).
+  const masterTopicPool: SectionTopic[] = useMemo(() => {
+    if (useSyllabus) {
+      return selectableSyllabusTopics
+        .filter((t) => selectedTopicIds.includes(t.id))
+        .map((t) => ({
+          topic: t.topicCode ? `${t.topicCode} · ${t.title}` : t.title,
+          topic_code: t.topicCode,
+          learning_outcomes: t.learningOutcomes,
+          ao_codes: t.aoCodes,
+          outcome_categories: t.outcomeCategories,
+        }));
+    }
+    return topics.map((t) => ({ topic: t }));
+  }, [useSyllabus, selectableSyllabusTopics, selectedTopicIds, topics]);
+
+  const sectionsTotalMarks = blueprintTotalMarks({ sections });
+  const totalQuestions = sections.reduce((acc, s) => acc + (s.num_questions || 0), 0);
   const assessmentMode = selected?.paper.assessmentMode ?? "written";
+
   const visibleQuestionTypes = useMemo(() => {
     const allowedIds = QUESTION_TYPES_BY_MODE[assessmentMode] ?? QUESTION_TYPES_BY_MODE.written;
-    // For written mode show everything except oral/listening-only types; for non-written hide written-only.
     if (assessmentMode === "written") {
       return QUESTION_TYPES.filter((t) => !["spoken_response", "listening_mcq", "note_taking"].includes(t.id));
     }
     return QUESTION_TYPES.filter((t) => allowedIds.includes(t.id));
   }, [assessmentMode]);
-  const [qTypes, setQTypes] = useState<string[]>(["mcq", "short_answer", "structured"]);
-  useEffect(() => {
-    const defaults = QUESTION_TYPES_BY_MODE[assessmentMode] ?? ["mcq", "short_answer", "structured"];
-    setQTypes(defaults);
-  }, [assessmentMode]);
-  const [sources, setSources] = useState<string[]>(["ai"]);
 
-  // Step 5
-  const [referenceNote, setReferenceNote] = useState("");
-
-  const blueprintSum = blueprint.reduce((acc, b) => acc + (b.marks || 0), 0);
-
-  const updateBlueprintRow = (i: number, patch: Partial<BlueprintRow>) => {
-    setBlueprint((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  const updateSection = (id: string, patch: Partial<Section>) => {
+    setSections((sx) => sx.map((s) => (s.id === id ? { ...s, ...patch } : s)));
   };
+  const addSection = () => {
+    const remaining = Math.max(1, totalMarks - sectionsTotalMarks);
+    setSections((sx) => [...sx, { ...defaultSection(nextSectionLetter(sx), remaining), topic_pool: masterTopicPool }]);
+  };
+  const removeSection = (id: string) => {
+    setSections((sx) => {
+      const next = sx.filter((s) => s.id !== id);
+      // Re-letter A, B, C…
+      return next.map((s, i) => ({ ...s, letter: String.fromCharCode(65 + i) }));
+    });
+  };
+  const moveSection = (id: string, dir: -1 | 1) => {
+    setSections((sx) => {
+      const i = sx.findIndex((s) => s.id === id);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= sx.length) return sx;
+      const next = [...sx];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next.map((s, k) => ({ ...s, letter: String.fromCharCode(65 + k) }));
+    });
+  };
+
+  // Step 4 — references / instructions
+  const [referenceNote, setReferenceNote] = useState("");
 
   const toggle = (arr: string[], v: string) =>
     arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v];
@@ -272,34 +317,38 @@ function NewAssessment() {
   const canNext = () => {
     if (step === 1) {
       if (libLoading) return false;
-      if (library.length > 0 && !selected) return false; // must pick a paper if any exist
+      if (library.length > 0 && !selected) return false;
       return title.trim().length > 0;
     }
     if (step === 2) return useSyllabus ? selectedTopicIds.length > 0 : topics.length > 0;
-    if (step === 3) return blueprintSum === totalMarks;
-    if (step === 4) return qTypes.length > 0 && sources.length > 0;
+    if (step === 3) {
+      if (sections.length === 0) return false;
+      if (sectionsTotalMarks !== totalMarks) return false;
+      if (sections.some((s) => s.topic_pool.length === 0 || s.num_questions < 1)) return false;
+      return true;
+    }
     return true;
   };
 
   const handleGenerate = async () => {
     setBusy(true);
+    const blueprintForDb: SectionedBlueprint = { sections };
+    const allTopics = Array.from(new Set(sections.flatMap((s) => s.topic_pool.map((t) => t.topic))));
+    const allQTypes = Array.from(new Set(sections.map((s) => s.question_type)));
+
     const { data: created, error: e1 } = await supabase
       .from("assessments")
       .insert({
         user_id: user.id,
-        title,
-        subject,
-        level,
+        title, subject, level,
         assessment_type: aType,
         duration_minutes: duration,
         total_marks: totalMarks,
         status: "draft",
-        topics: useSyllabus
-          ? blueprint.map((b) => b.topic)
-          : topics,
-        blueprint,
-        question_types: qTypes,
-        item_sources: sources,
+        topics: allTopics,
+        blueprint: blueprintForDb as unknown as never,
+        question_types: allQTypes,
+        item_sources: ["ai"],
         instructions: referenceNote || null,
         syllabus_doc_id: selected?.doc.id ?? null,
         syllabus_paper_id: selected?.paper.id ?? null,
@@ -321,10 +370,10 @@ function NewAssessment() {
         assessmentType: aType,
         durationMinutes: duration,
         totalMarks,
-        topics: useSyllabus ? blueprint.map((b) => b.topic) : topics,
-        blueprint,
-        questionTypes: qTypes,
-        itemSources: sources,
+        topics: allTopics,
+        blueprint: blueprintForDb,
+        questionTypes: allQTypes,
+        itemSources: ["ai"],
         instructions: referenceNote,
         syllabusCode: selected?.doc.syllabusCode ?? null,
         paperCode: selected?.paper.paperCode ?? null,
@@ -332,12 +381,8 @@ function NewAssessment() {
     });
 
     setBusy(false);
-
-    if (e2) {
-      toast.error("Generation failed — opening empty draft");
-    } else if (gen) {
-      toast.success(`Drafted ${gen.questionCount ?? "your"} questions`);
-    }
+    if (e2) toast.error("Generation failed — opening empty draft");
+    else if (gen) toast.success(`Drafted ${gen.questionCount ?? "your"} questions`);
     navigate({ to: "/assessment/$id", params: { id: created.id } });
   };
 
@@ -590,117 +635,76 @@ function NewAssessment() {
 
           {step === 3 && (
             <div className="space-y-5">
-              <h2 className="font-paper text-xl font-semibold">Table of Specifications</h2>
+              <h2 className="font-paper text-xl font-semibold">Sections</h2>
               <p className="text-sm text-muted-foreground">
-                Tag each topic with one or more Assessment Objectives and assign marks.
-                Total must equal {totalMarks} marks.
+                Build your paper section by section. Each section has its own question type, topic pool, and marks.
+                Total marks must equal {totalMarks}.
               </p>
-              <BlueprintTable
-                blueprint={blueprint}
-                totalMarks={totalMarks}
-                blueprintSum={blueprintSum}
-                paperAOs={(() => {
-                  const bound = docAOs.filter((a) => a.paperId === selected?.paper.id);
-                  return bound.length > 0 ? bound : docAOs.filter((a) => !a.paperId);
-                })()}
-                aosAreSyllabusWide={docAOs.filter((a) => a.paperId === selected?.paper.id).length === 0 && docAOs.some((a) => !a.paperId)}
-                onUpdate={updateBlueprintRow}
-              />
-              <CoverageStrips blueprint={blueprint} aos={(() => {
-                const bound = docAOs.filter((a) => a.paperId === selected?.paper.id);
-                return bound.length > 0 ? bound : docAOs.filter((a) => !a.paperId);
-              })()} />
+
+              {sections.length === 0 && (
+                <div className="rounded-lg border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+                  Pick topics in Step 2 first, then add a section here.
+                </div>
+              )}
+
+              {sections.map((s, i) => (
+                <SectionCard
+                  key={s.id}
+                  section={s}
+                  isFirst={i === 0}
+                  isLast={i === sections.length - 1}
+                  masterPool={masterTopicPool}
+                  visibleQuestionTypes={visibleQuestionTypes}
+                  subject={subject}
+                  onUpdate={(patch) => updateSection(s.id, patch)}
+                  onRemove={() => removeSection(s.id)}
+                  onMove={(d) => moveSection(s.id, d)}
+                />
+              ))}
+
+              {masterTopicPool.length > 0 && (
+                <div className="flex items-center justify-between">
+                  <Button variant="outline" size="sm" onClick={addSection} className="gap-1">
+                    <Plus className="h-4 w-4" /> Add section
+                  </Button>
+                  <div className={`text-sm font-medium ${sectionsTotalMarks === totalMarks ? "text-success" : "text-destructive"}`}>
+                    Total: {sectionsTotalMarks} / {totalMarks} marks · {totalQuestions} question{totalQuestions === 1 ? "" : "s"}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
           {step === 4 && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="font-paper text-xl font-semibold">Question types</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Pick the mix you want in the paper.
-                  {assessmentMode !== "written" && (
-                    <span className="ml-1">Defaults tuned for <span className="font-medium capitalize text-foreground">{assessmentMode}</span> assessment.</span>
-                  )}
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {visibleQuestionTypes.map((t) => {
-                    const on = qTypes.includes(t.id);
-                    return (
-                      <button key={t.id} type="button" onClick={() => setQTypes(toggle(qTypes, t.id))}
-                        className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${on ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted"}`}>
-                        {t.label}
-                      </button>
-                    );
-                  })}
-                </div>
-                {qTypes.includes("source_based") && /history|social studies|humanities/i.test(subject) && (
-                  <p className="mt-3 rounded-md border border-primary/30 bg-primary/5 p-3 text-xs text-muted-foreground">
-                    <span className="font-medium text-foreground">Source-based questions will be grounded in real, cited passages.</span>{" "}
-                    We pull a 100–180 word excerpt from approved sites (NAS, NLB, Roots, Straits Times, BBC, Reuters, British Library, National Archives UK, etc.) — never Wikipedia, blogs, or AI-fabricated sources. Each question shows a clickable citation.
-                  </p>
-                )}
-                {(qTypes.includes("comprehension") || qTypes.includes("source_based")) && /\benglish\b/i.test(subject) && (
-                  <p className="mt-3 rounded-md border border-primary/30 bg-primary/5 p-3 text-xs text-muted-foreground">
-                    <span className="font-medium text-foreground">English passages will be grounded in real, cited prose.</span>{" "}
-                    We pull a 100–180 word excerpt from approved sources (Project Gutenberg, Standard Ebooks, Poetry Foundation, BBC, The Guardian, Smithsonian, National Geographic, Granta, Lit Hub, Straits Times, etc.) — never Wikipedia, blogs, or AI-fabricated content. Each question shows a clickable citation.
-                  </p>
-                )}
-                {/(math|science|physics|chemistry|biology)/i.test(subject) && qTypes.some((t) => ["structured","practical","source_based","comprehension"].includes(t)) && (
-                  <p className="mt-3 rounded-md border border-primary/30 bg-primary/5 p-3 text-xs text-muted-foreground">
-                    <span className="font-medium text-foreground">Diagrams will be sourced through a 4-tier cascade.</span>{" "}
-                    For each question that needs a figure: (1) reuse a tagged figure from your uploaded past papers, (2) find a labelled diagram from approved educational sites (Khan Academy, OpenStax, CK-12, PhET, NRICH, etc. — never Wikipedia), (3) AI-generate an MOE exam-style line-art diagram, or (4) flag it for manual attachment. Upload past papers in the <a href="/papers" className="underline">Papers</a> section to seed the first tier.
-                  </p>
-                )}
-              </div>
-              <div>
-                <h2 className="font-paper text-xl font-semibold">Item sources</h2>
-                <p className="mt-1 text-sm text-muted-foreground">Where should questions come from?</p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {ITEM_SOURCES.map((t) => {
-                    const on = sources.includes(t.id);
-                    return (
-                      <button key={t.id} type="button" onClick={() => setSources(toggle(sources, t.id))}
-                        className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${on ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted"}`}>
-                        {t.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+            <div className="space-y-4">
+              <h2 className="font-paper text-xl font-semibold">References & instructions</h2>
+              <p className="text-sm text-muted-foreground">
+                Optional: describe any style cues, past-paper patterns, or special instructions for the AI.
+              </p>
+              <Textarea rows={6} value={referenceNote} onChange={(e) => setReferenceNote(e.target.value)}
+                placeholder="e.g. Mimic 2023 PSLE Math style. Use Singapore hawker contexts. SI units." />
             </div>
           )}
 
           {step === 5 && (
-            <div className="space-y-4">
-              <h2 className="font-paper text-xl font-semibold">References & instructions</h2>
-              <p className="text-xs uppercase tracking-wide text-primary">Curated inspiration</p>
-              <p className="text-sm text-muted-foreground">
-                Optional: describe any style cues, past-paper patterns, or special instructions for the AI.
-                Reference uploads coming soon.
-              </p>
-              <Textarea rows={6} value={referenceNote} onChange={(e) => setReferenceNote(e.target.value)}
-                placeholder="e.g. Mimic 2023 PSLE Math style. Include 1 word problem with a Singapore hawker centre context. Use SI units." />
-            </div>
-          )}
-
-          {step === 6 && (
             <div className="space-y-4 text-center">
               <Sparkles className="mx-auto h-10 w-10 text-primary" />
               <h2 className="font-paper text-2xl font-semibold">Ready to draft</h2>
               <p className="mx-auto max-w-md text-sm text-muted-foreground">
-                We'll write {totalMarks} marks of {blueprint.length}-topic questions matching your blueprint.
+                We'll write {totalQuestions} questions across {sections.length} section{sections.length === 1 ? "" : "s"} ({totalMarks} marks).
                 You'll be able to edit, regenerate, and refine every question.
               </p>
               <ul className="mx-auto inline-flex flex-wrap justify-center gap-2 text-xs text-muted-foreground">
-                {selected?.paper.paperCode && (
-                  <Badge variant="default">{selected.paper.paperCode}</Badge>
-                )}
+                {selected?.paper.paperCode && <Badge variant="default">{selected.paper.paperCode}</Badge>}
                 <Badge variant="secondary">{subject}</Badge>
                 <Badge variant="secondary">{level}</Badge>
                 <Badge variant="secondary">{duration} min</Badge>
                 <Badge variant="secondary">{totalMarks} marks</Badge>
-                <Badge variant="secondary">{qTypes.length} question types</Badge>
+                {sections.map((s) => (
+                  <Badge key={s.id} variant="outline">
+                    {s.letter}: {QUESTION_TYPES.find((q) => q.id === s.question_type)?.label ?? s.question_type} ({s.num_questions}×)
+                  </Badge>
+                ))}
               </ul>
               <Button size="lg" className="mt-4 gap-2" onClick={handleGenerate} disabled={busy}>
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}

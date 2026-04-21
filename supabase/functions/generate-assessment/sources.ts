@@ -18,8 +18,10 @@ const ALLOW_DOMAINS_HUMANITIES = [
   "straitstimes.com", "channelnewsasia.com", "todayonline.com",
   // International news / reference
   "bbc.co.uk", "reuters.com", "apnews.com", "britannica.com",
+  "history.com", "historytoday.com",
   // International archives / museums
   "bl.uk", "iwm.org.uk", "nationalarchives.gov.uk", "loc.gov", "un.org",
+  "archives.gov", "awm.gov.au", "ushmm.org",
 ];
 
 // Allow-list for English (literary / journalistic / public-domain prose & non-fiction).
@@ -82,26 +84,70 @@ export function questionTypeNeedsSource(qt: string | null | undefined): boolean 
   return qt === "source_based" || qt === "comprehension";
 }
 
+// Words removed from queries — they're noise that hurts search relevance.
+const STOPWORDS = new Set([
+  "a", "an", "the", "of", "in", "on", "at", "to", "for", "by", "with", "and",
+  "or", "but", "as", "is", "are", "was", "were", "be", "been", "being",
+  "case", "study", "studies", "key", "developments", "extension", "outside",
+  "between", "within", "during", "from", "this", "that", "these", "those",
+  "examine", "explain", "describe", "outline", "discuss", "compare", "analyse",
+  "assess", "evaluate", "students", "learners", "should", "able", "understand",
+  "level", "syllabus", "section", "topic", "outcome", "outcomes", "learning",
+]);
+
+function extractKeywords(text: string, max: number): string[] {
+  const cleaned = text
+    .replace(/[*_`#]+/g, " ")
+    .replace(/[–—]/g, "-")           // unicode dashes → ascii so 1954-75 stays joined
+    .replace(/[^a-zA-Z0-9\-\s]/g, " ")
+    .toLowerCase();
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const w of words) {
+    if (STOPWORDS.has(w)) continue;
+    if (w.length < 2) continue;
+    if (seen.has(w)) continue;
+    seen.add(w);
+    out.push(w);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+/** Build a list of progressively broader queries to try. Earlier = more specific. */
+export function buildQueryChain(
+  subjectKind: Exclude<SubjectKind, null>,
+  topic: string,
+  learningOutcomes: string[] = [],
+): string[] {
+  const topicKw = extractKeywords(topic, 5);
+  const loKw = extractKeywords((learningOutcomes[0] ?? ""), 4);
+  const suffix = subjectKind === "english" ? "short prose excerpt" : "primary source";
+  const chain: string[] = [];
+  // 1) topic + LO context (most specific)
+  if (topicKw.length > 0 && loKw.length > 0) {
+    chain.push(`${[...topicKw, ...loKw].join(" ")} ${suffix}`);
+  }
+  // 2) topic only
+  if (topicKw.length > 0) {
+    chain.push(`${topicKw.join(" ")} ${suffix}`);
+  }
+  // 3) two most distinctive topic words + suffix (shortest fallback)
+  if (topicKw.length >= 2) {
+    chain.push(`${topicKw.slice(0, 2).join(" ")} ${suffix}`);
+  }
+  // Dedupe while keeping order.
+  return Array.from(new Set(chain));
+}
+
+// Backwards-compat single-query helper (kept for any older callers).
 export function buildQuery(
   subjectKind: Exclude<SubjectKind, null>,
   topic: string,
   learningOutcomes: string[] = [],
 ): string {
-  // Strip markdown / boilerplate markers (e.g. trailing "*") and keep the
-  // topic short. Long queries hurt search relevance and hit Tavily's 400-char limit.
-  const cleanTopic = topic.replace(/[*_`#]+/g, "").trim().slice(0, 120);
-  // Take only the first ~8 words of the first LO to add context without bloat.
-  const firstLo = (learningOutcomes[0] ?? "")
-    .replace(/[*_`#]+/g, "")
-    .trim()
-    .split(/\s+/)
-    .slice(0, 8)
-    .join(" ");
-  const base = `${cleanTopic} ${firstLo}`.trim();
-  if (subjectKind === "english") {
-    return `${base} short prose excerpt`;
-  }
-  return `${base} primary source`;
+  return buildQueryChain(subjectKind, topic, learningOutcomes)[0] ?? topic;
 }
 
 function hostnameOf(url: string): string {
@@ -258,41 +304,48 @@ export async function fetchGroundedSource(
   usedUrls?: Set<string>,
 ): Promise<GroundedSource | null> {
   const allowList = subjectKind === "english" ? ALLOW_DOMAINS_ENGLISH : ALLOW_DOMAINS_HUMANITIES;
-  const query = buildQuery(subjectKind, topic, learningOutcomes);
-  const urls = await searchUrls(query, allowList);
-  if (urls.length === 0) {
-    console.warn("[sources] no allow-listed search results for query:", query);
+  const queries = buildQueryChain(subjectKind, topic, learningOutcomes);
+  if (queries.length === 0) {
+    console.warn("[sources] could not build any search query for topic:", topic);
     return null;
   }
-  // Filter out hosts/URLs already used in this assessment so every source is unique.
-  const candidates = urls.filter((u) => {
-    if (usedUrls && usedUrls.has(u)) return false;
-    if (usedHosts && usedHosts.has(hostnameOf(u))) return false;
-    return true;
-  });
-  if (candidates.length === 0) {
-    console.warn("[sources] all candidate URLs are from already-used hosts/URLs for query:", query);
-    return null;
-  }
-  for (const url of candidates.slice(0, 5)) {
-    try {
-      const scraped = await firecrawlScrape(url);
-      if (!scraped) continue;
-      const excerpt = extractExcerpt(scraped.markdown);
-      if (!excerpt) continue;
-      const host = hostnameOf(url);
-      if (usedHosts) usedHosts.add(host);
-      if (usedUrls) usedUrls.add(url);
-      return {
-        excerpt,
-        source_url: url,
-        source_title: scraped.title || publisherOf(url),
-        publisher: publisherOf(url),
-      };
-    } catch (e) {
-      console.warn("[sources] scrape error for", url, e);
+
+  // Walk the query chain (most specific → most general) until we get hits.
+  for (const query of queries) {
+    const urls = await searchUrls(query, allowList);
+    if (urls.length === 0) {
+      console.warn("[sources] no allow-listed results for query:", query);
+      continue;
     }
+    const candidates = urls.filter((u) => {
+      if (usedUrls && usedUrls.has(u)) return false;
+      if (usedHosts && usedHosts.has(hostnameOf(u))) return false;
+      return true;
+    });
+    if (candidates.length === 0) {
+      console.warn("[sources] all candidates already used for query:", query);
+      continue;
+    }
+    for (const url of candidates.slice(0, 5)) {
+      try {
+        const scraped = await firecrawlScrape(url);
+        if (!scraped) continue;
+        const excerpt = extractExcerpt(scraped.markdown);
+        if (!excerpt) continue;
+        const host = hostnameOf(url);
+        if (usedHosts) usedHosts.add(host);
+        if (usedUrls) usedUrls.add(url);
+        return {
+          excerpt,
+          source_url: url,
+          source_title: scraped.title || publisherOf(url),
+          publisher: publisherOf(url),
+        };
+      } catch (e) {
+        console.warn("[sources] scrape error for", url, e);
+      }
+    }
+    console.warn("[sources] no usable excerpt extracted for query:", query);
   }
-  console.warn("[sources] no usable excerpt extracted for query:", query);
   return null;
 }

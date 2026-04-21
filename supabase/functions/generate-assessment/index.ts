@@ -11,15 +11,38 @@ const corsHeaders = {
 
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 
-interface BlueprintRow {
+// ---------- Types ----------
+
+type SectionTopic = {
   topic: string;
-  bloom: string;
-  marks: number;
   topic_code?: string | null;
   learning_outcomes?: string[];
   ao_codes?: string[];
   outcome_categories?: string[];
-}
+};
+
+type Section = {
+  id?: string;
+  letter: string;
+  name?: string;
+  question_type: string;
+  marks: number;
+  num_questions: number;
+  bloom?: string;
+  topic_pool: SectionTopic[];
+  instructions?: string;
+};
+
+type LegacyBlueprintRow = {
+  topic: string;
+  bloom?: string;
+  marks: number;
+  topic_code?: string | null;
+  section?: string | null;
+  learning_outcomes?: string[];
+  ao_codes?: string[];
+  outcome_categories?: string[];
+};
 
 const QUESTION_TYPE_LABELS: Record<string, string> = {
   mcq: "multiple-choice (4 options, one correct)",
@@ -30,6 +53,50 @@ const QUESTION_TYPE_LABELS: Record<string, string> = {
   practical: "practical / applied scenario",
   source_based: "source-based with stimulus and analysis",
 };
+
+// ---------- Blueprint normalisation ----------
+
+function toSections(blueprint: unknown, defaultType: string, fallbackQuestionTypes: string[]): Section[] {
+  // New shape: { sections: [...] }
+  if (
+    blueprint &&
+    typeof blueprint === "object" &&
+    !Array.isArray(blueprint) &&
+    Array.isArray((blueprint as { sections?: unknown }).sections)
+  ) {
+    return ((blueprint as { sections: Section[] }).sections).map((s, i) => ({
+      ...s,
+      letter: s.letter ?? String.fromCharCode(65 + i),
+      num_questions: Math.max(1, s.num_questions || 1),
+      marks: Math.max(1, s.marks || 1),
+      topic_pool: Array.isArray(s.topic_pool) ? s.topic_pool : [],
+    }));
+  }
+  // Legacy flat shape: collapse into a single virtual section.
+  if (Array.isArray(blueprint)) {
+    const rows = blueprint as LegacyBlueprintRow[];
+    if (rows.length === 0) return [];
+    const totalMarks = rows.reduce((acc, r) => acc + (r.marks || 0), 0);
+    return [{
+      letter: "A",
+      question_type: fallbackQuestionTypes[0] ?? defaultType,
+      marks: totalMarks,
+      num_questions: rows.length,
+      bloom: rows[0]?.bloom ?? "Apply",
+      topic_pool: rows.map((r) => ({
+        topic: r.topic,
+        topic_code: r.topic_code ?? null,
+        learning_outcomes: r.learning_outcomes,
+        ao_codes: r.ao_codes,
+        outcome_categories: r.outcome_categories,
+      })),
+      instructions: "Answer all questions in this section.",
+    }];
+  }
+  return [];
+}
+
+// ---------- Prompts ----------
 
 function buildSystemPrompt(subject: string, level: string, paperCode?: string | null) {
   const alignLine = paperCode
@@ -46,68 +113,87 @@ When a "GROUNDED SOURCE" block is provided for a question, you MUST:
   - Place the verbatim source text inside the question stem under a "Source A" heading (or "Passage" for English comprehension).
   - NOT paraphrase, summarise, translate, or alter the source text in any way.
   - Add a citation line directly under the source: \`Source: {publisher} — {url}\`.
-  - Write your sub-questions to refer to the passage / Source A.
+  - Write your sub-questions to refer to the passage / Source A by name (e.g. "According to Source A, …").
   - NEVER fabricate sources, attributions, or URLs of your own.`;
 }
 
-function buildUserPrompt(opts: {
+function buildSectionUserPrompt(opts: {
   title: string; subject: string; level: string; assessmentType: string;
-  totalMarks: number; durationMinutes: number;
-  blueprint: BlueprintRow[]; questionTypes: string[]; itemSources: string[];
+  durationMinutes: number; totalMarks: number;
+  section: Section; sectionIndex: number; totalSections: number;
+  syllabusCode?: string | null; paperCode?: string | null;
+  groundedSources: (GroundedSource | null)[]; // index-aligned with section.num_questions
   instructions?: string;
-  syllabusCode?: string | null;
-  paperCode?: string | null;
-  groundedSources: (GroundedSource | null)[]; // index-aligned with blueprint
 }) {
-  const typeStr = opts.questionTypes.map((t) => `- ${QUESTION_TYPE_LABELS[t] ?? t}`).join("\n");
-  const blueprintStr = opts.blueprint
-    .map((r, i) => {
-      const code = r.topic_code ? ` [${r.topic_code}]` : "";
-      const los = r.learning_outcomes && r.learning_outcomes.length > 0
-        ? `\n   Learning outcomes: ${r.learning_outcomes.slice(0, 4).map((lo) => `• ${lo}`).join(" ")}`
-        : "";
-      const aos = r.ao_codes && r.ao_codes.length > 0
-        ? `\n   Assessment Objectives to address: ${r.ao_codes.join(", ")}`
-        : "";
-      const cats = r.outcome_categories && r.outcome_categories.length > 0
-        ? `\n   Outcome category: ${r.outcome_categories.join(" / ")}`
-        : "";
-      const src = opts.groundedSources[i];
-      const grounded = src
-        ? `\n   GROUNDED SOURCE (use verbatim, do not modify):\n   ---\n   ${src.excerpt}\n   ---\n   Citation: Source: ${src.publisher} — ${src.source_url}\n   Set source_excerpt to the exact text between the dashes above. Set source_url to ${src.source_url}.`
-        : "";
-      return `${i + 1}. Topic${code}: "${r.topic}" — Bloom: ${r.bloom} — ${r.marks} marks${los}${aos}${cats}${grounded}`;
-    })
-    .join("\n");
+  const { section } = opts;
+  const typeLabel = QUESTION_TYPE_LABELS[section.question_type] ?? section.question_type;
+
+  const topicLines = section.topic_pool.map((t, i) => {
+    const code = t.topic_code ? ` [${t.topic_code}]` : "";
+    const los = t.learning_outcomes && t.learning_outcomes.length > 0
+      ? `\n     Learning outcomes: ${t.learning_outcomes.slice(0, 3).map((lo) => `• ${lo}`).join(" ")}`
+      : "";
+    const aos = t.ao_codes && t.ao_codes.length > 0
+      ? `\n     Assessment Objectives: ${t.ao_codes.join(", ")}`
+      : "";
+    return `  ${i + 1}. ${t.topic}${code}${los}${aos}`;
+  }).join("\n");
+
+  const sourceBlocks = opts.groundedSources.map((src, i) => {
+    if (!src) return "";
+    return `\n  Question ${i + 1} GROUNDED SOURCE (use verbatim, do not modify):
+  ---
+  ${src.excerpt}
+  ---
+  Citation: Source: ${src.publisher} — ${src.source_url}
+  Set source_excerpt to the exact text between the dashes above. Set source_url to ${src.source_url}.`;
+  }).join("\n");
 
   const grounding = opts.paperCode
     ? `Aligned to MOE syllabus ${opts.syllabusCode ?? ""} paper ${opts.paperCode}.\n`
     : "";
 
-  return `${grounding}Draft a ${opts.assessmentType} for ${opts.level} ${opts.subject} titled "${opts.title}".
-Duration: ${opts.durationMinutes} minutes. Total marks: ${opts.totalMarks}.
+  const perQMarks = Math.floor(section.marks / Math.max(1, section.num_questions));
+  const remainder = section.marks - perQMarks * section.num_questions;
+  const marksGuide = remainder > 0
+    ? `Distribute ${section.marks} marks across ${section.num_questions} questions. Most questions get ${perQMarks} marks; ${remainder} question(s) get 1 extra mark.`
+    : `Each of the ${section.num_questions} question(s) is worth ${perQMarks} marks (total ${section.marks}).`;
 
-BLUEPRINT (you MUST match the marks per topic+Bloom row):
-${blueprintStr}
+  const sectionLabel = section.name ? `Section ${section.letter} — ${section.name}` : `Section ${section.letter}`;
 
-Allowed question types (mix appropriately, prefer earlier ones for lower marks):
-${typeStr}
+  return `${grounding}You are drafting ${sectionLabel} of "${opts.title}" (${opts.level} ${opts.subject}, ${opts.assessmentType}, ${opts.durationMinutes} min, ${opts.totalMarks} total marks across ${opts.totalSections} sections).
 
-${opts.instructions ? `TEACHER INSTRUCTIONS:\n${opts.instructions}\n` : ""}
-Generate questions whose total marks equal ${opts.totalMarks} and respect the blueprint as closely as possible.
-For each question, choose ONE question_type from this exact list: ${opts.questionTypes.join(", ")}.
-For MCQ, provide exactly 4 options as an array; for non-MCQ, options must be null.
-Difficulty should be one of: easy, medium, hard.
-Bloom_level must be one of: Remember, Understand, Apply, Analyse, Evaluate, Create.
+THIS SECTION:
+  - Question type for ALL questions in this section: ${typeLabel} — DO NOT mix in other types.
+  - Number of questions: exactly ${section.num_questions}
+  - Total marks for the section: ${section.marks}
+  - ${marksGuide}
+  - Bloom's level focus: ${section.bloom ?? "Apply"} (use other levels only if the topic clearly demands it)
+  ${section.instructions ? `- Section instructions for the rubric: ${section.instructions}` : ""}
 
-Call the tool save_assessment with the full list of questions.`;
+ALLOWED TOPICS (pick from these only — DO NOT invent topics outside this pool):
+${topicLines}
+${sourceBlocks}
+
+${opts.instructions ? `TEACHER INSTRUCTIONS (apply to all questions):\n${opts.instructions}\n` : ""}
+For every question:
+  - question_type MUST be exactly "${section.question_type}".
+  - For MCQ provide exactly 4 options as an array; for non-MCQ, options must be null.
+  - difficulty: easy | medium | hard.
+  - bloom_level: Remember | Understand | Apply | Analyse | Evaluate | Create.
+  - The topic field must be one of the allowed topics above (verbatim).
+${section.question_type === "source_based" || section.question_type === "comprehension"
+    ? `  - This is a ${section.question_type === "source_based" ? "source-based" : "comprehension"} question. Build sub-parts (a), (b), (c) that explicitly REFER TO Source A by name and require analysis/inference of the passage — never generic content recall that ignores the source.`
+    : ""}
+
+Call the tool save_assessment with the full list of ${section.num_questions} questions for this section.`;
 }
 
 const TOOL = {
   type: "function",
   function: {
     name: "save_assessment",
-    description: "Save a fully-drafted assessment with all its questions.",
+    description: "Save the questions for this assessment section.",
     parameters: {
       type: "object",
       properties: {
@@ -139,12 +225,46 @@ const TOOL = {
   },
 };
 
+// ---------- AI gateway with retry ----------
+
+async function callAI(messages: Array<{ role: string; content: string }>): Promise<{ ok: boolean; status: number; json?: any; errText?: string }> {
+  const aiBody = JSON.stringify({
+    model: "google/gemini-2.5-pro",
+    messages,
+    tools: [TOOL],
+    tool_choice: { type: "function", function: { name: "save_assessment" } },
+  });
+  let aiResp: Response | null = null;
+  let lastErrTxt = "";
+  for (let attempt = 0; attempt < 3; attempt++) {
+    aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: aiBody,
+    });
+    if (aiResp.ok) break;
+    lastErrTxt = await aiResp.text().catch(() => "");
+    const transient = aiResp.status === 502 || aiResp.status === 503 || aiResp.status === 504;
+    console.warn(`[generate] AI attempt ${attempt + 1} failed status=${aiResp.status} transient=${transient}`);
+    if (!transient) break;
+    if (attempt < 2) await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+  }
+  if (!aiResp || !aiResp.ok) {
+    return { ok: false, status: aiResp?.status ?? 500, errText: lastErrTxt };
+  }
+  const json = await aiResp.json();
+  return { ok: true, status: 200, json };
+}
+
+// ---------- Main handler ----------
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    // Free-trial mode: no auth required. Use the service role to bypass RLS
-    // and accept the trial user id from the request body.
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -153,45 +273,22 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const {
       assessmentId, title, subject, level, assessmentType, durationMinutes,
-      totalMarks, blueprint, questionTypes, itemSources, instructions,
+      totalMarks, blueprint, questionTypes, instructions,
       userId: bodyUserId,
       syllabusCode, paperCode,
     } = body;
     const userId = bodyUserId ?? "00000000-0000-0000-0000-000000000001";
 
-    // Pre-fetch grounded sources for History / Social Studies (SBQ) and English
-    // (comprehension or source-based) rows.
-    // For Humanities: EVERY question gets exactly one unique source, regardless of
-    // the question type the model would have chosen. Questions without a successfully
-    // fetched source are dropped after generation.
-    const subjectKind = classifySubject(subject);
-    const wantsSourceBased = Array.isArray(questionTypes) && questionTypes.includes("source_based");
-    const wantsComprehension = Array.isArray(questionTypes) && questionTypes.includes("comprehension");
-    const sourceGate =
-      subjectKind === "humanities" ||
-      (subjectKind === "english" && (wantsComprehension || wantsSourceBased));
-    const groundedSources: (GroundedSource | null)[] = [];
-    if (sourceGate && subjectKind) {
-      console.log("[generate] source-grounding enabled for subject:", subject, "kind:", subjectKind);
-      const usedHosts = new Set<string>();
-      const usedUrls = new Set<string>();
-      for (const row of blueprint as BlueprintRow[]) {
-        try {
-          const src = await fetchGroundedSource(subjectKind, row.topic, row.learning_outcomes ?? [], usedHosts, usedUrls);
-          groundedSources.push(src);
-          if (subjectKind === "humanities" && !src) {
-            console.warn("[generate] humanities row has no source, will be dropped:", row.topic);
-          }
-        } catch (e) {
-          console.warn("[generate] source fetch failed for row", row.topic, e);
-          groundedSources.push(null);
-        }
-      }
-    } else {
-      for (let i = 0; i < (blueprint as BlueprintRow[]).length; i++) groundedSources.push(null);
+    const fallbackTypes = Array.isArray(questionTypes) ? questionTypes : [];
+    const sections = toSections(blueprint, "structured", fallbackTypes);
+    if (sections.length === 0) {
+      return new Response(JSON.stringify({ error: "Blueprint has no sections" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Fetch past-paper exemplars (auto-match by subject + level) to anchor style/difficulty.
+    const subjectKind = classifySubject(subject);
+    const scienceMathKind = classifyScienceMath(subject);
+
+    // Fetch past-paper exemplars once for the whole paper (style anchor).
     let exemplarBlock = "";
     try {
       const ex = await fetchExemplars(supabase, subject, level);
@@ -201,189 +298,200 @@ Deno.serve(async (req) => {
       console.warn("[generate] exemplar fetch failed", e);
     }
 
-    const messages: Array<{ role: string; content: string }> = [
-      { role: "system", content: buildSystemPrompt(subject, level, paperCode) },
-    ];
-    if (exemplarBlock) messages.push({ role: "system", content: exemplarBlock });
-    messages.push({ role: "user", content: buildUserPrompt({
-      title, subject, level, assessmentType, totalMarks, durationMinutes,
-      blueprint, questionTypes, itemSources, instructions,
-      syllabusCode, paperCode, groundedSources,
-    }) });
+    // Shared dedup sets so no two questions across the whole paper reuse a source.
+    const usedHosts = new Set<string>();
+    const usedUrls = new Set<string>();
 
-    // Call the AI gateway with retry on transient upstream errors (502/503/504).
-    const aiBody = JSON.stringify({
-      model: "google/gemini-2.5-pro",
-      messages,
-      tools: [TOOL],
-      tool_choice: { type: "function", function: { name: "save_assessment" } },
-    });
-    let aiResp: Response | null = null;
-    let lastErrTxt = "";
-    for (let attempt = 0; attempt < 3; attempt++) {
-      aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: aiBody,
-      });
-      if (aiResp.ok) break;
-      lastErrTxt = await aiResp.text().catch(() => "");
-      const transient = aiResp.status === 502 || aiResp.status === 503 || aiResp.status === 504;
-      console.warn(`[generate] AI attempt ${attempt + 1} failed status=${aiResp.status} transient=${transient}`);
-      if (!transient) break;
-      // Exponential backoff: 1s, 2s
-      if (attempt < 2) await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
-    }
+    type EnrichedRow = {
+      assessment_id: string; user_id: string; position: number;
+      question_type: string; topic: string | null; bloom_level: string | null;
+      difficulty: string | null; marks: number; stem: string;
+      options: string[] | null; answer: string | null; mark_scheme: string | null;
+      source_excerpt: string | null; source_url: string | null; notes: string | null;
+      diagram_url: string | null; diagram_source: string | null;
+      diagram_citation: string | null; diagram_caption: string | null;
+    };
 
-    if (!aiResp || !aiResp.ok) {
-      const status = aiResp?.status ?? 500;
-      console.error("AI error", status, lastErrTxt.slice(0, 500));
-      if (status === 429) return new Response(JSON.stringify({ error: "Rate limit, please retry" }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      if (status === 402) return new Response(JSON.stringify({ error: "AI credits exhausted" }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      if (status === 502 || status === 503 || status === 504) {
-        return new Response(JSON.stringify({ error: "AI service temporarily unavailable. Please try again in a moment." }), { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      }
-      return new Response(JSON.stringify({ error: "AI failed", details: lastErrTxt.slice(0, 500) }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
+    const allRows: EnrichedRow[] = [];
+    let droppedNoSource = 0;
+    let groundedCount = 0;
+    let diagramCount = 0;
+    let sectionFailures = 0;
 
+    // Pick a topic pool entry, round-robining so all topics in the pool are covered.
+    const pickTopic = (s: Section, qIdx: number): SectionTopic | null => {
+      if (s.topic_pool.length === 0) return null;
+      return s.topic_pool[qIdx % s.topic_pool.length];
+    };
 
-    const aiJson = await aiResp.json();
-    const toolCall = aiJson.choices?.[0]?.message?.tool_calls?.[0];
-    if (!toolCall) {
-      console.error("No tool call", JSON.stringify(aiJson));
-      return new Response(JSON.stringify({ error: "AI did not return structured questions" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-    const args = JSON.parse(toolCall.function.arguments);
-    const questions: any[] = args.questions ?? [];
+    for (let si = 0; si < sections.length; si++) {
+      const section = sections[si];
+      console.log(`[generate] section ${section.letter} (${section.question_type}) — ${section.num_questions} questions, ${section.marks} marks`);
 
-    // Build a normalized lookup of grounded excerpts to verify byte-equality.
-    const expectedByIndex = groundedSources.map((s) => s?.excerpt ?? null);
+      // Decide which questions in this section need a grounded source.
+      // Humanities + non-essay = always; English + (source_based|comprehension) = always; otherwise none.
+      const isHumanitiesNonEssay =
+        subjectKind === "humanities" &&
+        section.question_type !== "long" &&
+        section.question_type !== "structured";
+      const isEnglishSourcey =
+        subjectKind === "english" &&
+        (section.question_type === "source_based" || section.question_type === "comprehension");
+      const needsSourcePerQ = isHumanitiesNonEssay || isEnglishSourcey;
 
-    // Diagram cascade for science/math questions (after AI returns).
-    const scienceMathKind = classifyScienceMath(subject);
-    const diagramByIndex: (Awaited<ReturnType<typeof fetchDiagram>>)[] = [];
-    if (scienceMathKind) {
-      console.log("[generate] diagram pipeline enabled for", subject, "kind:", scienceMathKind);
-      for (let i = 0; i < questions.length; i++) {
-        const q = questions[i];
-        const blueprintRow = (blueprint as BlueprintRow[])[i];
-        const wantDiagram = questionWantsDiagram(
-          scienceMathKind,
-          [q.question_type],
-          q.topic ?? blueprintRow?.topic ?? "",
-          blueprintRow?.learning_outcomes ?? [],
-        );
-        if (!wantDiagram) { diagramByIndex.push(null); continue; }
-        try {
-          const d = await fetchDiagram({
-            supabase,
-            kind: scienceMathKind,
-            subject,
-            level,
-            topic: q.topic ?? blueprintRow?.topic ?? "",
-            learningOutcomes: blueprintRow?.learning_outcomes ?? [],
-            assessmentId,
-          });
-          diagramByIndex.push(d);
-        } catch (e) {
-          console.warn("[generate] diagram fetch failed for q", i, e);
-          diagramByIndex.push(null);
-        }
-      }
-    } else {
-      for (let i = 0; i < questions.length; i++) diagramByIndex.push(null);
-    }
-
-    // Insert all questions
-    let droppedHumanitiesNoSource = 0;
-    const rows = questions.map((q, i) => {
-      const expected = expectedByIndex[i] ?? null;
-      let source_excerpt: string | null = q.source_excerpt ?? null;
-      let source_url: string | null = q.source_url ?? null;
-      let notes: string | null = null;
-      let question_type: string = q.question_type;
-
-      // Humanities: essays/long-answer questions never need a source.
-      // All other Humanities question types MUST have exactly one unique source.
-      const isEssay = question_type === "long" || question_type === "structured";
-      if (subjectKind === "humanities" && !isEssay) {
-        if (!expected) {
-          // Drop this question — no source could be retrieved for a non-essay humanities question.
-          droppedHumanitiesNoSource++;
-          return null;
-        }
-        question_type = "source_based";
-        source_excerpt = expected;
-        source_url = groundedSources[i]?.source_url ?? null;
-        if (q.source_excerpt !== expected) {
-          notes = "Source excerpt enforced from retrieved citation (model attempted to alter it).";
+      // Pre-fetch grounded sources for each question slot.
+      const sourcesForSection: (GroundedSource | null)[] = [];
+      if (needsSourcePerQ && subjectKind) {
+        for (let qi = 0; qi < section.num_questions; qi++) {
+          const t = pickTopic(section, qi);
+          if (!t) { sourcesForSection.push(null); continue; }
+          try {
+            const src = await fetchGroundedSource(subjectKind, t.topic, t.learning_outcomes ?? [], usedHosts, usedUrls);
+            sourcesForSection.push(src);
+          } catch (e) {
+            console.warn("[generate] source fetch failed for", t.topic, e);
+            sourcesForSection.push(null);
+          }
         }
       } else {
-        const needsSource = question_type === "source_based" || question_type === "comprehension";
-        if (!needsSource) {
-          // Structured / long / MCQ / short_answer / practical → no source attached, ever.
-          source_excerpt = null;
-          source_url = null;
-        } else if (expected) {
-          // Anti-hallucination: require exact verbatim excerpt back.
-          if (source_excerpt !== expected) {
-            source_excerpt = expected;
-            source_url = groundedSources[i]?.source_url ?? source_url;
+        for (let qi = 0; qi < section.num_questions; qi++) sourcesForSection.push(null);
+      }
+
+      // Build prompt + call AI for this section only.
+      const messages: Array<{ role: string; content: string }> = [
+        { role: "system", content: buildSystemPrompt(subject, level, paperCode) },
+      ];
+      if (exemplarBlock) messages.push({ role: "system", content: exemplarBlock });
+      messages.push({
+        role: "user",
+        content: buildSectionUserPrompt({
+          title, subject, level, assessmentType, totalMarks, durationMinutes,
+          section, sectionIndex: si, totalSections: sections.length,
+          syllabusCode, paperCode, groundedSources: sourcesForSection, instructions,
+        }),
+      });
+
+      const ai = await callAI(messages);
+      if (!ai.ok) {
+        console.error(`[generate] section ${section.letter} AI error`, ai.status, (ai.errText ?? "").slice(0, 300));
+        sectionFailures++;
+        continue;
+      }
+      const toolCall = ai.json?.choices?.[0]?.message?.tool_calls?.[0];
+      if (!toolCall) {
+        console.error(`[generate] section ${section.letter}: no tool call`, JSON.stringify(ai.json).slice(0, 300));
+        sectionFailures++;
+        continue;
+      }
+      let parsed: { questions?: any[] };
+      try { parsed = JSON.parse(toolCall.function.arguments); }
+      catch { sectionFailures++; continue; }
+      const questions = parsed.questions ?? [];
+
+      // Per-question post-processing: enforce source attachment, drop unsupported.
+      for (let qi = 0; qi < questions.length; qi++) {
+        const q = questions[qi];
+        const expectedSrc = sourcesForSection[qi];
+        let question_type: string = section.question_type; // FORCE section's type
+        let source_excerpt: string | null = q.source_excerpt ?? null;
+        let source_url: string | null = q.source_url ?? null;
+        let notes: string | null = null;
+
+        if (needsSourcePerQ) {
+          if (!expectedSrc) {
+            // Could not retrieve a source for a question that requires one — drop it.
+            droppedNoSource++;
+            continue;
+          }
+          // Force source_based for humanities so the editor renders the passage UI.
+          if (subjectKind === "humanities") question_type = "source_based";
+          source_excerpt = expectedSrc.excerpt;
+          source_url = expectedSrc.source_url;
+          if (q.source_excerpt !== expectedSrc.excerpt) {
             notes = "Source excerpt enforced from retrieved citation (model attempted to alter it).";
           }
-        } else if (sourceGate) {
-          notes = "Source retrieval failed for this row — please attach a passage manually.";
+          groundedCount++;
+        } else {
+          // Sections that don't need a source must not carry one.
           source_excerpt = null;
           source_url = null;
         }
+
+        // Diagram cascade for science/math (only for question types that benefit).
+        let diag: Awaited<ReturnType<typeof fetchDiagram>> | null = null;
+        if (scienceMathKind) {
+          const t = pickTopic(section, qi);
+          const wantDiagram = questionWantsDiagram(
+            scienceMathKind,
+            [question_type],
+            q.topic ?? t?.topic ?? "",
+            t?.learning_outcomes ?? [],
+          );
+          if (wantDiagram) {
+            try {
+              diag = await fetchDiagram({
+                supabase, kind: scienceMathKind, subject, level,
+                topic: q.topic ?? t?.topic ?? "",
+                learningOutcomes: t?.learning_outcomes ?? [],
+                assessmentId,
+              });
+              if (diag) diagramCount++;
+            } catch (e) {
+              console.warn("[generate] diagram fetch failed", e);
+            }
+          }
+        }
+
+        allRows.push({
+          assessment_id: assessmentId,
+          user_id: userId,
+          position: allRows.length,
+          question_type,
+          topic: q.topic ?? null,
+          bloom_level: q.bloom_level ?? section.bloom ?? null,
+          difficulty: q.difficulty ?? null,
+          marks: q.marks ?? 1,
+          stem: q.stem,
+          options: q.options ?? null,
+          answer: q.answer ?? null,
+          mark_scheme: q.mark_scheme ?? null,
+          source_excerpt,
+          source_url,
+          notes,
+          diagram_url: diag?.url ?? null,
+          diagram_source: diag?.source ?? null,
+          diagram_citation: diag?.citation ?? null,
+          diagram_caption: diag?.caption ?? null,
+        });
       }
-
-      const diag = diagramByIndex[i];
-      return {
-        assessment_id: assessmentId,
-        user_id: userId,
-        position: i,
-        question_type,
-        topic: q.topic ?? null,
-        bloom_level: q.bloom_level ?? null,
-        difficulty: q.difficulty ?? null,
-        marks: q.marks ?? 1,
-        stem: q.stem,
-        options: q.options ?? null,
-        answer: q.answer ?? null,
-        mark_scheme: q.mark_scheme ?? null,
-        source_excerpt,
-        source_url,
-        notes,
-        diagram_url: diag?.url ?? null,
-        diagram_source: diag?.source ?? null,
-        diagram_citation: diag?.citation ?? null,
-        diagram_caption: diag?.caption ?? null,
-      };
-    }).filter((r): r is NonNullable<typeof r> => r !== null)
-      // Re-number positions after dropping rows
-      .map((r, i) => ({ ...r, position: i }));
-
-    if (droppedHumanitiesNoSource > 0) {
-      console.warn(`[generate] dropped ${droppedHumanitiesNoSource} humanities question(s) with no retrievable source`);
     }
 
-    if (rows.length > 0) {
-      const { error: insErr } = await supabase.from("assessment_questions").insert(rows);
+    if (droppedNoSource > 0) {
+      console.warn(`[generate] dropped ${droppedNoSource} question(s) with no retrievable source`);
+    }
+    if (sectionFailures > 0) {
+      console.warn(`[generate] ${sectionFailures} section(s) failed to generate`);
+    }
+
+    if (allRows.length > 0) {
+      const { error: insErr } = await supabase.from("assessment_questions").insert(allRows);
       if (insErr) {
         console.error("Insert error", insErr);
         return new Response(JSON.stringify({ error: insErr.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
     }
 
+    if (allRows.length === 0 && sectionFailures > 0) {
+      return new Response(JSON.stringify({ error: "AI service temporarily unavailable. Please try again in a moment." }), { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     return new Response(JSON.stringify({
       ok: true,
-      questionCount: rows.length,
-      groundedCount: groundedSources.filter(Boolean).length,
-      diagramCount: diagramByIndex.filter(Boolean).length,
+      questionCount: allRows.length,
+      groundedCount,
+      diagramCount,
+      droppedNoSource,
+      sectionFailures,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
