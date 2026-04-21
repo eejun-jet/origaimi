@@ -239,11 +239,14 @@ async function firecrawlScrape(url: string): Promise<{ markdown: string; title: 
   return { markdown, title };
 }
 
-/** Search + scrape + extract a usable 100–180 word excerpt. Returns null on total failure. */
+/** Search + scrape + extract a usable 100–180 word excerpt. Returns null on total failure.
+ *  When `usedHosts` is provided, results from already-used hostnames are skipped so each
+ *  generated assessment ends up with at most one source per site. */
 export async function fetchGroundedSource(
   subjectKind: Exclude<SubjectKind, null>,
   topic: string,
   learningOutcomes: string[] = [],
+  usedHosts?: Set<string>,
 ): Promise<GroundedSource | null> {
   const allowList = subjectKind === "english" ? ALLOW_DOMAINS_ENGLISH : ALLOW_DOMAINS_HUMANITIES;
   const query = buildQuery(subjectKind, topic, learningOutcomes);
@@ -252,12 +255,22 @@ export async function fetchGroundedSource(
     console.warn("[sources] no allow-listed search results for query:", query);
     return null;
   }
-  for (const url of urls.slice(0, 3)) {
+  // Filter out hosts already used in this assessment so every source comes from a different site.
+  const candidates = usedHosts
+    ? urls.filter((u) => !usedHosts.has(hostnameOf(u)))
+    : urls;
+  if (candidates.length === 0) {
+    console.warn("[sources] all candidate URLs are from already-used hosts for query:", query);
+    return null;
+  }
+  for (const url of candidates.slice(0, 5)) {
     try {
       const scraped = await firecrawlScrape(url);
       if (!scraped) continue;
       const excerpt = extractExcerpt(scraped.markdown);
       if (!excerpt) continue;
+      const host = hostnameOf(url);
+      if (usedHosts) usedHosts.add(host);
       return {
         excerpt,
         source_url: url,
