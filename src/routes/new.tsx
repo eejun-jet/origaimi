@@ -20,6 +20,7 @@ import {
 import {
   type Section, type SectionTopic, type SectionedBlueprint,
   defaultSection, nextSectionLetter, blueprintTotalMarks,
+  SBQ_SKILLS, getSbqSkill, isHumanitiesSubject, type SbqSkill,
 } from "@/lib/sections";
 import { ChevronLeft, ChevronRight, Sparkles, Loader2, BookOpen, Upload, Plus, Trash2, ChevronUp, ChevronDown } from "lucide-react";
 import { Link } from "@tanstack/react-router";
@@ -1062,7 +1063,7 @@ type SectionCardProps = {
 };
 
 function SectionCard({
-  section, isFirst, isLast, masterPool, visibleQuestionTypes, onUpdate, onRemove, onMove,
+  section, isFirst, isLast, masterPool, visibleQuestionTypes, subject, onUpdate, onRemove, onMove,
 }: SectionCardProps) {
   const pickedKeys = new Set(section.topic_pool.map((t) => `${t.topic_code ?? ""}::${t.topic}`));
   const toggleTopic = (t: SectionTopic) => {
@@ -1071,6 +1072,26 @@ function SectionCard({
       ? section.topic_pool.filter((p) => `${p.topic_code ?? ""}::${p.topic}` !== key)
       : [...section.topic_pool, t];
     onUpdate({ topic_pool: next });
+  };
+
+  const showSbqSkill = section.question_type === "source_based" && isHumanitiesSubject(subject);
+  const currentSkill = getSbqSkill(section.sbq_skill);
+  const skillLocked = currentSkill?.locked ?? false;
+  const allowedMarks = currentSkill?.marks;
+
+  const handleSkillChange = (skillId: string) => {
+    const skill = getSbqSkill(skillId);
+    if (!skill) return;
+    const patch: Partial<Section> = { sbq_skill: skill.id as SbqSkill };
+    // For locked skills (Assertion = 8 marks, 1 question), enforce the canonical shape.
+    if (skill.locked) {
+      patch.num_questions = 1;
+      patch.marks = skill.default;
+    } else if (!allowedMarks || !allowedMarks.includes(Math.floor(section.marks / Math.max(1, section.num_questions)))) {
+      // If per-question marks fall outside the new skill's allowed range, snap to default.
+      patch.marks = skill.default * Math.max(1, section.num_questions);
+    }
+    onUpdate(patch);
   };
 
   return (
@@ -1101,7 +1122,7 @@ function SectionCard({
       <div className="mt-3 grid gap-3 sm:grid-cols-4">
         <div>
           <Label className="text-xs">Question type</Label>
-          <Select value={section.question_type} onValueChange={(v) => onUpdate({ question_type: v })}>
+          <Select value={section.question_type} onValueChange={(v) => onUpdate({ question_type: v, ...(v !== "source_based" ? { sbq_skill: undefined } : {}) })}>
             <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
             <SelectContent>
               {visibleQuestionTypes.map((q) => (
@@ -1122,6 +1143,7 @@ function SectionCard({
         <div>
           <Label className="text-xs"># Questions</Label>
           <Input type="number" min={1} className="h-9"
+            disabled={skillLocked}
             value={section.num_questions}
             onChange={(e) => onUpdate({ num_questions: Math.max(1, parseInt(e.target.value || "1", 10)) })}
           />
@@ -1129,11 +1151,37 @@ function SectionCard({
         <div>
           <Label className="text-xs">Total marks</Label>
           <Input type="number" min={1} className="h-9"
+            disabled={skillLocked}
             value={section.marks}
             onChange={(e) => onUpdate({ marks: Math.max(1, parseInt(e.target.value || "1", 10)) })}
           />
         </div>
       </div>
+
+      {showSbqSkill && (
+        <div className="mt-3 rounded-md border border-primary/30 bg-primary-soft/20 p-3">
+          <Label className="text-xs font-medium">SBQ Skill (History / Social Studies)</Label>
+          <div className="mt-1 grid gap-2 sm:grid-cols-2">
+            <Select value={section.sbq_skill ?? ""} onValueChange={handleSkillChange}>
+              <SelectTrigger className="h-9"><SelectValue placeholder="Select a skill type…" /></SelectTrigger>
+              <SelectContent>
+                {SBQ_SKILLS.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.label} {s.locked ? `(${s.default}m, fixed)` : `(${s.marks.join("/")}m)`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {currentSkill && (
+              <p className="text-xs text-muted-foreground self-center">
+                {currentSkill.locked
+                  ? `Assertion is always ${currentSkill.default} marks with all sources used as evidence.`
+                  : `Each question should be worth ${currentSkill.marks.join(", ")} or ${currentSkill.marks[currentSkill.marks.length - 1]} marks.`}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="mt-3">
         <Label className="text-xs">Topic pool ({section.topic_pool.length} selected)</Label>
