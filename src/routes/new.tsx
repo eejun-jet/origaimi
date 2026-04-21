@@ -504,52 +504,16 @@ function NewAssessment() {
             <div className="space-y-5">
               <h2 className="font-paper text-xl font-semibold">Table of Specifications</h2>
               <p className="text-sm text-muted-foreground">
-                Set Bloom's level and marks per topic — your TOS. Total must equal {totalMarks} marks.
+                Tag each topic with one or more Assessment Objectives and assign marks.
+                Total must equal {totalMarks} marks.
               </p>
-              <div className="overflow-x-auto rounded-lg border border-border">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                    <tr>
-                      <th className="px-3 py-2">Topic</th>
-                      <th className="px-3 py-2">Bloom's</th>
-                      <th className="px-3 py-2 text-right">Marks</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {blueprint.map((row, i) => (
-                      <tr key={i} className="border-t border-border">
-                        <td className="px-3 py-2">
-                          {row.topic_code && (
-                            <span className="mr-1.5 font-mono text-xs text-muted-foreground">{row.topic_code}</span>
-                          )}
-                          {row.topic.replace(`${row.topic_code} · `, "")}
-                        </td>
-                        <td className="px-3 py-2">
-                          <Select value={row.bloom} onValueChange={(v) => updateBlueprintRow(i, { bloom: v })}>
-                            <SelectTrigger className="h-8 w-[140px]"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              {BLOOMS.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                        </td>
-                        <td className="px-3 py-2 text-right">
-                          <Input type="number" min={1} value={row.marks}
-                            className="ml-auto h-8 w-20 text-right"
-                            onChange={(e) => updateBlueprintRow(i, { marks: Number(e.target.value) })} />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t border-border bg-muted/30">
-                      <td className="px-3 py-2 font-medium" colSpan={2}>Total</td>
-                      <td className={`px-3 py-2 text-right font-medium ${blueprintSum === totalMarks ? "text-success" : "text-destructive"}`}>
-                        {blueprintSum} / {totalMarks}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
+              <BlueprintTable
+                blueprint={blueprint}
+                totalMarks={totalMarks}
+                blueprintSum={blueprintSum}
+                paperAOs={docAOs.filter((a) => !a.paperId || a.paperId === selected?.paper.id)}
+                onUpdate={updateBlueprintRow}
+              />
               <CoverageStrips blueprint={blueprint} aos={docAOs.filter((a) => !a.paperId || a.paperId === selected?.paper.id)} />
             </div>
           )}
