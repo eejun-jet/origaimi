@@ -130,6 +130,9 @@ export type Database = {
           question_types: Json | null
           status: string
           subject: string
+          syllabus_code: string | null
+          syllabus_doc_id: string | null
+          syllabus_paper_id: string | null
           title: string
           topics: Json | null
           total_marks: number
@@ -148,6 +151,9 @@ export type Database = {
           question_types?: Json | null
           status?: string
           subject: string
+          syllabus_code?: string | null
+          syllabus_doc_id?: string | null
+          syllabus_paper_id?: string | null
           title: string
           topics?: Json | null
           total_marks?: number
@@ -166,13 +172,31 @@ export type Database = {
           question_types?: Json | null
           status?: string
           subject?: string
+          syllabus_code?: string | null
+          syllabus_doc_id?: string | null
+          syllabus_paper_id?: string | null
           title?: string
           topics?: Json | null
           total_marks?: number
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "assessments_syllabus_doc_id_fkey"
+            columns: ["syllabus_doc_id"]
+            isOneToOne: false
+            referencedRelation: "syllabus_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assessments_syllabus_paper_id_fkey"
+            columns: ["syllabus_paper_id"]
+            isOneToOne: false
+            referencedRelation: "syllabus_papers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
