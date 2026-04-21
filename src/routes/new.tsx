@@ -1075,23 +1075,21 @@ function SectionCard({
   };
 
   const showSbqSkill = section.question_type === "source_based" && isHumanitiesSubject(subject);
-  const currentSkill = getSbqSkill(section.sbq_skill);
-  const skillLocked = currentSkill?.locked ?? false;
-  const allowedMarks = currentSkill?.marks;
+  const selectedSkills = getSectionSkills(section);
+  const selectedSet = new Set<string>(selectedSkills);
+  const atMax = selectedSkills.length >= MAX_SBQ_SKILLS;
+  const hasAssertion = selectedSet.has("assertion");
 
-  const handleSkillChange = (skillId: string) => {
-    const skill = getSbqSkill(skillId);
-    if (!skill) return;
-    const patch: Partial<Section> = { sbq_skill: skill.id as SbqSkill };
-    // For locked skills (Assertion = 8 marks, 1 question), enforce the canonical shape.
-    if (skill.locked) {
-      patch.num_questions = 1;
-      patch.marks = skill.default;
-    } else if (!allowedMarks || !(allowedMarks as readonly number[]).includes(Math.floor(section.marks / Math.max(1, section.num_questions)))) {
-      // If per-question marks fall outside the new skill's allowed range, snap to default.
-      patch.marks = skill.default * Math.max(1, section.num_questions);
+  const toggleSkill = (skillId: SbqSkill) => {
+    const isOn = selectedSet.has(skillId);
+    let next: SbqSkill[];
+    if (isOn) {
+      next = selectedSkills.filter((s) => s !== skillId);
+    } else {
+      if (atMax) return;
+      next = [...selectedSkills, skillId];
     }
-    onUpdate(patch);
+    onUpdate({ sbq_skills: next, sbq_skill: undefined });
   };
 
   return (
