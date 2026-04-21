@@ -803,12 +803,14 @@ function BlueprintTable({
   totalMarks,
   blueprintSum,
   paperAOs,
+  aosAreSyllabusWide,
   onUpdate,
 }: {
   blueprint: Blueprint;
   totalMarks: number;
   blueprintSum: number;
   paperAOs: AssessmentObjective[];
+  aosAreSyllabusWide?: boolean;
   onUpdate: (i: number, patch: Partial<BlueprintRow>) => void;
 }) {
   const groups = useMemo(() => {
