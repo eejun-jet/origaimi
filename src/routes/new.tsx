@@ -97,10 +97,26 @@ function NewAssessment() {
     return () => { cancelled = true; };
   }, []);
 
-  const filteredLibrary = useMemo(
-    () => library.filter((d) => matchesBandStream(d.level, bandFilter, streamFilter)),
-    [library, bandFilter, streamFilter],
-  );
+  // Subject/level are the primary scope; stream narrows within the band.
+  // Band is derived from level (P* → primary, Sec/S* → secondary).
+  const filteredLibrary = useMemo(() => {
+    return library.filter((d) => {
+      if (!d.level) return false;
+      const c = classifyLevel(d.level);
+      if (!c) return false;
+      // Match band derived from the user's chosen level.
+      const userBand = classifyLevel(level)?.band;
+      if (!userBand || c.band !== userBand) return false;
+      if (c.stream !== streamFilter) return false;
+      // Subject match (case-insensitive substring to allow "PSLE Mathematics" vs "Mathematics").
+      if (subject && d.subject) {
+        const a = d.subject.toLowerCase();
+        const b = subject.toLowerCase();
+        if (!a.includes(b) && !b.includes(a)) return false;
+      }
+      return true;
+    });
+  }, [library, subject, level, streamFilter]);
 
   // If the current selection no longer matches the active filter, clear it.
   useEffect(() => {
