@@ -5,6 +5,8 @@
 //
 // Returns null if no usable 100–180 word excerpt can be extracted.
 
+import { tavilySearch, hasTavily } from "../_shared/tavily.ts";
+
 const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY") ?? "";
 
 // Allow-list for History / Social Studies (primary / news / heritage).
@@ -167,7 +169,6 @@ async function firecrawlSearch(query: string, allowList: string[]): Promise<stri
     return [];
   }
   const json = await resp.json();
-  // v2 shape: { data: { web: [{ url, title, ... }] } } or { web: [...] }
   const results = json?.data?.web ?? json?.web ?? json?.data ?? [];
   const urls: string[] = [];
   for (const r of results) {
@@ -175,6 +176,21 @@ async function firecrawlSearch(query: string, allowList: string[]): Promise<stri
     if (typeof url === "string") urls.push(url);
   }
   return urls.filter((u) => isAllowed(u, allowList)).slice(0, 5);
+}
+
+/** Try Tavily first (native domain filtering), fall back to Firecrawl. */
+async function searchUrls(query: string, allowList: string[]): Promise<string[]> {
+  if (hasTavily()) {
+    const { results } = await tavilySearch(query, {
+      includeDomains: allowList,
+      excludeDomains: DENY_DOMAINS,
+      maxResults: 10,
+    });
+    const urls = results.map((r) => r.url).filter((u) => isAllowed(u, allowList));
+    if (urls.length > 0) return urls.slice(0, 5);
+    console.warn("[sources] tavily returned 0 allow-listed results, falling back to firecrawl");
+  }
+  return firecrawlSearch(query, allowList);
 }
 
 async function firecrawlScrape(url: string): Promise<{ markdown: string; title: string } | null> {
@@ -207,7 +223,7 @@ export async function fetchGroundedSource(
 ): Promise<GroundedSource | null> {
   const allowList = subjectKind === "english" ? ALLOW_DOMAINS_ENGLISH : ALLOW_DOMAINS_HUMANITIES;
   const query = buildQuery(subjectKind, topic, learningOutcomes);
-  const urls = await firecrawlSearch(query, allowList);
+  const urls = await searchUrls(query, allowList);
   if (urls.length === 0) {
     console.warn("[sources] no allow-listed search results for query:", query);
     return null;
