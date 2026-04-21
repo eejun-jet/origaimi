@@ -79,6 +79,14 @@ function NewAssessment() {
   const [step, setStep] = useState(1);
   const [busy, setBusy] = useState(false);
 
+  // Step 1 / basics — auto-filled when a syllabus paper is selected
+  const [title, setTitle] = useState("");
+  const [subject, setSubject] = useState<string>(SUBJECTS[0]);
+  const [level, setLevel] = useState<string>("P5");
+  const [aType, setAType] = useState<string>("topical");
+  const [duration, setDuration] = useState(60);
+  const [totalMarks, setTotalMarks] = useState(50);
+
   // Syllabus library
   const [library, setLibrary] = useState<SyllabusLibraryDoc[]>([]);
   const [libLoading, setLibLoading] = useState(true);
@@ -97,18 +105,23 @@ function NewAssessment() {
     return () => { cancelled = true; };
   }, []);
 
-  // Subject/level are the primary scope; stream narrows within the band.
-  // Band is derived from level (P* → primary, Sec/S* → secondary).
+  // Derived band from the chosen Level (P* → primary, Sec/S* → secondary).
+  const userBand: Band = useMemo(() => classifyLevel(level)?.band ?? "primary", [level]);
+
+  // When the level's band changes, snap the stream to a valid choice for that band.
+  useEffect(() => {
+    const valid = STREAMS_FOR_BAND[userBand].map((s) => s.id);
+    if (!valid.includes(streamFilter)) setStreamFilter(STREAMS_FOR_BAND[userBand][0].id);
+  }, [userBand, streamFilter]);
+
+  // Filter the syllabus library by subject + level-band + stream.
   const filteredLibrary = useMemo(() => {
     return library.filter((d) => {
       if (!d.level) return false;
       const c = classifyLevel(d.level);
       if (!c) return false;
-      // Match band derived from the user's chosen level.
-      const userBand = classifyLevel(level)?.band;
-      if (!userBand || c.band !== userBand) return false;
+      if (c.band !== userBand) return false;
       if (c.stream !== streamFilter) return false;
-      // Subject match (case-insensitive substring to allow "PSLE Mathematics" vs "Mathematics").
       if (subject && d.subject) {
         const a = d.subject.toLowerCase();
         const b = subject.toLowerCase();
@@ -116,7 +129,7 @@ function NewAssessment() {
       }
       return true;
     });
-  }, [library, subject, level, streamFilter]);
+  }, [library, subject, userBand, streamFilter]);
 
   // If the current selection no longer matches the active filter, clear it.
   useEffect(() => {
@@ -135,15 +148,6 @@ function NewAssessment() {
   }, [selectedPaperKey, library]);
 
   const useSyllabus = !!selected;
-
-
-  // Step 1 / basics — auto-filled when a syllabus paper is selected
-  const [title, setTitle] = useState("");
-  const [subject, setSubject] = useState<string>(SUBJECTS[0]);
-  const [level, setLevel] = useState<string>("P5");
-  const [aType, setAType] = useState<string>("topical");
-  const [duration, setDuration] = useState(60);
-  const [totalMarks, setTotalMarks] = useState(50);
 
   // When the selected paper changes, load its topics + prefill metadata.
   // For multi-track MCQ papers (e.g. 5086/01) topics live on sibling
