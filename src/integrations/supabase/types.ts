@@ -28,6 +28,8 @@ export type Database = {
           options: Json | null
           position: number
           question_type: string
+          source_excerpt: string | null
+          source_url: string | null
           stem: string
           topic: string | null
           updated_at: string
@@ -47,6 +49,8 @@ export type Database = {
           options?: Json | null
           position?: number
           question_type: string
+          source_excerpt?: string | null
+          source_url?: string | null
           stem: string
           topic?: string | null
           updated_at?: string
@@ -66,6 +70,8 @@ export type Database = {
           options?: Json | null
           position?: number
           question_type?: string
+          source_excerpt?: string | null
+          source_url?: string | null
           stem?: string
           topic?: string | null
           updated_at?: string

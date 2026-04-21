@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.0";
+import { fetchGroundedSource, isHumanitiesSubject, type GroundedSource } from "./sources.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -38,7 +39,13 @@ Always use British English spelling and SI units. Use Singapore-relevant context
 Match MOE phrasing conventions and difficulty norms for ${level}.
 ${alignLine}
 Each question must include a clear stem, a precise answer, and a marking scheme that breaks down marks where appropriate.
-Use Bloom's taxonomy levels rigorously.`;
+Use Bloom's taxonomy levels rigorously.
+When a "GROUNDED SOURCE" block is provided for a question, you MUST:
+  - Place the verbatim source text inside the question stem under a "Source A" heading.
+  - NOT paraphrase, summarise, translate, or alter the source text in any way.
+  - Add a citation line directly under the source: \`Source: {publisher} — {url}\`.
+  - Write your sub-questions to refer to "Source A".
+  - NEVER fabricate sources, attributions, or URLs of your own.`;
 }
 
 function buildUserPrompt(opts: {
@@ -48,6 +55,7 @@ function buildUserPrompt(opts: {
   instructions?: string;
   syllabusCode?: string | null;
   paperCode?: string | null;
+  groundedSources: (GroundedSource | null)[]; // index-aligned with blueprint
 }) {
   const typeStr = opts.questionTypes.map((t) => `- ${QUESTION_TYPE_LABELS[t] ?? t}`).join("\n");
   const blueprintStr = opts.blueprint
@@ -62,7 +70,11 @@ function buildUserPrompt(opts: {
       const cats = r.outcome_categories && r.outcome_categories.length > 0
         ? `\n   Outcome category: ${r.outcome_categories.join(" / ")}`
         : "";
-      return `${i + 1}. Topic${code}: "${r.topic}" — Bloom: ${r.bloom} — ${r.marks} marks${los}${aos}${cats}`;
+      const src = opts.groundedSources[i];
+      const grounded = src
+        ? `\n   GROUNDED SOURCE (use verbatim, do not modify):\n   ---\n   ${src.excerpt}\n   ---\n   Citation: Source: ${src.publisher} — ${src.source_url}\n   Set source_excerpt to the exact text between the dashes above. Set source_url to ${src.source_url}.`
+        : "";
+      return `${i + 1}. Topic${code}: "${r.topic}" — Bloom: ${r.bloom} — ${r.marks} marks${los}${aos}${cats}${grounded}`;
     })
     .join("\n");
 
@@ -107,10 +119,12 @@ const TOOL = {
               bloom_level: { type: "string", enum: ["Remember", "Understand", "Apply", "Analyse", "Evaluate", "Create"] },
               difficulty: { type: "string", enum: ["easy", "medium", "hard"] },
               marks: { type: "integer", minimum: 1 },
-              stem: { type: "string", description: "The question text. For structured questions include sub-parts (a), (b), etc." },
+              stem: { type: "string", description: "The question text. For structured questions include sub-parts (a), (b), etc. For source-based questions include the verbatim Source A block + citation, then the sub-parts." },
               options: { type: ["array", "null"], items: { type: "string" }, description: "MCQ options or null." },
               answer: { type: "string", description: "The correct answer (for MCQ, the letter and option text)." },
               mark_scheme: { type: "string", description: "Marking rubric showing how to award marks." },
+              source_excerpt: { type: ["string", "null"], description: "Verbatim source passage used in the stem (only when a GROUNDED SOURCE was provided)." },
+              source_url: { type: ["string", "null"], description: "URL of the source (only when a GROUNDED SOURCE was provided)." },
             },
             required: ["question_type", "topic", "bloom_level", "difficulty", "marks", "stem", "answer", "mark_scheme"],
             additionalProperties: false,
@@ -143,6 +157,25 @@ Deno.serve(async (req) => {
     } = body;
     const userId = bodyUserId ?? "00000000-0000-0000-0000-000000000001";
 
+    // Pre-fetch grounded sources for History / Social Studies SBQ rows.
+    const wantsSourceBased = Array.isArray(questionTypes) && questionTypes.includes("source_based");
+    const sourceGate = isHumanitiesSubject(subject) && wantsSourceBased;
+    const groundedSources: (GroundedSource | null)[] = [];
+    if (sourceGate) {
+      console.log("[generate] source-grounding enabled for subject:", subject);
+      for (const row of blueprint as BlueprintRow[]) {
+        try {
+          const src = await fetchGroundedSource(row.topic, row.learning_outcomes ?? []);
+          groundedSources.push(src);
+        } catch (e) {
+          console.warn("[generate] source fetch failed for row", row.topic, e);
+          groundedSources.push(null);
+        }
+      }
+    } else {
+      for (let i = 0; i < (blueprint as BlueprintRow[]).length; i++) groundedSources.push(null);
+    }
+
     const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -156,7 +189,7 @@ Deno.serve(async (req) => {
           { role: "user", content: buildUserPrompt({
             title, subject, level, assessmentType, totalMarks, durationMinutes,
             blueprint, questionTypes, itemSources, instructions,
-            syllabusCode, paperCode,
+            syllabusCode, paperCode, groundedSources,
           }) },
         ],
         tools: [TOOL],
@@ -181,21 +214,48 @@ Deno.serve(async (req) => {
     const args = JSON.parse(toolCall.function.arguments);
     const questions: any[] = args.questions ?? [];
 
+    // Build a normalized lookup of grounded excerpts to verify byte-equality.
+    const expectedByIndex = groundedSources.map((s) => s?.excerpt ?? null);
+
     // Insert all questions
-    const rows = questions.map((q, i) => ({
-      assessment_id: assessmentId,
-      user_id: userId,
-      position: i,
-      question_type: q.question_type,
-      topic: q.topic ?? null,
-      bloom_level: q.bloom_level ?? null,
-      difficulty: q.difficulty ?? null,
-      marks: q.marks ?? 1,
-      stem: q.stem,
-      options: q.options ?? null,
-      answer: q.answer ?? null,
-      mark_scheme: q.mark_scheme ?? null,
-    }));
+    const rows = questions.map((q, i) => {
+      const expected = expectedByIndex[i] ?? null;
+      let source_excerpt: string | null = q.source_excerpt ?? null;
+      let source_url: string | null = q.source_url ?? null;
+      let notes: string | null = null;
+
+      if (expected) {
+        // Anti-hallucination: require exact verbatim excerpt back.
+        if (source_excerpt !== expected) {
+          // Override with the trusted excerpt + URL we retrieved.
+          source_excerpt = expected;
+          source_url = groundedSources[i]?.source_url ?? source_url;
+          notes = "Source excerpt enforced from retrieved citation (model attempted to alter it).";
+        }
+      } else if (sourceGate && q.question_type === "source_based") {
+        notes = "Source retrieval failed for this row — please attach a source manually.";
+        source_excerpt = null;
+        source_url = null;
+      }
+
+      return {
+        assessment_id: assessmentId,
+        user_id: userId,
+        position: i,
+        question_type: q.question_type,
+        topic: q.topic ?? null,
+        bloom_level: q.bloom_level ?? null,
+        difficulty: q.difficulty ?? null,
+        marks: q.marks ?? 1,
+        stem: q.stem,
+        options: q.options ?? null,
+        answer: q.answer ?? null,
+        mark_scheme: q.mark_scheme ?? null,
+        source_excerpt,
+        source_url,
+        notes,
+      };
+    });
 
     if (rows.length > 0) {
       const { error: insErr } = await supabase.from("assessment_questions").insert(rows);
@@ -205,7 +265,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ ok: true, questionCount: rows.length }), {
+    return new Response(JSON.stringify({ ok: true, questionCount: rows.length, groundedCount: groundedSources.filter(Boolean).length }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
