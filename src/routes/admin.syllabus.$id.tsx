@@ -89,20 +89,23 @@ function SyllabusReview() {
   const [doc, setDoc] = useState<Doc | null>(null);
   const [papers, setPapers] = useState<Paper[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
+  const [aos, setAos] = useState<AO[]>([]);
   const [activePaperId, setActivePaperId] = useState<string>(ALL_PAPERS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
     setLoading(true);
-    const [{ data: d }, { data: ps }, { data: ts }] = await Promise.all([
+    const [{ data: d }, { data: ps }, { data: ts }, { data: aoData }] = await Promise.all([
       supabase.from("syllabus_documents").select("*").eq("id", id).single(),
       supabase.from("syllabus_papers").select("*").eq("source_doc_id", id).order("position", { ascending: true }),
       supabase.from("syllabus_topics").select("*").eq("source_doc_id", id).order("position", { ascending: true }),
+      supabase.from("syllabus_assessment_objectives").select("*").eq("source_doc_id", id).order("position", { ascending: true }),
     ]);
     setDoc(d as Doc);
     setPapers((ps as Paper[]) ?? []);
     setTopics((ts as Topic[]) ?? []);
+    setAos((aoData as AO[]) ?? []);
     setLoading(false);
   };
 
