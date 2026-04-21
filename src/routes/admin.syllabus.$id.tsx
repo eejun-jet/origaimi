@@ -451,6 +451,72 @@ function SyllabusReview() {
           </Card>
         )}
 
+        {/* Assessment Objectives panel */}
+        <Card className="mb-4 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-medium">Assessment Objectives</h2>
+              <p className="text-xs text-muted-foreground">Construct validity reference. Empty = syllabus does not publish AOs.</p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setAos((prev) => [
+                  ...prev,
+                  {
+                    id: crypto.randomUUID(),
+                    paper_id: activePaperId !== ALL_PAPERS && activePaperId !== UNASSIGNED ? activePaperId : null,
+                    code: `AO${prev.length + 1}`,
+                    title: null,
+                    description: null,
+                    weighting_percent: null,
+                    position: prev.length,
+                  },
+                ])
+              }
+            >
+              <Plus className="mr-2 h-4 w-4" /> Add AO
+            </Button>
+          </div>
+          {aos.length === 0 ? (
+            <p className="text-xs italic text-muted-foreground">No AOs extracted. Add manually if your syllabus publishes them.</p>
+          ) : (
+            <div className="space-y-2">
+              {aos
+                .filter((a) => activePaperId === ALL_PAPERS || !a.paper_id || a.paper_id === activePaperId)
+                .map((a) => {
+                  const idx = aos.findIndex((x) => x.id === a.id);
+                  return (
+                    <div key={a.id} className="grid grid-cols-1 gap-2 rounded-md border border-border p-2 sm:grid-cols-12">
+                      <div className="sm:col-span-2">
+                        <Label className="text-xs">Code</Label>
+                        <Input className="font-mono" value={a.code} onChange={(e) => setAos((prev) => prev.map((x, i) => i === idx ? { ...x, code: e.target.value } : x))} />
+                      </div>
+                      <div className="sm:col-span-3">
+                        <Label className="text-xs">Title</Label>
+                        <Input value={a.title ?? ""} onChange={(e) => setAos((prev) => prev.map((x, i) => i === idx ? { ...x, title: e.target.value || null } : x))} placeholder="Knowledge with Understanding" />
+                      </div>
+                      <div className="sm:col-span-5">
+                        <Label className="text-xs">Description</Label>
+                        <Input value={a.description ?? ""} onChange={(e) => setAos((prev) => prev.map((x, i) => i === idx ? { ...x, description: e.target.value || null } : x))} />
+                      </div>
+                      <div className="sm:col-span-1">
+                        <Label className="text-xs">% wt</Label>
+                        <Input type="number" value={a.weighting_percent ?? ""} onChange={(e) => setAos((prev) => prev.map((x, i) => i === idx ? { ...x, weighting_percent: e.target.value ? parseInt(e.target.value, 10) : null } : x))} />
+                      </div>
+                      <div className="flex items-end justify-end sm:col-span-1">
+                        <Button variant="ghost" size="sm" onClick={() => setAos((prev) => prev.filter((x) => x.id !== a.id))}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+        </Card>
+
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-medium">
             Extracted topics ({filteredTopics.length}{filteredTopics.length !== topics.length ? ` of ${topics.length}` : ""})
