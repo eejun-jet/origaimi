@@ -187,7 +187,84 @@ function EditorPage() {
     }
   };
 
-  const saveQToBank = async (q: Question) => {
+  const runDiagramAction = async (
+    qId: string,
+    mode: "generate" | "edit" | "regenerate",
+    instruction?: string,
+  ): Promise<boolean> => {
+    if (!assessment) return false;
+    const q = questions.find((x) => x.id === qId);
+    if (!q) return false;
+    const toastId = toast.loading(
+      mode === "edit" ? "Editing diagram…" : mode === "regenerate" ? "Regenerating diagram…" : "Generating diagram…",
+    );
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-diagram", {
+        body: {
+          questionId: qId,
+          topic: q.topic ?? assessment.subject,
+          subject: assessment.subject,
+          mode,
+          instruction,
+          currentDiagramUrl: q.diagram_url ?? undefined,
+        },
+      });
+      if (error) {
+        // supabase.functions.invoke surfaces non-2xx as error; check for rate/credit issues.
+        const ctx = (error as { context?: { status?: number } }).context;
+        if (ctx?.status === 429) {
+          toast.error("Rate-limited, try again shortly", { id: toastId });
+        } else if (ctx?.status === 402) {
+          toast.error("Out of AI credits — top up to continue", { id: toastId });
+        } else {
+          toast.error("Diagram action failed", { id: toastId });
+        }
+        return false;
+      }
+      if (data?.url) {
+        setQuestions((qs) =>
+          qs.map((x) =>
+            x.id === qId
+              ? {
+                  ...x,
+                  diagram_url: data.url as string,
+                  diagram_source: (data.diagram_source as string) ?? (mode === "edit" ? "ai_edited" : "ai_generated"),
+                  diagram_citation: null,
+                  diagram_caption:
+                    mode === "edit" ? x.diagram_caption : `${x.topic ?? assessment.subject} (AI-generated diagram)`,
+                }
+              : x,
+          ),
+        );
+        toast.success(
+          mode === "edit" ? "Diagram updated" : mode === "regenerate" ? "Diagram regenerated" : "Diagram generated",
+          { id: toastId },
+        );
+        return true;
+      }
+      toast.error("No image returned", { id: toastId });
+      return false;
+    } catch (e) {
+      console.error(e);
+      toast.error("Diagram action failed", { id: toastId });
+      return false;
+    }
+  };
+
+  const removeDiagram = async (qId: string) => {
+    setQuestions((qs) =>
+      qs.map((x) =>
+        x.id === qId
+          ? { ...x, diagram_url: null, diagram_source: null, diagram_citation: null, diagram_caption: null }
+          : x,
+      ),
+    );
+    await supabase
+      .from("assessment_questions")
+      .update({ diagram_url: null, diagram_source: null, diagram_citation: null, diagram_caption: null })
+      .eq("id", qId);
+    toast.success("Diagram removed");
+  };
     if (!user || !assessment) return;
     await supabase.from("question_bank_items").insert({
       user_id: user.id,
