@@ -880,8 +880,95 @@ function QuestionCard({
                   {q.diagram_source === "ai_generated" && (
                     <div className="mt-0.5 italic">AI-generated exam-style diagram</div>
                   )}
+                  {q.diagram_source === "ai_edited" && (
+                    <div className="mt-0.5 italic">AI-edited exam-style diagram</div>
+                  )}
                 </figcaption>
               </figure>
+            )}
+            {q.diagram_url && showDiagramTools && (
+              <div className="mt-2 flex flex-wrap items-center gap-1">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={diagramBusy}
+                  onClick={() => { setDiagramMode("edit"); setDiagramInstr(""); }}
+                  className="gap-1"
+                >
+                  <Wand2 className="h-3.5 w-3.5" /> Edit with prompt
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={diagramBusy}
+                  onClick={() => { setDiagramMode("regenerate"); setDiagramInstr(""); }}
+                  className="gap-1"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" /> Regenerate diagram
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={diagramBusy}
+                  onClick={() => {
+                    if (confirm("Remove this diagram?")) onDiagramRemove();
+                  }}
+                  className="gap-1 text-destructive hover:text-destructive"
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Remove
+                </Button>
+              </div>
+            )}
+            {!q.diagram_url && showDiagramTools && (
+              <div className="mt-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={diagramBusy}
+                  onClick={() => runDiagram("generate")}
+                  className="gap-1"
+                >
+                  {diagramBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImageIcon className="h-3.5 w-3.5" />}
+                  Generate diagram
+                </Button>
+              </div>
+            )}
+            {diagramMode && showDiagramTools && (
+              <div className="mt-3 rounded-lg border border-border bg-muted/30 p-3">
+                <div className="text-xs font-medium text-foreground">
+                  {diagramMode === "edit" ? "Edit diagram" : "Regenerate diagram"}
+                </div>
+                <Textarea
+                  rows={2}
+                  value={diagramInstr}
+                  onChange={(e) => setDiagramInstr(e.target.value)}
+                  placeholder={
+                    diagramMode === "edit"
+                      ? "Describe the change — e.g. 'add a switch in series', 'relabel R₁ as 4Ω', 'shade the triangle'"
+                      : "Optional: 'show side view instead', 'use a Bunsen burner', 'simpler labels'"
+                  }
+                  className="mt-2"
+                />
+                <div className="mt-2 flex gap-2">
+                  <Button
+                    size="sm"
+                    disabled={diagramBusy || (diagramMode === "edit" && !diagramInstr.trim())}
+                    onClick={() => runDiagram(diagramMode, diagramInstr.trim() || undefined)}
+                    className="gap-1"
+                  >
+                    {diagramBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                    Apply
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={diagramBusy}
+                    onClick={() => { setDiagramMode(null); setDiagramInstr(""); }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
             )}
             {q.options && Array.isArray(q.options) && q.options.length > 0 && (
               <ol className="mt-3 list-inside list-[upper-alpha] space-y-1 font-paper text-sm">
