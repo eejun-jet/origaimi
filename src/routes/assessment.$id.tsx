@@ -73,6 +73,7 @@ function EditorPage() {
   const [confirmDelete, setConfirmDelete] = useState<{ ids: string[]; label: string } | null>(null);
   const [bulkRegenOpen, setBulkRegenOpen] = useState(false);
   const [bulkRegenInstr, setBulkRegenInstr] = useState("");
+  const [bulkRegenDifficulty, setBulkRegenDifficulty] = useState<"keep" | "easy" | "medium" | "hard">("keep");
   const [bulkBusy, setBulkBusy] = useState(false);
 
   const loadAll = async () => {
@@ -131,10 +132,14 @@ function EditorPage() {
     ]);
   };
 
-  const regenerate = async (qId: string, instruction: string) => {
+  const regenerate = async (
+    qId: string,
+    instruction: string,
+    difficulty?: "easy" | "medium" | "hard",
+  ) => {
     setRegenId(qId);
     const { data, error } = await supabase.functions.invoke("regenerate-question", {
-      body: { questionId: qId, instruction },
+      body: { questionId: qId, instruction, difficulty },
     });
     setRegenId(null);
     if (error) return toast.error("Regeneration failed");
@@ -144,7 +149,10 @@ function EditorPage() {
     }
   };
 
-  const bulkRegenerate = async (instruction: string) => {
+  const bulkRegenerate = async (
+    instruction: string,
+    difficulty?: "easy" | "medium" | "hard",
+  ) => {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
     setBulkBusy(true);
@@ -156,7 +164,7 @@ function EditorPage() {
       setRegenId(qId);
       try {
         const { data, error } = await supabase.functions.invoke("regenerate-question", {
-          body: { questionId: qId, instruction },
+          body: { questionId: qId, instruction, difficulty },
         });
         if (error) failed++;
         else if (data?.question) {
@@ -171,6 +179,7 @@ function EditorPage() {
     setRegenId(null);
     setBulkBusy(false);
     setBulkRegenInstr("");
+    setBulkRegenDifficulty("keep");
     if (failed > 0) {
       toast.error(`${done - failed} regenerated, ${failed} failed`, { id: toastId });
     } else {
