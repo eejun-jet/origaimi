@@ -53,7 +53,7 @@ function Landing() {
                 Human-in-the-loop AI for Singapore educators
               </div>
               <h1 className="mt-6 font-paper text-4xl font-semibold leading-tight tracking-tight text-foreground sm:text-6xl">
-                Unfold the joy of <span className="text-primary">assessing.</span>
+                Unfold the joy of <span className="text-primary">assessing</span>
               </h1>
               <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
                 AI does the paddling. You set the course. origAImi takes over the heavy
