@@ -581,7 +581,7 @@ function NewAssessment() {
                           </button>
                         ))}
                       </div>
-                      <p className="text-xs text-muted-foreground">This paper draws from multiple sections — pick which discipline to assess.</p>
+                      <p className="text-xs text-muted-foreground">This paper covers multiple disciplines — pick <span className="font-medium">All</span> to choose topics from every section, or filter to one.</p>
                     </div>
                   )}
                   {topicsLoading ? (
