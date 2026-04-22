@@ -155,12 +155,19 @@ async function fromPastPapers(
   subject: string,
   level: string,
   stem: string,
+  usedUrls?: Set<string>,
 ): Promise<DiagramResult | null> {
   // Build a tag-pool from topic + LOs + stem snippet.
-  const tags = (topic + " " + learningOutcomes.join(" ") + " " + stem.slice(0, 200))
+  const topicTags = (topic + " " + learningOutcomes.join(" "))
     .toLowerCase()
     .split(/[^a-z0-9]+/)
     .filter((w) => w.length > 3);
+  const stemTags = stem.slice(0, 200)
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length > 3);
+  const tags = Array.from(new Set([...topicTags, ...stemTags]));
+  const stemOnlyTags = new Set(stemTags.filter((w) => !topicTags.includes(w)));
   if (tags.length === 0) return null;
 
   // Try subject + level first; fall back to subject-only when level has no hits.
@@ -202,11 +209,20 @@ async function fromPastPapers(
       const dtags = (d.topic_tags ?? []).map((t) => t.toLowerCase());
       const caption = (d.caption ?? "").toLowerCase();
       let score = 0;
-      // Tag overlap (high signal).
-      score += dtags.filter((t) => tags.some((q) => t.includes(q) || q.includes(t))).length * 2;
+      // Tag overlap (high signal). Boost for stem-only keywords so different
+      // questions on the same topic prefer different figures.
+      for (const t of dtags) {
+        for (const q of tags) {
+          if (t.includes(q) || q.includes(t)) {
+            score += stemOnlyTags.has(q) ? 3 : 2;
+          }
+        }
+      }
       // Caption keyword overlap.
       for (const t of tags) {
-        if (t.length > 3 && caption.includes(t)) score += 1;
+        if (t.length > 3 && caption.includes(t)) {
+          score += stemOnlyTags.has(t) ? 2 : 1;
+        }
       }
       // Specimen / sample paper boost.
       const title = (paperById.get(d.paper_id)?.title ?? "").toLowerCase();
@@ -219,22 +235,23 @@ async function fromPastPapers(
     .sort((a, b) => b.score - a.score);
   if (ranked.length === 0) return null;
 
-  const best = ranked[0].d;
-  const paper = paperById.get(best.paper_id);
-
-  // Resolve a public URL for the image.
-  const url = await resolveStorageUrl(supabase, best.image_path);
-  if (!url) return null;
-
-  const citation = paper
-    ? `${paper.exam_board ?? "Past paper"} ${paper.year ?? ""} ${paper.title} Paper ${paper.paper_number ?? ""}`.replace(/\s+/g, " ").trim()
-    : "Past paper (uploaded)";
-  return {
-    url,
-    source: "past_paper",
-    citation,
-    caption: best.caption ?? "Figure from uploaded past paper",
-  };
+  // Walk ranked candidates, skipping any whose resolved URL is already used.
+  for (const { d: best } of ranked) {
+    const url = await resolveStorageUrl(supabase, best.image_path);
+    if (!url) continue;
+    if (usedUrls && usedUrls.has(url)) continue;
+    const paper = paperById.get(best.paper_id);
+    const citation = paper
+      ? `${paper.exam_board ?? "Past paper"} ${paper.year ?? ""} ${paper.title} Paper ${paper.paper_number ?? ""}`.replace(/\s+/g, " ").trim()
+      : "Past paper (uploaded)";
+    return {
+      url,
+      source: "past_paper",
+      citation,
+      caption: best.caption ?? "Figure from uploaded past paper",
+    };
+  }
+  return null;
 }
 
 async function resolveStorageUrl(
