@@ -1291,6 +1291,9 @@ function SectionCard({
           </div>
         );
       })()}
+
+      <div className="mt-3">
+        <Label className="text-xs">Topic pool ({section.topic_pool.length} selected)</Label>
         {masterPool.length === 0 ? (
           <p className="mt-1 text-xs text-muted-foreground">Pick topics in Step 2 first.</p>
         ) : (
