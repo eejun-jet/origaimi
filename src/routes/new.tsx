@@ -18,8 +18,9 @@ import {
   type SyllabusLibraryDoc, type SyllabusLibraryPaper, type PaperTopic, type AssessmentObjective,
 } from "@/lib/syllabus-data";
 import {
-  type Section, type SectionTopic, type SectionedBlueprint,
-  defaultSection, nextSectionLetter, blueprintTotalMarks,
+  type Section, type SectionTopic, type SectionedBlueprint, type DifficultyMix,
+  defaultSection, nextSectionLetter, blueprintTotalMarks, isScienceSubject,
+  difficultyMixTotal, DEFAULT_DIFFICULTY_MIX,
   SBQ_SKILLS, MAX_SBQ_SKILLS, getSectionSkills, isHumanitiesSubject, type SbqSkill,
 } from "@/lib/sections";
 import { ChevronLeft, ChevronRight, Sparkles, Loader2, BookOpen, Upload, Plus, Trash2, ChevronUp, ChevronDown } from "lucide-react";
@@ -337,6 +338,10 @@ function NewAssessment() {
       if (sections.length === 0) return false;
       if (sectionsTotalMarks !== totalMarks) return false;
       if (sections.some((s) => s.topic_pool.length === 0 || s.num_questions < 1)) return false;
+      // For Science subjects, any section with a difficulty_mix must sum to 100.
+      if (isScienceSubject(subject)) {
+        if (sections.some((s) => s.difficulty_mix && difficultyMixTotal(s.difficulty_mix) !== 100)) return false;
+      }
       return true;
     }
     return true;
@@ -1229,6 +1234,63 @@ function SectionCard({
           </p>
         </div>
       )}
+
+      {isScienceSubject(subject) && (() => {
+        const mix: DifficultyMix = section.difficulty_mix ?? { ...DEFAULT_DIFFICULTY_MIX };
+        const total = difficultyMixTotal(mix);
+        const ok = total === 100;
+        const setMix = (next: DifficultyMix) => onUpdate({ difficulty_mix: next });
+        const updateField = (k: keyof DifficultyMix, v: string) => {
+          const n = Math.max(0, Math.min(100, parseInt(v || "0", 10) || 0));
+          setMix({ ...mix, [k]: n });
+        };
+        return (
+          <div className="mt-3 rounded-md border border-primary/30 bg-primary-soft/20 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-xs font-medium">Difficulty mix</Label>
+              <button
+                type="button"
+                className="text-[11px] text-primary underline-offset-2 hover:underline"
+                onClick={() => setMix({ ...DEFAULT_DIFFICULTY_MIX })}
+              >
+                Reset to default (20 / 60 / 20)
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Sets the proportion of easy / medium / hard questions across the {section.num_questions} question(s) in this section. Must total 100%.
+              </p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-3">
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Easy %</Label>
+                <Input
+                  type="number" min={0} max={100} className="h-9"
+                  value={mix.easy}
+                  onChange={(e) => updateField("easy", e.target.value)}
+                />
+              </div>
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Medium %</Label>
+                <Input
+                  type="number" min={0} max={100} className="h-9"
+                  value={mix.medium}
+                  onChange={(e) => updateField("medium", e.target.value)}
+                />
+              </div>
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Hard %</Label>
+                <Input
+                  type="number" min={0} max={100} className="h-9"
+                  value={mix.hard}
+                  onChange={(e) => updateField("hard", e.target.value)}
+                />
+              </div>
+            </div>
+            <p className={`mt-2 text-[11px] ${ok ? "text-muted-foreground" : "text-destructive"}`}>
+              Total: {total}% {ok ? "✓" : "(must equal 100%)"}
+            </p>
+          </div>
+        );
+      })()}
 
       <div className="mt-3">
         <Label className="text-xs">Topic pool ({section.topic_pool.length} selected)</Label>

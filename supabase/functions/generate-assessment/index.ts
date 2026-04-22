@@ -21,6 +21,8 @@ type SectionTopic = {
   outcome_categories?: string[];
 };
 
+type DifficultyMix = { easy: number; medium: number; hard: number };
+
 type Section = {
   id?: string;
   letter: string;
@@ -33,7 +35,55 @@ type Section = {
   sbq_skills?: string[];
   topic_pool: SectionTopic[];
   instructions?: string;
+  difficulty_mix?: DifficultyMix;
 };
+
+/** Largest-remainder rounding: turn a percentage mix into an array of n difficulty labels. */
+function assignDifficultyToQuestions(
+  mix: DifficultyMix | undefined | null,
+  n: number,
+): ("easy" | "medium" | "hard")[] {
+  if (n <= 0) return [];
+  const fallback: ("easy" | "medium" | "hard")[] = Array(n).fill("medium");
+  if (!mix) return fallback;
+  const total = (mix.easy || 0) + (mix.medium || 0) + (mix.hard || 0);
+  if (total <= 0) return fallback;
+  const levels: ("easy" | "medium" | "hard")[] = ["easy", "medium", "hard"];
+  const raw = {
+    easy: ((mix.easy || 0) / total) * n,
+    medium: ((mix.medium || 0) / total) * n,
+    hard: ((mix.hard || 0) / total) * n,
+  };
+  const counts: Record<"easy" | "medium" | "hard", number> = {
+    easy: Math.floor(raw.easy),
+    medium: Math.floor(raw.medium),
+    hard: Math.floor(raw.hard),
+  };
+  let assigned = counts.easy + counts.medium + counts.hard;
+  // Distribute remaining slots by largest fractional remainder.
+  const remainders = levels
+    .map((l) => ({ l, frac: raw[l] - Math.floor(raw[l]) }))
+    .sort((a, b) => b.frac - a.frac);
+  let ri = 0;
+  while (assigned < n) {
+    counts[remainders[ri % 3].l]++;
+    assigned++;
+    ri++;
+  }
+  // Build a deterministic interleaved sequence: easy, medium, hard repeating
+  // until each level's count is exhausted, so adjacent questions vary.
+  const out: ("easy" | "medium" | "hard")[] = [];
+  while (out.length < n) {
+    for (const l of levels) {
+      if (counts[l] > 0) {
+        out.push(l);
+        counts[l]--;
+        if (out.length >= n) break;
+      }
+    }
+  }
+  return out;
+}
 
 // SBQ skill definitions mirrored from src/lib/sections.ts
 type SbqSkillDef = {
@@ -283,6 +333,8 @@ function buildSectionUserPrompt(opts: {
   sharedSourcePool?: GroundedSource[]; // For humanities SBQ: ONE shared pool A–E
   subjectKind?: "humanities" | "english" | null;
   instructions?: string;
+  /** Per-question difficulty targets for THIS chunk (length === section.num_questions). */
+  difficultyTargets?: ("easy" | "medium" | "hard")[];
 }) {
   const { section } = opts;
   const typeLabel = QUESTION_TYPE_LABELS[section.question_type] ?? section.question_type;
@@ -421,6 +473,19 @@ ${assignments}
 IMPORTANT: For Assertion parts, the hypothesis MUST be testable against ALL sources (each should plausibly support OR challenge it). For single-source parts, the bound source is FIXED above — name it explicitly in the stem. Do NOT mix skill formats across parts. Do NOT bind two different single-source parts to the same source.`;
   }
 
+  let difficultyBlock = "";
+  if (opts.difficultyTargets && opts.difficultyTargets.length === section.num_questions) {
+    const lines = opts.difficultyTargets
+      .map((d, i) => `  - Question ${i + 1}: ${d.toUpperCase()}`)
+      .join("\n");
+    difficultyBlock = `
+
+DIFFICULTY DISTRIBUTION (REQUIRED — set the difficulty field on each question to EXACTLY the target below):
+${lines}
+
+Calibrate stem complexity, distractor closeness (for MCQ), required reasoning steps and number of marks-bearing inferences to the target difficulty for each slot.`;
+  }
+
   return `${grounding}You are drafting ${sectionLabel} of "${opts.title}" (${opts.level} ${opts.subject}, ${opts.assessmentType}, ${opts.durationMinutes} min, ${opts.totalMarks} total marks across ${opts.totalSections} sections).
 
 THIS SECTION:
@@ -430,7 +495,7 @@ THIS SECTION:
   - ${marksGuide}
   - Bloom's level focus: ${section.bloom ?? "Apply"} (use other levels only if the topic clearly demands it)
   ${section.instructions ? `- Section instructions for the rubric: ${section.instructions}` : ""}
-${skillBlock}
+${skillBlock}${difficultyBlock}
 ${humanitiesSourceGuidance}${sbqSectionPreamble}
 ALLOWED TOPICS (pick from these only — DO NOT invent topics outside this pool):
 ${topicLines}
@@ -706,6 +771,13 @@ Deno.serve(async (req) => {
         for (let qi = 0; qi < section.num_questions; qi++) sourcesForSection.push([null]);
       }
 
+      // Plan per-question difficulty targets for this section (if a mix is set
+      // AND we are not in a deterministic SBQ section). Targets are sliced per
+      // chunk and used both in the prompt and as the saved value of `difficulty`.
+      const sectionDifficultyTargets = section.difficulty_mix
+        ? assignDifficultyToQuestions(section.difficulty_mix, section.num_questions)
+        : null;
+
       let questions: any[] = [];
       if (isHumanitiesSBQ && sharedSourcePool.length > 0) {
         console.log(`[generate] section ${section.letter}: using deterministic SBQ builder to avoid long AI timeout`);
@@ -737,6 +809,9 @@ Deno.serve(async (req) => {
             marks: chunkMarks,
           };
           const chunkSources = sourcesForSection.slice(startIdx, endIdx);
+          const chunkDifficultyTargets = sectionDifficultyTargets
+            ? sectionDifficultyTargets.slice(startIdx, endIdx)
+            : undefined;
 
           const messages: Array<{ role: string; content: string }> = [
             { role: "system", content: buildSystemPrompt(subject, level, paperCode) },
@@ -756,6 +831,7 @@ Deno.serve(async (req) => {
               syllabusCode, paperCode, groundedSources: chunkSources,
               sharedSourcePool: isHumanitiesSBQ ? sharedSourcePool : undefined,
               subjectKind, instructions,
+              difficultyTargets: chunkDifficultyTargets,
             }),
           });
 
@@ -860,7 +936,7 @@ Deno.serve(async (req) => {
           question_type,
           topic: q.topic ?? null,
           bloom_level: q.bloom_level ?? section.bloom ?? null,
-          difficulty: q.difficulty ?? null,
+          difficulty: sectionDifficultyTargets ? sectionDifficultyTargets[qi] ?? q.difficulty ?? null : (q.difficulty ?? null),
           marks: q.marks ?? 1,
           stem: q.stem,
           options: q.options ?? null,

@@ -73,6 +73,7 @@ function EditorPage() {
   const [confirmDelete, setConfirmDelete] = useState<{ ids: string[]; label: string } | null>(null);
   const [bulkRegenOpen, setBulkRegenOpen] = useState(false);
   const [bulkRegenInstr, setBulkRegenInstr] = useState("");
+  const [bulkRegenDifficulty, setBulkRegenDifficulty] = useState<"keep" | "easy" | "medium" | "hard">("keep");
   const [bulkBusy, setBulkBusy] = useState(false);
 
   const loadAll = async () => {
@@ -131,10 +132,14 @@ function EditorPage() {
     ]);
   };
 
-  const regenerate = async (qId: string, instruction: string) => {
+  const regenerate = async (
+    qId: string,
+    instruction: string,
+    difficulty?: "easy" | "medium" | "hard",
+  ) => {
     setRegenId(qId);
     const { data, error } = await supabase.functions.invoke("regenerate-question", {
-      body: { questionId: qId, instruction },
+      body: { questionId: qId, instruction, difficulty },
     });
     setRegenId(null);
     if (error) return toast.error("Regeneration failed");
@@ -144,7 +149,10 @@ function EditorPage() {
     }
   };
 
-  const bulkRegenerate = async (instruction: string) => {
+  const bulkRegenerate = async (
+    instruction: string,
+    difficulty?: "easy" | "medium" | "hard",
+  ) => {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
     setBulkBusy(true);
@@ -156,7 +164,7 @@ function EditorPage() {
       setRegenId(qId);
       try {
         const { data, error } = await supabase.functions.invoke("regenerate-question", {
-          body: { questionId: qId, instruction },
+          body: { questionId: qId, instruction, difficulty },
         });
         if (error) failed++;
         else if (data?.question) {
@@ -171,6 +179,7 @@ function EditorPage() {
     setRegenId(null);
     setBulkBusy(false);
     setBulkRegenInstr("");
+    setBulkRegenDifficulty("keep");
     if (failed > 0) {
       toast.error(`${done - failed} regenerated, ${failed} failed`, { id: toastId });
     } else {
@@ -403,8 +412,25 @@ function EditorPage() {
                   placeholder="Optional instruction applied to each: 'make harder', 'use Singapore context'…"
                   className="mt-2"
                 />
-                <div className="mt-2 flex gap-2">
-                  <Button size="sm" disabled={bulkBusy} onClick={() => bulkRegenerate(bulkRegenInstr)} className="gap-1">
+                <div className="mt-2 flex items-end gap-3">
+                  <div className="w-44">
+                    <label className="text-xs text-muted-foreground">Target difficulty</label>
+                    <Select value={bulkRegenDifficulty} onValueChange={(v) => setBulkRegenDifficulty(v as typeof bulkRegenDifficulty)}>
+                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="keep">Keep current</SelectItem>
+                        <SelectItem value="easy">Easy</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="hard">Hard</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button
+                    size="sm"
+                    disabled={bulkBusy}
+                    onClick={() => bulkRegenerate(bulkRegenInstr, bulkRegenDifficulty === "keep" ? undefined : bulkRegenDifficulty)}
+                    className="gap-1"
+                  >
                     {bulkBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
                     Regenerate selected
                   </Button>
@@ -500,7 +526,7 @@ function EditorPage() {
                       onUpdate={(patch) => updateQ(q.id, patch)}
                       onDelete={() => setConfirmDelete({ ids: [q.id], label: `Q${i + 1}` })}
                       onMove={(d) => moveQ(q.id, d)}
-                      onRegenerate={(ins) => regenerate(q.id, ins)}
+                      onRegenerate={(ins, diff) => regenerate(q.id, ins, diff)}
                       onBank={() => saveToBank(q)}
                       hideSourceBlock={isSbqSection}
                     />
@@ -608,7 +634,7 @@ function QuestionCard({
   onUpdate: (patch: Partial<Question>) => void;
   onDelete: () => void;
   onMove: (dir: -1 | 1) => void;
-  onRegenerate: (instruction: string) => void;
+  onRegenerate: (instruction: string, difficulty?: "easy" | "medium" | "hard") => void;
   onBank: () => void;
   hideSourceBlock?: boolean;
 }) {
@@ -620,6 +646,8 @@ function QuestionCard({
   const [bloom, setBloom] = useState(q.bloom_level ?? "");
   const [showRegen, setShowRegen] = useState(false);
   const [regenInstr, setRegenInstr] = useState("");
+  const [regenDifficulty, setRegenDifficulty] = useState<"keep" | "easy" | "medium" | "hard">("keep");
+
 
   const save = () => {
     onUpdate({ stem, answer, mark_scheme: scheme, marks, bloom_level: bloom || null });
@@ -640,6 +668,9 @@ function QuestionCard({
           <Badge variant="outline">{q.question_type.replace("_", " ")}</Badge>
           {q.topic && <Badge variant="outline">{q.topic}</Badge>}
           {q.bloom_level && <Badge variant="secondary">{q.bloom_level}</Badge>}
+          {q.difficulty && (
+            <Badge variant="outline" className="capitalize">{q.difficulty}</Badge>
+          )}
           <Badge variant="secondary">[{q.marks}]</Badge>
         </div>
         <div className="flex gap-1">
@@ -753,8 +784,25 @@ function QuestionCard({
         <div className="mt-4 rounded-lg border border-border bg-muted/30 p-3">
           <Textarea rows={2} value={regenInstr} onChange={(e) => setRegenInstr(e.target.value)}
             placeholder="Optional: 'make harder', 'use Singapore hawker context', 'less wordy'..." />
-          <div className="mt-2 flex gap-2">
-            <Button size="sm" disabled={isRegen} onClick={() => onRegenerate(regenInstr)} className="gap-1">
+          <div className="mt-2 flex flex-wrap items-end gap-3">
+            <div className="w-44">
+              <label className="text-xs text-muted-foreground">Target difficulty</label>
+              <Select value={regenDifficulty} onValueChange={(v) => setRegenDifficulty(v as typeof regenDifficulty)}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="keep">Keep current{q.difficulty ? ` (${q.difficulty})` : ""}</SelectItem>
+                  <SelectItem value="easy">Easy</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="hard">Hard</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              size="sm"
+              disabled={isRegen}
+              onClick={() => onRegenerate(regenInstr, regenDifficulty === "keep" ? undefined : regenDifficulty)}
+              className="gap-1"
+            >
               {isRegen ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
               Regenerate
             </Button>
