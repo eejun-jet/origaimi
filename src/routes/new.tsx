@@ -18,8 +18,9 @@ import {
   type SyllabusLibraryDoc, type SyllabusLibraryPaper, type PaperTopic, type AssessmentObjective,
 } from "@/lib/syllabus-data";
 import {
-  type Section, type SectionTopic, type SectionedBlueprint,
-  defaultSection, nextSectionLetter, blueprintTotalMarks,
+  type Section, type SectionTopic, type SectionedBlueprint, type DifficultyMix,
+  defaultSection, nextSectionLetter, blueprintTotalMarks, isScienceSubject,
+  difficultyMixTotal, DEFAULT_DIFFICULTY_MIX,
   SBQ_SKILLS, MAX_SBQ_SKILLS, getSectionSkills, isHumanitiesSubject, type SbqSkill,
 } from "@/lib/sections";
 import { ChevronLeft, ChevronRight, Sparkles, Loader2, BookOpen, Upload, Plus, Trash2, ChevronUp, ChevronDown } from "lucide-react";
@@ -337,6 +338,10 @@ function NewAssessment() {
       if (sections.length === 0) return false;
       if (sectionsTotalMarks !== totalMarks) return false;
       if (sections.some((s) => s.topic_pool.length === 0 || s.num_questions < 1)) return false;
+      // For Science subjects, any section with a difficulty_mix must sum to 100.
+      if (isScienceSubject(subject)) {
+        if (sections.some((s) => s.difficulty_mix && difficultyMixTotal(s.difficulty_mix) !== 100)) return false;
+      }
       return true;
     }
     return true;
