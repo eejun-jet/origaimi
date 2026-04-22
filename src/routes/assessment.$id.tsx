@@ -707,10 +707,30 @@ function parseSharedSourcePool(excerpt: string): Array<{ label: string; text: st
   return matches.map((m) => ({ label: m[1], text: m[2].trim() }));
 }
 
+const SCIENCE_MATH_SUBJECTS = [
+  "physics",
+  "chemistry",
+  "biology",
+  "general science",
+  "combined science",
+  "science",
+  "mathematics",
+  "math",
+  "maths",
+  "additional mathematics",
+];
+
+function isScienceOrMathSubject(subject: string | undefined | null): boolean {
+  if (!subject) return false;
+  const s = subject.toLowerCase();
+  return SCIENCE_MATH_SUBJECTS.some((k) => s.includes(k));
+}
+
 function QuestionCard({
-  q, index, isFirst, isLast, isRegen, selected, onToggleSelect, onUpdate, onDelete, onMove, onRegenerate, onBank, hideSourceBlock,
+  q, index, isFirst, isLast, isRegen, subject, selected, onToggleSelect, onUpdate, onDelete, onMove, onRegenerate, onBank, onDiagramAction, onDiagramRemove, hideSourceBlock,
 }: {
   q: Question; index: number; isFirst: boolean; isLast: boolean; isRegen: boolean;
+  subject: string;
   selected: boolean;
   onToggleSelect: () => void;
   onUpdate: (patch: Partial<Question>) => void;
@@ -718,6 +738,8 @@ function QuestionCard({
   onMove: (dir: -1 | 1) => void;
   onRegenerate: (instruction: string, difficulty?: "easy" | "medium" | "hard") => void;
   onBank: () => void;
+  onDiagramAction: (mode: "generate" | "edit" | "regenerate", instruction?: string) => Promise<boolean>;
+  onDiagramRemove: () => void;
   hideSourceBlock?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
@@ -729,6 +751,21 @@ function QuestionCard({
   const [showRegen, setShowRegen] = useState(false);
   const [regenInstr, setRegenInstr] = useState("");
   const [regenDifficulty, setRegenDifficulty] = useState<"keep" | "easy" | "medium" | "hard">("keep");
+  const [diagramMode, setDiagramMode] = useState<"edit" | "regenerate" | null>(null);
+  const [diagramInstr, setDiagramInstr] = useState("");
+  const [diagramBusy, setDiagramBusy] = useState(false);
+
+  const showDiagramTools = isScienceOrMathSubject(subject);
+
+  const runDiagram = async (mode: "generate" | "edit" | "regenerate", instruction?: string) => {
+    setDiagramBusy(true);
+    const ok = await onDiagramAction(mode, instruction);
+    setDiagramBusy(false);
+    if (ok) {
+      setDiagramMode(null);
+      setDiagramInstr("");
+    }
+  };
 
 
   const save = () => {
