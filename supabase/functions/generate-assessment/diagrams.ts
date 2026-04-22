@@ -545,6 +545,12 @@ export async function fetchDiagram(opts: {
   stem?: string;
   assessmentId: string;
   usedUrls?: Set<string>;
+  /**
+   * When true, only consult past papers — skip the slow web (Tavily / Firecrawl)
+   * and AI image generation stages. Used for MCQ / short-answer where speed
+   * matters and a missing diagram is acceptable.
+   */
+  pastPapersOnly?: boolean;
 }): Promise<DiagramResult | null> {
   const stem = opts.stem ?? "";
   const usedUrls = opts.usedUrls;
@@ -553,6 +559,8 @@ export async function fetchDiagram(opts: {
     const r = await fromPastPapers(opts.supabase, opts.topic, opts.learningOutcomes, opts.subject, opts.level, stem, usedUrls);
     if (r) return r;
   } catch (e) { console.warn("[diagrams] past_papers stage error", e); }
+
+  if (opts.pastPapersOnly) return null;
 
   // 2. Web (Tavily images → Firecrawl fallback)
   try {
