@@ -831,6 +831,7 @@ Deno.serve(async (req) => {
               syllabusCode, paperCode, groundedSources: chunkSources,
               sharedSourcePool: isHumanitiesSBQ ? sharedSourcePool : undefined,
               subjectKind, instructions,
+              difficultyTargets: chunkDifficultyTargets,
             }),
           });
 
