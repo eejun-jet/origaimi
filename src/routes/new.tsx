@@ -1235,8 +1235,62 @@ function SectionCard({
         </div>
       )}
 
-      <div className="mt-3">
-        <Label className="text-xs">Topic pool ({section.topic_pool.length} selected)</Label>
+      {isScienceSubject(subject) && (() => {
+        const mix: DifficultyMix = section.difficulty_mix ?? { ...DEFAULT_DIFFICULTY_MIX };
+        const total = difficultyMixTotal(mix);
+        const ok = total === 100;
+        const setMix = (next: DifficultyMix) => onUpdate({ difficulty_mix: next });
+        const updateField = (k: keyof DifficultyMix, v: string) => {
+          const n = Math.max(0, Math.min(100, parseInt(v || "0", 10) || 0));
+          setMix({ ...mix, [k]: n });
+        };
+        return (
+          <div className="mt-3 rounded-md border border-primary/30 bg-primary-soft/20 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-xs font-medium">Difficulty mix</Label>
+              <button
+                type="button"
+                className="text-[11px] text-primary underline-offset-2 hover:underline"
+                onClick={() => setMix({ ...DEFAULT_DIFFICULTY_MIX })}
+              >
+                Reset to default (20 / 60 / 20)
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Sets the proportion of easy / medium / hard questions across the {section.num_questions} question(s) in this section. Must total 100%.
+              </p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-3">
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Easy %</Label>
+                <Input
+                  type="number" min={0} max={100} className="h-9"
+                  value={mix.easy}
+                  onChange={(e) => updateField("easy", e.target.value)}
+                />
+              </div>
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Medium %</Label>
+                <Input
+                  type="number" min={0} max={100} className="h-9"
+                  value={mix.medium}
+                  onChange={(e) => updateField("medium", e.target.value)}
+                />
+              </div>
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Hard %</Label>
+                <Input
+                  type="number" min={0} max={100} className="h-9"
+                  value={mix.hard}
+                  onChange={(e) => updateField("hard", e.target.value)}
+                />
+              </div>
+            </div>
+            <p className={`mt-2 text-[11px] ${ok ? "text-muted-foreground" : "text-destructive"}`}>
+              Total: {total}% {ok ? "✓" : "(must equal 100%)"}
+            </p>
+          </div>
+        );
+      })()}
         {masterPool.length === 0 ? (
           <p className="mt-1 text-xs text-muted-foreground">Pick topics in Step 2 first.</p>
         ) : (
