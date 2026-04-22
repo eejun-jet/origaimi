@@ -473,6 +473,19 @@ ${assignments}
 IMPORTANT: For Assertion parts, the hypothesis MUST be testable against ALL sources (each should plausibly support OR challenge it). For single-source parts, the bound source is FIXED above — name it explicitly in the stem. Do NOT mix skill formats across parts. Do NOT bind two different single-source parts to the same source.`;
   }
 
+  let difficultyBlock = "";
+  if (opts.difficultyTargets && opts.difficultyTargets.length === section.num_questions) {
+    const lines = opts.difficultyTargets
+      .map((d, i) => `  - Question ${i + 1}: ${d.toUpperCase()}`)
+      .join("\n");
+    difficultyBlock = `
+
+DIFFICULTY DISTRIBUTION (REQUIRED — set the difficulty field on each question to EXACTLY the target below):
+${lines}
+
+Calibrate stem complexity, distractor closeness (for MCQ), required reasoning steps and number of marks-bearing inferences to the target difficulty for each slot.`;
+  }
+
   return `${grounding}You are drafting ${sectionLabel} of "${opts.title}" (${opts.level} ${opts.subject}, ${opts.assessmentType}, ${opts.durationMinutes} min, ${opts.totalMarks} total marks across ${opts.totalSections} sections).
 
 THIS SECTION:
@@ -482,7 +495,7 @@ THIS SECTION:
   - ${marksGuide}
   - Bloom's level focus: ${section.bloom ?? "Apply"} (use other levels only if the topic clearly demands it)
   ${section.instructions ? `- Section instructions for the rubric: ${section.instructions}` : ""}
-${skillBlock}
+${skillBlock}${difficultyBlock}
 ${humanitiesSourceGuidance}${sbqSectionPreamble}
 ALLOWED TOPICS (pick from these only — DO NOT invent topics outside this pool):
 ${topicLines}
