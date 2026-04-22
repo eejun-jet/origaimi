@@ -936,7 +936,7 @@ Deno.serve(async (req) => {
           question_type,
           topic: q.topic ?? null,
           bloom_level: q.bloom_level ?? section.bloom ?? null,
-          difficulty: q.difficulty ?? null,
+          difficulty: sectionDifficultyTargets ? sectionDifficultyTargets[qi] ?? q.difficulty ?? null : (q.difficulty ?? null),
           marks: q.marks ?? 1,
           stem: q.stem,
           options: q.options ?? null,
