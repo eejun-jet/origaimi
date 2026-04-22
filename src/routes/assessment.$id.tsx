@@ -526,7 +526,7 @@ function EditorPage() {
                       onUpdate={(patch) => updateQ(q.id, patch)}
                       onDelete={() => setConfirmDelete({ ids: [q.id], label: `Q${i + 1}` })}
                       onMove={(d) => moveQ(q.id, d)}
-                      onRegenerate={(ins) => regenerate(q.id, ins)}
+                      onRegenerate={(ins, diff) => regenerate(q.id, ins, diff)}
                       onBank={() => saveToBank(q)}
                       hideSourceBlock={isSbqSection}
                     />
