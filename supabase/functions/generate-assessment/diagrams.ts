@@ -286,11 +286,14 @@ async function fromTavilyImages(
   kind: Exclude<ScienceMathKind, null>,
   topic: string,
   learningOutcomes: string[],
+  stem: string,
+  usedUrls?: Set<string>,
 ): Promise<DiagramResult | null> {
   if (!hasTavily()) return null;
   const lo = learningOutcomes[0] ?? "";
   const subjectWord = kind === "general_science" ? "science" : kind;
-  const query = `${topic} ${lo} ${subjectWord} diagram labelled exam`.trim();
+  const stemSnippet = (stem ?? "").trim().slice(0, 120);
+  const query = `${topic} ${lo} ${stemSnippet} ${subjectWord} diagram labelled exam`.replace(/\s+/g, " ").trim();
 
   const { images, results } = await tavilySearch(query, {
     includeDomains: ALLOW_DOMAINS_SCIENCE_MATH,
@@ -301,15 +304,18 @@ async function fromTavilyImages(
   });
 
   // Prefer images whose URL is on the allow-list and looks like a real raster/svg.
+  const stemWords = stemSnippet.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
   const ranked = images
     .filter((im) => /\.(png|jpe?g|gif|svg|webp)(\?|#|$)/i.test(im.url))
     .filter((im) => !isDenied(im.url))
+    .filter((im) => !(usedUrls && usedUrls.has(im.url)))
     .map((im) => {
       let score = 0;
       if (isOnAllowList(im.url)) score += 5;
       const blob = ((im.description ?? "") + " " + im.url).toLowerCase();
       const topicWords = topic.toLowerCase().split(/\s+/);
       for (const w of topicWords) if (w.length > 3 && blob.includes(w)) score += 2;
+      for (const w of stemWords) if (blob.includes(w)) score += 2;
       if (/diagram|figure|fig\.|circuit|graph|chart|model|setup|apparatus/.test(blob)) score += 3;
       if (/logo|icon|avatar|sprite|banner|ad/.test(blob)) score -= 5;
       return { im, score };
@@ -333,11 +339,14 @@ async function fromFirecrawl(
   kind: Exclude<ScienceMathKind, null>,
   topic: string,
   learningOutcomes: string[],
+  stem: string,
+  usedUrls?: Set<string>,
 ): Promise<DiagramResult | null> {
   if (!FIRECRAWL_API_KEY) return null;
   const lo = learningOutcomes[0] ?? "";
   const subjectWord = kind === "general_science" ? "science" : kind;
-  const query = `${topic} ${lo} ${subjectWord} diagram labelled exam`.trim();
+  const stemSnippet = (stem ?? "").trim().slice(0, 120);
+  const query = `${topic} ${lo} ${stemSnippet} ${subjectWord} diagram labelled exam`.replace(/\s+/g, " ").trim();
 
   const resp = await fetch("https://api.firecrawl.dev/v2/search", {
     method: "POST",
@@ -375,6 +384,7 @@ async function fromFirecrawl(
       const markdown: string = data?.markdown ?? "";
       const img = pickBestImage(html, markdown, cand.url, topic);
       if (!img) continue;
+      if (usedUrls && usedUrls.has(img.src)) continue;
       return {
         url: img.src,
         source: "web",
@@ -393,10 +403,12 @@ async function fromWeb(
   kind: Exclude<ScienceMathKind, null>,
   topic: string,
   learningOutcomes: string[],
+  stem: string,
+  usedUrls?: Set<string>,
 ): Promise<DiagramResult | null> {
-  const t = await fromTavilyImages(kind, topic, learningOutcomes);
+  const t = await fromTavilyImages(kind, topic, learningOutcomes, stem, usedUrls);
   if (t) return t;
-  return fromFirecrawl(kind, topic, learningOutcomes);
+  return fromFirecrawl(kind, topic, learningOutcomes, stem, usedUrls);
 }
 
 /** Pick the largest <img> matching topic keywords; fall back to first image. */
