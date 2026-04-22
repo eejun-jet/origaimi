@@ -190,24 +190,35 @@ function NewAssessment() {
   // Step 2 — topic selection
   const fallbackTopics = useMemo(() => topicsFor(subject, level), [subject, level]);
 
-  // Section sub-selector (for multi-track papers like Combined Science 5086)
+  // Section sub-selector (for multi-track papers like Combined Science 5086).
+  // For combined papers we expose an extra "All" pseudo-section so teachers can
+  // pull topics from both disciplines (e.g. Physics + Chemistry) into the same
+  // paper instead of being forced to pick one.
+  const ALL_SECTIONS = "All";
   const availableSections = useMemo(() => {
     if (!selected) return [];
     const tags = selected.paper.trackTags ?? [];
-    if (tags.length > 1) return tags.map((t) => t.charAt(0).toUpperCase() + t.slice(1));
-    const fromTopics = Array.from(new Set(paperTopics.map((t) => t.section).filter((s): s is string => !!s)));
-    return fromTopics.length > 1 ? fromTopics : [];
+    let base: string[] = [];
+    if (tags.length > 1) {
+      base = tags.map((t) => t.charAt(0).toUpperCase() + t.slice(1));
+    } else {
+      const fromTopics = Array.from(new Set(paperTopics.map((t) => t.section).filter((s): s is string => !!s)));
+      if (fromTopics.length > 1) base = fromTopics;
+    }
+    return base.length > 1 ? [ALL_SECTIONS, ...base] : base;
   }, [selected, paperTopics]);
   const [activeSection, setActiveSection] = useState<string | null>(null);
   useEffect(() => {
+    // Default to "All" on combined papers so both subjects' topics are visible.
     if (availableSections.length > 0) setActiveSection(availableSections[0]);
     else setActiveSection(selected?.paper.section ?? null);
   }, [availableSections, selected]);
 
-  // For syllabus mode, only pick leaf-ish topics, optionally filtered by active section
+  // For syllabus mode, only pick leaf-ish topics, optionally filtered by active section.
+  // When activeSection === "All", show topics from every section.
   const selectableSyllabusTopics = useMemo(() => {
     let pool = paperTopics.filter((t) => t.depth >= 1 || paperTopics.every((x) => x.depth === 0));
-    if (availableSections.length > 0 && activeSection) {
+    if (availableSections.length > 0 && activeSection && activeSection !== ALL_SECTIONS) {
       pool = pool.filter((t) => !t.section || t.section.toLowerCase() === activeSection.toLowerCase());
     }
     return pool;
@@ -570,7 +581,7 @@ function NewAssessment() {
                           </button>
                         ))}
                       </div>
-                      <p className="text-xs text-muted-foreground">This paper draws from multiple sections — pick which discipline to assess.</p>
+                      <p className="text-xs text-muted-foreground">This paper covers multiple disciplines — pick <span className="font-medium">All</span> to choose topics from every section, or filter to one.</p>
                     </div>
                   )}
                   {topicsLoading ? (
