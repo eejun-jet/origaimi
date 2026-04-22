@@ -1224,20 +1224,40 @@ function SectionCard({
         {masterPool.length === 0 ? (
           <p className="mt-1 text-xs text-muted-foreground">Pick topics in Step 2 first.</p>
         ) : (
-          <div className="mt-1 grid max-h-48 gap-1 overflow-auto rounded-md border border-border p-2 sm:grid-cols-2">
-            {masterPool.map((t) => {
-              const key = `${t.topic_code ?? ""}::${t.topic}`;
-              const checked = pickedKeys.has(key);
+          <div className="mt-1 max-h-48 overflow-auto rounded-md border border-border p-2">
+            {(() => {
+              const allChecked = masterPool.length > 0 && masterPool.every((t) => pickedKeys.has(`${t.topic_code ?? ""}::${t.topic}`));
+              const someChecked = masterPool.some((t) => pickedKeys.has(`${t.topic_code ?? ""}::${t.topic}`));
               return (
-                <label key={key} className={`flex cursor-pointer items-start gap-2 rounded p-1.5 text-xs ${checked ? "bg-primary-soft/40" : "hover:bg-muted/40"}`}>
-                  <Checkbox checked={checked} onCheckedChange={() => toggleTopic(t)} />
+                <label className="mb-1 flex cursor-pointer items-center gap-2 rounded border-b border-dashed border-border p-1.5 text-xs font-medium hover:bg-muted/40">
+                  <Checkbox
+                    checked={allChecked ? true : someChecked ? "indeterminate" : false}
+                    onCheckedChange={() => {
+                      onUpdate({ topic_pool: allChecked ? [] : [...masterPool] });
+                    }}
+                  />
                   <span>
-                    {t.topic_code && <span className="font-mono text-muted-foreground mr-1">{t.topic_code}</span>}
-                    {t.topic}
+                    {allChecked ? "Deselect all" : "Select all"}{" "}
+                    <span className="text-muted-foreground">({section.topic_pool.length}/{masterPool.length})</span>
                   </span>
                 </label>
               );
-            })}
+            })()}
+            <div className="grid gap-1 sm:grid-cols-2">
+              {masterPool.map((t) => {
+                const key = `${t.topic_code ?? ""}::${t.topic}`;
+                const checked = pickedKeys.has(key);
+                return (
+                  <label key={key} className={`flex cursor-pointer items-start gap-2 rounded p-1.5 text-xs ${checked ? "bg-primary-soft/40" : "hover:bg-muted/40"}`}>
+                    <Checkbox checked={checked} onCheckedChange={() => toggleTopic(t)} />
+                    <span>
+                      {t.topic_code && <span className="font-mono text-muted-foreground mr-1">{t.topic_code}</span>}
+                      {t.topic}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
