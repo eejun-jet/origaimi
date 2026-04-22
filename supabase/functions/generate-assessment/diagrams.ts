@@ -37,13 +37,25 @@ export function questionWantsDiagram(
   learningOutcomes: string[],
 ): boolean {
   if (!kind) return false;
-  // Always attempt for structured / source_based / practical / comprehension types.
-  const type_ok = questionTypes.some((t) =>
-    ["structured", "source_based", "practical", "comprehension"].includes(t)
-  );
-  if (!type_ok) return false;
-  // Look for keywords suggesting visual content.
   const blob = (topic + " " + learningOutcomes.join(" ")).toLowerCase();
+
+  // Skip for purely descriptive / non-visual topics, even in science.
+  const descriptiveOnly = [
+    "definition", "definitions", "history of", "etymology", "naming convention",
+    "social impact", "ethical", "discussion of", "essay on",
+  ];
+  if (descriptiveOnly.some((k) => blob.includes(k))) return false;
+
+  const isScience = kind === "physics" || kind === "chemistry" || kind === "biology" || kind === "general_science";
+  const heavyTypes = ["structured", "source_based", "practical", "comprehension"];
+  const lightTypes = ["mcq", "short_answer"];
+
+  // SCIENCE: default-on for structured/practical/comprehension/source_based questions
+  // (these are the slots where MOE specimen papers consistently feature apparatus,
+  // circuits, ray paths, biological structures, etc.).
+  if (isScience && questionTypes.some((t) => heavyTypes.includes(t))) return true;
+
+  // MATH or non-science fallback: require a heavy type AND a visual keyword.
   const visualKeywords = [
     "diagram", "graph", "circuit", "apparatus", "structure", "cell", "anatomy",
     "force", "ray", "lens", "mirror", "wave", "field", "molecule", "bond",
@@ -51,10 +63,19 @@ export function questionWantsDiagram(
     "ecosystem", "food web", "organ", "plant", "animal", "reaction", "energy profile",
     "titration", "distillation", "set-up", "setup", "shape", "solid", "net",
     "fraction", "bar model", "number line", "pie chart", "histogram",
+    "circuit diagram", "apparatus", "bunsen", "test tube", "beaker", "alkene",
+    "ammeter", "voltmeter", "pulley", "spring", "pendulum", "convex", "concave",
   ];
-  if (visualKeywords.some((k) => blob.includes(k))) return true;
-  // For math/physics, default-yes when the type is structured.
+  const hasVisualKeyword = visualKeywords.some((k) => blob.includes(k));
+
+  if (questionTypes.some((t) => heavyTypes.includes(t)) && hasVisualKeyword) return true;
+
+  // MCQ / short-answer: only when the topic explicitly mentions a visual.
+  if (questionTypes.some((t) => lightTypes.includes(t)) && hasVisualKeyword) return true;
+
+  // Math/physics structured: default-yes (formulas often paired with figures).
   if ((kind === "math" || kind === "physics") && questionTypes.includes("structured")) return true;
+
   return false;
 }
 

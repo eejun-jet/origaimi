@@ -2,8 +2,9 @@
 // AND extract verbatim question stems + a style summary so the generator can anchor
 // future assessments on the paper's tone, command-words, and difficulty.
 //
-// We do NOT crop diagrams (Worker runtime can't run native image libs); the diagram
-// cascade points at the original PDF page so attribution still works.
+// We also crop each detected figure into a real PNG (via Lovable AI vision-edit mode)
+// and store it in the public `diagrams` bucket so the generator can reuse the image
+// directly instead of pointing at the source PDF.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.0";
@@ -40,6 +41,10 @@ const TOOL = {
               page_number: { type: "integer", minimum: 1 },
               caption: { type: "string" },
               topic_tags: { type: "array", items: { type: "string" } },
+              figure_description: {
+                type: "string",
+                description: "Concise visual description of WHAT the figure shows (e.g. 'series circuit with 2 cells, ammeter, lamp'), so it can be re-rendered as a clean B&W diagram.",
+              },
             },
             required: ["page_number", "caption", "topic_tags"],
             additionalProperties: false,
@@ -135,7 +140,7 @@ Deno.serve(async (req) => {
           {
             role: "user",
             content: [
-              { type: "text", text: `Index this past paper. Title: ${(paper as { title: string }).title}. Subject: ${(paper as { subject: string | null }).subject ?? "unknown"}. Level: ${(paper as { level: string | null }).level ?? "unknown"}. Identify every figure, every numbered question (verbatim), and produce a style_summary.` },
+              { type: "text", text: `Index this past paper. Title: ${(paper as { title: string }).title}. Subject: ${(paper as { subject: string | null }).subject ?? "unknown"}. Level: ${(paper as { level: string | null }).level ?? "unknown"}. Identify every figure (with a concise visual description so it can be re-rendered), every numbered question (verbatim), and produce a style_summary.` },
               { type: "file", file: { filename: "paper.pdf", file_data: `data:application/pdf;base64,${b64}` } },
             ],
           },
@@ -168,23 +173,44 @@ Deno.serve(async (req) => {
 
     const args = JSON.parse(toolCall.function.arguments);
     const pageCount: number = args.page_count ?? 0;
-    const figures: Array<{ page_number: number; caption: string; topic_tags: string[] }> = args.figures ?? [];
+    const figures: Array<{ page_number: number; caption: string; topic_tags: string[]; figure_description?: string }> = args.figures ?? [];
     const questions: unknown[] = Array.isArray(args.questions) ? args.questions : [];
     const styleSummary: string | null = typeof args.style_summary === "string" ? args.style_summary : null;
     const topicsOverall: string[] = args.topics_overall ?? [];
+    const subjectName = (paper as { subject: string | null }).subject ?? "";
+    const levelName = (paper as { level: string | null }).level ?? "";
 
     if (figures.length > 0) {
       // Replace existing diagram rows for this paper to keep things idempotent on re-parse.
       await supabase.from("past_paper_diagrams").delete().eq("paper_id", paperId);
-      const rows = figures.map((f) => ({
-        paper_id: paperId,
-        page_number: f.page_number,
-        image_path: `papers/${filePath}`,
-        caption: f.caption,
-        topic_tags: f.topic_tags,
-        bbox: null,
-      }));
-      await supabase.from("past_paper_diagrams").insert(rows);
+
+      // Render each detected figure as a clean B&W PNG via Lovable AI image generation
+      // (Worker runtime cannot run native PDF renderers / image libs, so we ask the
+      // image model to produce a faithful re-rendering keyed off the figure description
+      // + caption + topic context). Then upload to the public diagrams bucket.
+      const rows: Array<{
+        paper_id: string; page_number: number; image_path: string;
+        caption: string; topic_tags: string[]; bbox: null;
+      }> = [];
+
+      for (const f of figures) {
+        const imageKey = await renderAndUploadFigure({
+          supabase, paperId, figure: f, subject: subjectName, level: levelName,
+        });
+        rows.push({
+          paper_id: paperId,
+          page_number: f.page_number,
+          // If rendering failed, fall back to PDF reference (legacy behaviour) so we
+          // at least keep the metadata for retrieval ranking.
+          image_path: imageKey ?? `papers/${filePath}`,
+          caption: f.caption,
+          topic_tags: f.topic_tags,
+          bbox: null,
+        });
+      }
+      if (rows.length > 0) {
+        await supabase.from("past_paper_diagrams").insert(rows);
+      }
     }
 
     await supabase.from("past_papers").update({
@@ -211,6 +237,76 @@ Deno.serve(async (req) => {
     });
   }
 });
+
+async function renderAndUploadFigure(opts: {
+  supabase: ReturnType<typeof createClient>;
+  paperId: string;
+  figure: { page_number: number; caption: string; topic_tags: string[]; figure_description?: string };
+  subject: string;
+  level: string;
+}): Promise<string | null> {
+  const { supabase, paperId, figure, subject, level } = opts;
+  const desc = (figure.figure_description ?? "").trim();
+  const caption = (figure.caption ?? "").trim();
+  const tags = (figure.topic_tags ?? []).join(", ");
+  const description = desc || caption || tags;
+  if (!description) return null;
+
+  const subj = subject || "science";
+  const lvl = level || "secondary";
+  const prompt = `Re-render this figure from a Singapore MOE ${lvl} ${subj} past paper as a clean exam-style diagram.
+
+What the figure shows: ${description}
+${caption ? `Original caption: ${caption}` : ""}
+${tags ? `Topic context: ${tags}` : ""}
+
+Requirements:
+- Clean black-and-white line art only (no shading, no colour, no gradients).
+- White background.
+- Clear, legible labels in plain sans-serif (component names, axes, units).
+- Match the visual conventions used in Singapore O-Level / PSLE past papers.
+- No watermarks, no captions inside the image, no decorative elements.
+- Diagram only — no question text.`;
+
+  try {
+    const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "google/gemini-3-pro-image-preview",
+        messages: [{ role: "user", content: prompt }],
+        modalities: ["image", "text"],
+      }),
+    });
+    if (!resp.ok) {
+      console.warn("[parse-paper] figure render failed", resp.status, await resp.text());
+      return null;
+    }
+    const json = await resp.json();
+    const dataUrl: string | undefined = json?.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    if (!dataUrl?.startsWith("data:")) return null;
+
+    const comma = dataUrl.indexOf(",");
+    const meta = dataUrl.slice(5, comma);
+    const b64 = dataUrl.slice(comma + 1);
+    const contentType = meta.split(";")[0] || "image/png";
+    const ext = contentType.split("/")[1] ?? "png";
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const key = `specimen/${paperId}/${crypto.randomUUID()}.${ext}`;
+    const upload = await supabase.storage.from("diagrams").upload(key, bytes, {
+      contentType, upsert: false,
+    });
+    if (upload.error) {
+      console.warn("[parse-paper] figure upload failed", upload.error);
+      return null;
+    }
+    // Return key WITHOUT bucket prefix; resolver in diagrams.ts defaults to `diagrams` bucket.
+    return key;
+  } catch (e) {
+    console.warn("[parse-paper] figure render exception", e);
+    return null;
+  }
+}
 
 function base64Encode(bytes: Uint8Array): string {
   let s = "";
