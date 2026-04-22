@@ -35,9 +35,11 @@ export function questionWantsDiagram(
   questionTypes: string[],
   topic: string,
   learningOutcomes: string[],
+  stem: string = "",
 ): boolean {
   if (!kind) return false;
   const blob = (topic + " " + learningOutcomes.join(" ")).toLowerCase();
+  const stemBlob = (stem ?? "").toLowerCase();
 
   // Skip for purely descriptive / non-visual topics, even in science.
   const descriptiveOnly = [
@@ -50,10 +52,29 @@ export function questionWantsDiagram(
   const heavyTypes = ["structured", "source_based", "practical", "comprehension"];
   const lightTypes = ["mcq", "short_answer"];
 
+  // Visual keywords that, when present in the STEM, strongly imply the question
+  // is referring to an image the student is expected to look at.
+  const stemVisualPhrases = [
+    "diagram below", "diagram shows", "diagram above", "the diagram",
+    "figure below", "figure shows", "figure above", "the figure", "fig.",
+    "circuit shown", "circuit below", "the circuit",
+    "apparatus shown", "apparatus below", "the apparatus", "set-up shown", "setup shown",
+    "graph shows", "graph below", "the graph", "shown in the graph",
+    "shown below", "shown above", "shown in fig",
+    "ray diagram", "energy profile", "structure shown", "structure of",
+    "as shown", "is shown", "are shown",
+  ];
+  const stemHasVisualRef = stemVisualPhrases.some((k) => stemBlob.includes(k));
+
   // SCIENCE: default-on for structured/practical/comprehension/source_based questions
   // (these are the slots where MOE specimen papers consistently feature apparatus,
   // circuits, ray paths, biological structures, etc.).
   if (isScience && questionTypes.some((t) => heavyTypes.includes(t))) return true;
+
+  // SCIENCE MCQ / short-answer: only fire when the STEM itself references a visual.
+  // MOE Paper 1 (MCQ) frequently has text-only items; we don't want to force a
+  // diagram on every MCQ, only those that explicitly refer to one.
+  if (isScience && questionTypes.some((t) => lightTypes.includes(t)) && stemHasVisualRef) return true;
 
   // MATH or non-science fallback: require a heavy type AND a visual keyword.
   const visualKeywords = [
@@ -66,11 +87,11 @@ export function questionWantsDiagram(
     "circuit diagram", "apparatus", "bunsen", "test tube", "beaker", "alkene",
     "ammeter", "voltmeter", "pulley", "spring", "pendulum", "convex", "concave",
   ];
-  const hasVisualKeyword = visualKeywords.some((k) => blob.includes(k));
+  const hasVisualKeyword = visualKeywords.some((k) => blob.includes(k) || stemBlob.includes(k));
 
   if (questionTypes.some((t) => heavyTypes.includes(t)) && hasVisualKeyword) return true;
 
-  // MCQ / short-answer: only when the topic explicitly mentions a visual.
+  // MCQ / short-answer (non-science): only when topic OR stem mentions a visual.
   if (questionTypes.some((t) => lightTypes.includes(t)) && hasVisualKeyword) return true;
 
   // Math/physics structured: default-yes (formulas often paired with figures).
@@ -134,12 +155,19 @@ async function fromPastPapers(
   subject: string,
   level: string,
   stem: string,
+  usedUrls?: Set<string>,
 ): Promise<DiagramResult | null> {
   // Build a tag-pool from topic + LOs + stem snippet.
-  const tags = (topic + " " + learningOutcomes.join(" ") + " " + stem.slice(0, 200))
+  const topicTags = (topic + " " + learningOutcomes.join(" "))
     .toLowerCase()
     .split(/[^a-z0-9]+/)
     .filter((w) => w.length > 3);
+  const stemTags = stem.slice(0, 200)
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length > 3);
+  const tags = Array.from(new Set([...topicTags, ...stemTags]));
+  const stemOnlyTags = new Set(stemTags.filter((w) => !topicTags.includes(w)));
   if (tags.length === 0) return null;
 
   // Try subject + level first; fall back to subject-only when level has no hits.
@@ -181,11 +209,20 @@ async function fromPastPapers(
       const dtags = (d.topic_tags ?? []).map((t) => t.toLowerCase());
       const caption = (d.caption ?? "").toLowerCase();
       let score = 0;
-      // Tag overlap (high signal).
-      score += dtags.filter((t) => tags.some((q) => t.includes(q) || q.includes(t))).length * 2;
+      // Tag overlap (high signal). Boost for stem-only keywords so different
+      // questions on the same topic prefer different figures.
+      for (const t of dtags) {
+        for (const q of tags) {
+          if (t.includes(q) || q.includes(t)) {
+            score += stemOnlyTags.has(q) ? 3 : 2;
+          }
+        }
+      }
       // Caption keyword overlap.
       for (const t of tags) {
-        if (t.length > 3 && caption.includes(t)) score += 1;
+        if (t.length > 3 && caption.includes(t)) {
+          score += stemOnlyTags.has(t) ? 2 : 1;
+        }
       }
       // Specimen / sample paper boost.
       const title = (paperById.get(d.paper_id)?.title ?? "").toLowerCase();
@@ -198,22 +235,23 @@ async function fromPastPapers(
     .sort((a, b) => b.score - a.score);
   if (ranked.length === 0) return null;
 
-  const best = ranked[0].d;
-  const paper = paperById.get(best.paper_id);
-
-  // Resolve a public URL for the image.
-  const url = await resolveStorageUrl(supabase, best.image_path);
-  if (!url) return null;
-
-  const citation = paper
-    ? `${paper.exam_board ?? "Past paper"} ${paper.year ?? ""} ${paper.title} Paper ${paper.paper_number ?? ""}`.replace(/\s+/g, " ").trim()
-    : "Past paper (uploaded)";
-  return {
-    url,
-    source: "past_paper",
-    citation,
-    caption: best.caption ?? "Figure from uploaded past paper",
-  };
+  // Walk ranked candidates, skipping any whose resolved URL is already used.
+  for (const { d: best } of ranked) {
+    const url = await resolveStorageUrl(supabase, best.image_path);
+    if (!url) continue;
+    if (usedUrls && usedUrls.has(url)) continue;
+    const paper = paperById.get(best.paper_id);
+    const citation = paper
+      ? `${paper.exam_board ?? "Past paper"} ${paper.year ?? ""} ${paper.title} Paper ${paper.paper_number ?? ""}`.replace(/\s+/g, " ").trim()
+      : "Past paper (uploaded)";
+    return {
+      url,
+      source: "past_paper",
+      citation,
+      caption: best.caption ?? "Figure from uploaded past paper",
+    };
+  }
+  return null;
 }
 
 async function resolveStorageUrl(
@@ -248,11 +286,14 @@ async function fromTavilyImages(
   kind: Exclude<ScienceMathKind, null>,
   topic: string,
   learningOutcomes: string[],
+  stem: string,
+  usedUrls?: Set<string>,
 ): Promise<DiagramResult | null> {
   if (!hasTavily()) return null;
   const lo = learningOutcomes[0] ?? "";
   const subjectWord = kind === "general_science" ? "science" : kind;
-  const query = `${topic} ${lo} ${subjectWord} diagram labelled exam`.trim();
+  const stemSnippet = (stem ?? "").trim().slice(0, 120);
+  const query = `${topic} ${lo} ${stemSnippet} ${subjectWord} diagram labelled exam`.replace(/\s+/g, " ").trim();
 
   const { images, results } = await tavilySearch(query, {
     includeDomains: ALLOW_DOMAINS_SCIENCE_MATH,
@@ -263,15 +304,18 @@ async function fromTavilyImages(
   });
 
   // Prefer images whose URL is on the allow-list and looks like a real raster/svg.
+  const stemWords = stemSnippet.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
   const ranked = images
     .filter((im) => /\.(png|jpe?g|gif|svg|webp)(\?|#|$)/i.test(im.url))
     .filter((im) => !isDenied(im.url))
+    .filter((im) => !(usedUrls && usedUrls.has(im.url)))
     .map((im) => {
       let score = 0;
       if (isOnAllowList(im.url)) score += 5;
       const blob = ((im.description ?? "") + " " + im.url).toLowerCase();
       const topicWords = topic.toLowerCase().split(/\s+/);
       for (const w of topicWords) if (w.length > 3 && blob.includes(w)) score += 2;
+      for (const w of stemWords) if (blob.includes(w)) score += 2;
       if (/diagram|figure|fig\.|circuit|graph|chart|model|setup|apparatus/.test(blob)) score += 3;
       if (/logo|icon|avatar|sprite|banner|ad/.test(blob)) score -= 5;
       return { im, score };
@@ -295,11 +339,14 @@ async function fromFirecrawl(
   kind: Exclude<ScienceMathKind, null>,
   topic: string,
   learningOutcomes: string[],
+  stem: string,
+  usedUrls?: Set<string>,
 ): Promise<DiagramResult | null> {
   if (!FIRECRAWL_API_KEY) return null;
   const lo = learningOutcomes[0] ?? "";
   const subjectWord = kind === "general_science" ? "science" : kind;
-  const query = `${topic} ${lo} ${subjectWord} diagram labelled exam`.trim();
+  const stemSnippet = (stem ?? "").trim().slice(0, 120);
+  const query = `${topic} ${lo} ${stemSnippet} ${subjectWord} diagram labelled exam`.replace(/\s+/g, " ").trim();
 
   const resp = await fetch("https://api.firecrawl.dev/v2/search", {
     method: "POST",
@@ -337,6 +384,7 @@ async function fromFirecrawl(
       const markdown: string = data?.markdown ?? "";
       const img = pickBestImage(html, markdown, cand.url, topic);
       if (!img) continue;
+      if (usedUrls && usedUrls.has(img.src)) continue;
       return {
         url: img.src,
         source: "web",
@@ -355,10 +403,12 @@ async function fromWeb(
   kind: Exclude<ScienceMathKind, null>,
   topic: string,
   learningOutcomes: string[],
+  stem: string,
+  usedUrls?: Set<string>,
 ): Promise<DiagramResult | null> {
-  const t = await fromTavilyImages(kind, topic, learningOutcomes);
+  const t = await fromTavilyImages(kind, topic, learningOutcomes, stem, usedUrls);
   if (t) return t;
-  return fromFirecrawl(kind, topic, learningOutcomes);
+  return fromFirecrawl(kind, topic, learningOutcomes, stem, usedUrls);
 }
 
 /** Pick the largest <img> matching topic keywords; fall back to first image. */
@@ -494,21 +544,23 @@ export async function fetchDiagram(opts: {
   learningOutcomes: string[];
   stem?: string;
   assessmentId: string;
+  usedUrls?: Set<string>;
 }): Promise<DiagramResult | null> {
   const stem = opts.stem ?? "";
+  const usedUrls = opts.usedUrls;
   // 1. Past papers
   try {
-    const r = await fromPastPapers(opts.supabase, opts.topic, opts.learningOutcomes, opts.subject, opts.level, stem);
+    const r = await fromPastPapers(opts.supabase, opts.topic, opts.learningOutcomes, opts.subject, opts.level, stem, usedUrls);
     if (r) return r;
   } catch (e) { console.warn("[diagrams] past_papers stage error", e); }
 
   // 2. Web (Tavily images → Firecrawl fallback)
   try {
-    const r = await fromWeb(opts.kind, opts.topic, opts.learningOutcomes);
+    const r = await fromWeb(opts.kind, opts.topic, opts.learningOutcomes, stem, usedUrls);
     if (r) return r;
   } catch (e) { console.warn("[diagrams] web stage error", e); }
 
-  // 3. AI generation
+  // 3. AI generation (always unique — fresh upload each call)
   try {
     const r = await fromAI(opts.supabase, opts.kind, opts.subject, opts.level, opts.topic, opts.learningOutcomes, stem, opts.assessmentId);
     if (r) return r;
