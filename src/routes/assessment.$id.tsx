@@ -600,6 +600,7 @@ function EditorPage() {
                       isLast={i === questions.length - 1}
                       isFirst={i === 0}
                       isRegen={regenId === q.id}
+                      subject={assessment.subject}
                       selected={selectedIds.has(q.id)}
                       onToggleSelect={() => toggleSelect(q.id)}
                       onUpdate={(patch) => updateQ(q.id, patch)}
@@ -607,6 +608,8 @@ function EditorPage() {
                       onMove={(d) => moveQ(q.id, d)}
                       onRegenerate={(ins, diff) => regenerate(q.id, ins, diff)}
                       onBank={() => saveToBank(q)}
+                      onDiagramAction={(mode, ins) => runDiagramAction(q.id, mode, ins)}
+                      onDiagramRemove={() => removeDiagram(q.id)}
                       hideSourceBlock={isSbqSection}
                     />
                   </div>
