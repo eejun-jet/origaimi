@@ -191,7 +191,7 @@ function EditorPage() {
     qId: string,
     mode: "generate" | "edit" | "regenerate",
     instruction?: string,
-  ): Promise<boolean> => {
+  ) => {
     if (!assessment) return false;
     const q = questions.find((x) => x.id === qId);
     if (!q) return false;
