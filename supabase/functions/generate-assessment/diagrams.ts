@@ -486,15 +486,19 @@ Requirements:
 - Diagram only — no question text.`;
 
   try {
+    const ac = new AbortController();
+    const httpTimer = setTimeout(() => ac.abort(), 15000);
     const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "google/gemini-3-pro-image-preview",
+        // Nano Banana 2 — fast image gen with pro-level quality.
+        model: "google/gemini-3.1-flash-image-preview",
         messages: [{ role: "user", content: prompt }],
         modalities: ["image", "text"],
       }),
-    });
+      signal: ac.signal,
+    }).finally(() => clearTimeout(httpTimer));
     if (!resp.ok) {
       console.warn("[diagrams] AI generation failed", resp.status, await resp.text());
       return null;
@@ -535,6 +539,24 @@ Requirements:
 // Public entrypoint: run the cascade.
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Race a promise against a timeout. Returns null on timeout (non-fatal). */
+async function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race<T | null>([
+      p,
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => {
+          console.warn(`[diagrams] ${label} timed out after ${ms}ms`);
+          resolve(null);
+        }, ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export async function fetchDiagram(opts: {
   supabase: ReturnType<typeof createClient>;
   kind: Exclude<ScienceMathKind, null>;
@@ -545,34 +567,52 @@ export async function fetchDiagram(opts: {
   stem?: string;
   assessmentId: string;
   usedUrls?: Set<string>;
-  /**
-   * When true, only consult past papers — skip the slow web (Tavily / Firecrawl)
-   * and AI image generation stages. Used for MCQ / short-answer where speed
-   * matters and a missing diagram is acceptable.
-   */
-  pastPapersOnly?: boolean;
+  /** Max ms for past-paper lookup (DB). Default 4000. */
+  pastPapersTimeoutMs?: number;
+  /** Max ms for the web stage (Tavily + Firecrawl). Default 8000. */
+  webTimeoutMs?: number;
+  /** Max ms for the AI image generation stage. Default 12000. 0 disables AI. */
+  aiTimeoutMs?: number;
 }): Promise<DiagramResult | null> {
   const stem = opts.stem ?? "";
   const usedUrls = opts.usedUrls;
+  const pastPapersMs = opts.pastPapersTimeoutMs ?? 4000;
+  const webMs = opts.webTimeoutMs ?? 8000;
+  const aiMs = opts.aiTimeoutMs ?? 12000;
+
   // 1. Past papers
   try {
-    const r = await fromPastPapers(opts.supabase, opts.topic, opts.learningOutcomes, opts.subject, opts.level, stem, usedUrls);
+    const r = await withTimeout(
+      fromPastPapers(opts.supabase, opts.topic, opts.learningOutcomes, opts.subject, opts.level, stem, usedUrls),
+      pastPapersMs,
+      "past_papers",
+    );
     if (r) return r;
   } catch (e) { console.warn("[diagrams] past_papers stage error", e); }
 
-  if (opts.pastPapersOnly) return null;
-
   // 2. Web (Tavily images → Firecrawl fallback)
-  try {
-    const r = await fromWeb(opts.kind, opts.topic, opts.learningOutcomes, stem, usedUrls);
-    if (r) return r;
-  } catch (e) { console.warn("[diagrams] web stage error", e); }
+  if (webMs > 0) {
+    try {
+      const r = await withTimeout(
+        fromWeb(opts.kind, opts.topic, opts.learningOutcomes, stem, usedUrls),
+        webMs,
+        "web",
+      );
+      if (r) return r;
+    } catch (e) { console.warn("[diagrams] web stage error", e); }
+  }
 
   // 3. AI generation (always unique — fresh upload each call)
-  try {
-    const r = await fromAI(opts.supabase, opts.kind, opts.subject, opts.level, opts.topic, opts.learningOutcomes, stem, opts.assessmentId);
-    if (r) return r;
-  } catch (e) { console.warn("[diagrams] ai stage error", e); }
+  if (aiMs > 0) {
+    try {
+      const r = await withTimeout(
+        fromAI(opts.supabase, opts.kind, opts.subject, opts.level, opts.topic, opts.learningOutcomes, stem, opts.assessmentId),
+        aiMs,
+        "ai",
+      );
+      if (r) return r;
+    } catch (e) { console.warn("[diagrams] ai stage error", e); }
+  }
 
   return null;
 }
