@@ -1,63 +1,72 @@
 
 
 ## Goal
-Let teachers control the **difficulty mix** of a Science paper at generation time (proportion of easy / medium / hard), and let them **regenerate any question at a chosen difficulty** afterwards.
+Let teachers click on a question's diagram to **edit it with a prompt** ("add a labelled ammeter", "remove the second beaker", "make the graph axes start at 0") or **regenerate it from scratch** at a different angle, directly from the assessment review page.
 
 ## What's there today
-- Sections (in `src/lib/sections.ts`) carry `question_type`, `marks`, `num_questions`, `bloom`, `topic_pool` — but **no difficulty target**. The AI picks `difficulty` per question freely (`easy | medium | hard`).
-- The single-question regenerator (`supabase/functions/regenerate-question/index.ts`) only accepts a freeform `instruction`. The bulk regenerate dialog in `src/routes/assessment.$id.tsx` is the same.
-- Difficulty is already stored on every `assessment_questions` row, so we can read & display it.
+- Every question can already carry a diagram (`diagram_url`, `diagram_source`, `diagram_caption`).
+- An edge function **`generate-diagram`** already exists and accepts an optional `instruction`. It always *generates* a brand-new image — it never *edits* the existing one.
+- The assessment review UI (`src/routes/assessment.$id.tsx`) renders the figure but exposes **no controls** for it. The "Regenerate" button on the card only re-rolls the *question text*, not the diagram.
 
 ## Plan
 
-### 1. Section model — add a difficulty mix
-- **`src/lib/sections.ts`**: extend `Section` with an optional `difficulty_mix?: { easy: number; medium: number; hard: number }` (percentages summing to 100). `defaultSection` returns `{ easy: 20, medium: 60, hard: 20 }` — a sensible MOE-style default.
-- Mix is **optional** so existing assessments keep working.
+### 1. Diagram toolbar on every figure
+In `src/routes/assessment.$id.tsx`, under the existing `<figure>` (around line 765), add a small action row visible whenever a diagram is present:
 
-### 2. Builder UI — only for Science
-- **`src/routes/new.tsx`** in the section card (around line 1185, under the Bloom / # Questions / Marks row): if the chosen subject is Physics / Chemistry / Biology / General Science / Combined Science, render a "Difficulty mix" block:
+```text
+[ Edit with prompt ]   [ Regenerate ]   [ Remove ]
+```
 
-  ```text
-  Difficulty mix      Easy  [ 20 %]   Medium [ 60 %]   Hard [ 20 %]
-                      ─────────────────────────────────  total 100%
-  ```
+If the question has **no diagram yet** but is a science/maths question, also show a single `[ Generate diagram ]` button below the stem so teachers can add one on demand.
 
-  - Three small number inputs (0–100) with a live total + colored warning if ≠ 100.
-  - A "Reset to default" link (20 / 60 / 20).
-  - For non-science subjects we hide the block entirely (no behaviour change).
-- Validation on the "Generate" step blocks submission if any science section's mix doesn't sum to 100.
+### 2. Inline prompt panel
+Clicking **Edit with prompt** or **Regenerate** opens a small panel under the figure (same visual pattern as the existing question-regenerate panel):
 
-### 3. Generator — convert mix to per-question targets
-- **`supabase/functions/generate-assessment/index.ts`**:
-  - Add `assignDifficultyToQuestions(mix, n)` — deterministically maps a percentage mix to an array of `n` labels (e.g. mix 20/60/20 with n=5 → `["easy","medium","medium","medium","hard"]`). Uses largest-remainder rounding so totals always match `n`.
-  - In `buildUserPrompt` (around lines 424–450), if `section.difficulty_mix` is set, append a "DIFFICULTY DISTRIBUTION" block that lists the target difficulty for each question slot (Q1=easy, Q2=medium…) and instructs the model to honour it.
-  - When inserting questions (around line 855–870), overwrite `difficulty` with the planned target if it differs from what the model returned, so the saved row matches the teacher's plan exactly.
-- Non-science / no-mix sections behave exactly as today.
+- Textarea — placeholder differs by mode:
+  - Edit: *"Describe the change — e.g. 'add a switch in series', 'relabel R₁ as 4Ω', 'shade the triangle'"*
+  - Regenerate: *"Optional: 'show side view instead', 'use a Bunsen burner', 'simpler labels'"*
+- Buttons: **Apply** (with spinner), **Cancel**.
 
-### 4. Per-question regenerate at a chosen difficulty
-- **`supabase/functions/regenerate-question/index.ts`**:
-  - Accept an optional `difficulty: "easy" | "medium" | "hard"` in the request body.
-  - When provided, inject "Target difficulty: <level>. Calibrate stem complexity, distractor closeness, and required reasoning steps to match a typical MOE <level> item." into the user prompt, and force the tool's returned `difficulty` to that value before saving.
-- **`src/routes/assessment.$id.tsx`**:
-  - In `QuestionCard`'s regenerate panel, add a small `Select` ("Difficulty: keep / easy / medium / hard"). Pass it into `onRegenerate(instruction, difficulty)`.
-  - Update `regenerate(qId, instruction, difficulty)` to forward the field to the edge function.
-  - Same dropdown in the bulk regenerate dialog so teachers can re-level several questions in one action.
-  - Show the current `q.difficulty` as a badge next to the existing Bloom badge so teachers can see what they're changing.
+### 3. Edge-function changes — `supabase/functions/generate-diagram/index.ts`
+Extend the function to support **three modes** in one call:
 
-### 5. No DB migration
-`assessment_questions.difficulty` already exists. The mix lives in `assessments.blueprint` JSON, so no schema change.
+| `mode` | Behaviour |
+|---|---|
+| `generate` (default, today) | Text-to-image with the MOE-style system prompt. |
+| `edit` | Calls Nano Banana 2 with both the **instruction** AND the existing `diagram_url` as an `image_url` content part — image-edit mode. Preserves layout, applies only the requested change. |
+| `regenerate` | Same as `generate` but accepts the user instruction to steer a fresh attempt; old image is replaced. |
+
+Implementation notes:
+- Add `mode`, `currentDiagramUrl`, plus the existing `instruction` to the request body.
+- For `edit`, build a multi-part user message (`text` + `image_url`) per the AI gateway image-edit pattern; keep the same MOE black-and-white styling rules in the text part.
+- Use `google/gemini-3.1-flash-image-preview` (Nano Banana 2) as the default model — fast and edit-capable. Keep `google/gemini-3-pro-image-preview` as a fallback for `regenerate` if the flash edit/generation fails.
+- After upload, update `diagram_url`, set `diagram_source = 'ai_edited'` (for edits) or `'ai_generated'` (for fresh generations), and refresh `diagram_caption` only on regenerate (keep caption on edit so labels don't drift).
+- Return the new `url` so the UI can swap it in immediately without a full page refetch.
+
+### 4. Frontend wiring — `src/routes/assessment.$id.tsx`
+- New helper `runDiagramAction(qId, mode, instruction)` that calls the edge function via `supabase.functions.invoke("generate-diagram", { body: { questionId, topic, subject, mode, instruction, currentDiagramUrl } })`.
+- On success: update the local `questions` state with the new `diagram_url` (and source) so the figure swaps in place, plus a toast.
+- On 429/402: surface friendly toasts ("Rate-limited, try again shortly" / "Out of AI credits").
+- **Remove** action: simple confirm + `update assessment_questions set diagram_url=null, diagram_source=null, diagram_caption=null, diagram_citation=null`.
+
+### 5. Where it shows
+Only show diagram actions for science / maths questions (Physics, Chemistry, Biology, General/Combined Science, Mathematics). For English/Humanities the figure toolbar stays hidden.
 
 ## Files touched
 ```
-src/lib/sections.ts                                       difficulty_mix on Section
-src/routes/new.tsx                                        mix UI per section (science only) + validation
-src/routes/assessment.$id.tsx                             difficulty selector in regen panels + badge
-supabase/functions/generate-assessment/index.ts           plan & enforce per-question difficulty
-supabase/functions/regenerate-question/index.ts           accept & honour target difficulty
+supabase/functions/generate-diagram/index.ts   add edit/regenerate modes,
+                                               image-edit multipart payload,
+                                               currentDiagramUrl handling
+src/routes/assessment.$id.tsx                  diagram toolbar, inline edit
+                                               panel, generate-from-scratch
+                                               button, remove action,
+                                               state swap on success
 ```
 
+No DB migration. No schema change. No new dependencies.
+
 ## Result
-- When generating a Science paper, teachers set e.g. 30 / 50 / 20 and the paper comes back with that exact distribution per section.
-- Any question can be re-rolled at a specific target difficulty from its card or from the bulk regenerate dialog.
-- Other subjects are unaffected.
+- Teachers can refine any diagram with natural-language prompts ("add a return spring", "make the parabola pass through the origin") and Nano Banana edits the **existing figure** in place.
+- They can also re-roll a diagram with a steering instruction, generate one for a question that currently has none, or remove an unwanted figure.
+- All actions stay on the same review screen — no full regenerate of the question text needed to fix a diagram.
 
