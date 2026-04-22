@@ -673,6 +673,9 @@ function QuestionCard({
           <Badge variant="outline">{q.question_type.replace("_", " ")}</Badge>
           {q.topic && <Badge variant="outline">{q.topic}</Badge>}
           {q.bloom_level && <Badge variant="secondary">{q.bloom_level}</Badge>}
+          {q.difficulty && (
+            <Badge variant="outline" className="capitalize">{q.difficulty}</Badge>
+          )}
           <Badge variant="secondary">[{q.marks}]</Badge>
         </div>
         <div className="flex gap-1">
@@ -786,8 +789,25 @@ function QuestionCard({
         <div className="mt-4 rounded-lg border border-border bg-muted/30 p-3">
           <Textarea rows={2} value={regenInstr} onChange={(e) => setRegenInstr(e.target.value)}
             placeholder="Optional: 'make harder', 'use Singapore hawker context', 'less wordy'..." />
-          <div className="mt-2 flex gap-2">
-            <Button size="sm" disabled={isRegen} onClick={() => onRegenerate(regenInstr)} className="gap-1">
+          <div className="mt-2 flex flex-wrap items-end gap-3">
+            <div className="w-44">
+              <label className="text-xs text-muted-foreground">Target difficulty</label>
+              <Select value={regenDifficulty} onValueChange={(v) => setRegenDifficulty(v as typeof regenDifficulty)}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="keep">Keep current{q.difficulty ? ` (${q.difficulty})` : ""}</SelectItem>
+                  <SelectItem value="easy">Easy</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="hard">Hard</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              size="sm"
+              disabled={isRegen}
+              onClick={() => onRegenerate(regenInstr, regenDifficulty === "keep" ? undefined : regenDifficulty)}
+              className="gap-1"
+            >
               {isRegen ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
               Regenerate
             </Button>
