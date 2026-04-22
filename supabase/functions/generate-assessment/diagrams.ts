@@ -35,9 +35,11 @@ export function questionWantsDiagram(
   questionTypes: string[],
   topic: string,
   learningOutcomes: string[],
+  stem: string = "",
 ): boolean {
   if (!kind) return false;
   const blob = (topic + " " + learningOutcomes.join(" ")).toLowerCase();
+  const stemBlob = (stem ?? "").toLowerCase();
 
   // Skip for purely descriptive / non-visual topics, even in science.
   const descriptiveOnly = [
@@ -50,10 +52,29 @@ export function questionWantsDiagram(
   const heavyTypes = ["structured", "source_based", "practical", "comprehension"];
   const lightTypes = ["mcq", "short_answer"];
 
+  // Visual keywords that, when present in the STEM, strongly imply the question
+  // is referring to an image the student is expected to look at.
+  const stemVisualPhrases = [
+    "diagram below", "diagram shows", "diagram above", "the diagram",
+    "figure below", "figure shows", "figure above", "the figure", "fig.",
+    "circuit shown", "circuit below", "the circuit",
+    "apparatus shown", "apparatus below", "the apparatus", "set-up shown", "setup shown",
+    "graph shows", "graph below", "the graph", "shown in the graph",
+    "shown below", "shown above", "shown in fig",
+    "ray diagram", "energy profile", "structure shown", "structure of",
+    "as shown", "is shown", "are shown",
+  ];
+  const stemHasVisualRef = stemVisualPhrases.some((k) => stemBlob.includes(k));
+
   // SCIENCE: default-on for structured/practical/comprehension/source_based questions
   // (these are the slots where MOE specimen papers consistently feature apparatus,
   // circuits, ray paths, biological structures, etc.).
   if (isScience && questionTypes.some((t) => heavyTypes.includes(t))) return true;
+
+  // SCIENCE MCQ / short-answer: only fire when the STEM itself references a visual.
+  // MOE Paper 1 (MCQ) frequently has text-only items; we don't want to force a
+  // diagram on every MCQ, only those that explicitly refer to one.
+  if (isScience && questionTypes.some((t) => lightTypes.includes(t)) && stemHasVisualRef) return true;
 
   // MATH or non-science fallback: require a heavy type AND a visual keyword.
   const visualKeywords = [
@@ -66,11 +87,11 @@ export function questionWantsDiagram(
     "circuit diagram", "apparatus", "bunsen", "test tube", "beaker", "alkene",
     "ammeter", "voltmeter", "pulley", "spring", "pendulum", "convex", "concave",
   ];
-  const hasVisualKeyword = visualKeywords.some((k) => blob.includes(k));
+  const hasVisualKeyword = visualKeywords.some((k) => blob.includes(k) || stemBlob.includes(k));
 
   if (questionTypes.some((t) => heavyTypes.includes(t)) && hasVisualKeyword) return true;
 
-  // MCQ / short-answer: only when the topic explicitly mentions a visual.
+  // MCQ / short-answer (non-science): only when topic OR stem mentions a visual.
   if (questionTypes.some((t) => lightTypes.includes(t)) && hasVisualKeyword) return true;
 
   // Math/physics structured: default-yes (formulas often paired with figures).
