@@ -843,36 +843,15 @@ Deno.serve(async (req) => {
           source_url = null;
         }
 
-        // Diagram cascade for science/math (only for question types that benefit).
-        let diag: Awaited<ReturnType<typeof fetchDiagram>> | null = null;
-        if (scienceMathKind) {
-          const t = pickTopic(section, qi);
-          const wantDiagram = questionWantsDiagram(
-            scienceMathKind,
-            [question_type],
-            q.topic ?? t?.topic ?? "",
-            t?.learning_outcomes ?? [],
-            q.stem ?? "",
-          );
-          if (wantDiagram) {
-            try {
-              diag = await fetchDiagram({
-                supabase, kind: scienceMathKind, subject, level,
-                topic: q.topic ?? t?.topic ?? "",
-                learningOutcomes: t?.learning_outcomes ?? [],
-                stem: q.stem ?? "",
-                assessmentId,
-                usedUrls: usedDiagramUrls,
-              });
-              if (diag) {
-                diagramCount++;
-                usedDiagramUrls.add(diag.url);
-              }
-            } catch (e) {
-              console.warn("[generate] diagram fetch failed", e);
-            }
-          }
-        }
+        // Decide whether this question wants a diagram (resolved later, in parallel).
+        const t = pickTopic(section, qi);
+        const wantDiagram = !!scienceMathKind && questionWantsDiagram(
+          scienceMathKind,
+          [question_type],
+          q.topic ?? t?.topic ?? "",
+          t?.learning_outcomes ?? [],
+          q.stem ?? "",
+        );
 
         allRows.push({
           assessment_id: assessmentId,
@@ -890,10 +869,20 @@ Deno.serve(async (req) => {
           source_excerpt,
           source_url,
           notes,
-          diagram_url: diag?.url ?? null,
-          diagram_source: diag?.source ?? null,
-          diagram_citation: diag?.citation ?? null,
-          diagram_caption: diag?.caption ?? null,
+          diagram_url: null,
+          diagram_source: null,
+          diagram_citation: null,
+          diagram_caption: null,
+          // transient — used by the post-insert diagram pass, stripped before insert
+          _wantDiagram: wantDiagram,
+          _diagramTopic: q.topic ?? t?.topic ?? "",
+          _diagramLOs: t?.learning_outcomes ?? [],
+          _diagramKind: scienceMathKind,
+        } as EnrichedRow & {
+          _wantDiagram: boolean;
+          _diagramTopic: string;
+          _diagramLOs: string[];
+          _diagramKind: typeof scienceMathKind;
         });
       }
     }
@@ -906,11 +895,71 @@ Deno.serve(async (req) => {
     }
 
     if (allRows.length > 0) {
-      const { error: insErr } = await supabase.from("assessment_questions").insert(allRows);
+      // Strip transient diagram-planning fields before insert.
+      const insertRows = allRows.map((r) => {
+        const { _wantDiagram, _diagramTopic, _diagramLOs, _diagramKind, ...rest } = r as any;
+        return rest;
+      });
+      const { data: insertedRows, error: insErr } = await supabase
+        .from("assessment_questions")
+        .insert(insertRows)
+        .select("id, position");
       if (insErr) {
         console.error("Insert error", insErr);
         await markAssessmentStatus("generation_failed");
         return new Response(JSON.stringify({ error: insErr.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ---- Diagram phase: parallel, post-insert. Failures here are non-fatal. ----
+      // MCQs / short-answer only consult past papers (cheap DB lookup); structured /
+      // practical / comprehension may also fall through to web + AI generation.
+      const idByPosition = new Map<number, string>();
+      for (const row of insertedRows ?? []) idByPosition.set(row.position, row.id);
+
+      const diagramTasks = allRows
+        .map((r, idx) => ({ r: r as any, idx }))
+        .filter(({ r }) => r._wantDiagram && r._diagramKind);
+
+      if (diagramTasks.length > 0) {
+        const CONCURRENCY = 5;
+        let cursor = 0;
+        const runOne = async () => {
+          while (cursor < diagramTasks.length) {
+            const myIdx = cursor++;
+            const { r, idx } = diagramTasks[myIdx];
+            const isLightType = r.question_type === "mcq" || r.question_type === "short_answer";
+            try {
+              const diag = await fetchDiagram({
+                supabase,
+                kind: r._diagramKind,
+                subject, level,
+                topic: r._diagramTopic,
+                learningOutcomes: r._diagramLOs,
+                stem: r.stem ?? "",
+                assessmentId,
+                usedUrls: usedDiagramUrls,
+                pastPapersOnly: isLightType,
+              });
+              if (diag) {
+                usedDiagramUrls.add(diag.url);
+                diagramCount++;
+                const id = idByPosition.get(r.position);
+                if (id) {
+                  await supabase.from("assessment_questions").update({
+                    diagram_url: diag.url,
+                    diagram_source: diag.source,
+                    diagram_citation: diag.citation,
+                    diagram_caption: diag.caption,
+                  }).eq("id", id);
+                }
+              }
+            } catch (e) {
+              console.warn(`[generate] diagram task ${idx} failed`, e);
+            }
+          }
+        };
+        const workers = Array.from({ length: Math.min(CONCURRENCY, diagramTasks.length) }, runOne);
+        await Promise.all(workers);
       }
     }
 
