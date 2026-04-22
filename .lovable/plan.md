@@ -1,49 +1,65 @@
 
 
-## Multi-skill SBQ selection
+## Goal
+Make AI-generated **Science** papers (Physics / Chemistry / Biology / General Science) include MOE-style diagrams the way the uploaded specimen papers (e.g. 5086) do — circuits, apparatus, ray paths, biological structures, graphs, etc. — instead of producing mostly text-only questions.
 
-Currently each SBQ section locks to ONE skill via a single dropdown. Change to allow **0–5 skills per section** (multi-select), and let the generator distribute them across the questions in that section.
+## What's broken today
+1. **Specimen diagrams are never cropped.** `parse-paper` records each figure as a row in `past_paper_diagrams`, but `image_path` is set to the whole PDF (`papers/<file_path>`). When the generator tries to reuse a specimen figure, it gets a PDF link, not an image — so the past-paper tier always fails for the UI.
+2. **Diagram trigger is too narrow.** `questionWantsDiagram` requires both a question type in `{structured, source_based, practical, comprehension}` AND a visual keyword. Many science MCQ / structured questions skip diagrams even when a circuit or apparatus would be standard.
+3. **AI generation is gated behind two failed tiers.** With (1) broken and the web tier hit-or-miss, science questions often end up with no diagram at all rather than a clean AI-generated MOE-style figure.
+4. **No diagram-density target per paper.** A specimen paper like 5086 has roughly 1 figure every 2–3 questions; we currently attempt 0–1 per section by accident.
 
-### What changes for the user
+## What we'll build
 
-- The "SBQ Skill" dropdown becomes a **checkbox grid** of the 7 skills.
-- Up to **5** skills can be selected; selecting a 6th is disabled with a tooltip.
-- **None selected = blank** = generator picks a sensible default mix per question (current default behaviour).
-- If **Assertion** is selected, the section still enforces "include 1 question worth 8 marks using all sources" but other selected skills fill the remaining questions.
-- Per-question marks validation is relaxed since skills can vary; the section's total marks remain user-controlled.
+### A. Crop specimen-paper figures during upload
+Extend `parse-paper` so each detected figure is rendered as a real image and stored in the public `diagrams` bucket.
 
-### Technical changes
+- Use Lovable AI (`google/gemini-3-pro-image-preview`) in **vision-extract mode**: feed it the PDF page, ask it to return the cropped figure(s) as base64 PNGs along with caption + topic tags.
+- For each figure: upload to `diagrams/specimen/<paper_id>/<uuid>.png`, store that key in `past_paper_diagrams.image_path` (no `papers/` prefix), keep `caption`, `topic_tags`, `page_number`, and add `bbox` if available.
+- Re-parse-friendly: keep the existing `delete + insert` so re-uploading works.
 
-**1. `src/lib/sections.ts`**
-- Add `sbq_skills?: SbqSkill[]` field on `Section` (array, max length 5)
-- Keep `sbq_skill?: SbqSkill` for backward compat — read-side helper `getSectionSkills(section)` returns the array (migrating single → array on the fly)
-- Export `MAX_SBQ_SKILLS = 5`
+### B. Strengthen the past-paper match in the diagram cascade
+In `diagrams.ts → fromPastPapers`:
+- Match on **subject + level**, but also fall back to subject-only when level has no hits.
+- Score by topic-tag overlap **and** caption keyword overlap (e.g. "circuit", "lens", "Bunsen", "alkene").
+- Prefer specimen / sample papers (check `past_papers.title` for "specimen" / "sample") with a +5 score boost — these are the highest-quality figures.
+- Resolve URLs from the public `diagrams` bucket directly (already supported).
 
-**2. `src/routes/new.tsx` (`SectionCard`)**
-- Replace the Select with a checkbox grid of all 7 SBQ_SKILLS
-- Disable un-checked boxes when 5 already selected
-- Show a small hint: "Leave blank to let the AI choose, or pick up to 5 skills."
-- If Assertion is checked, show a note: "Assertion contributes 1 fixed 8-mark question; remaining marks split across other selected skills."
-- Drop the auto-marks-locking logic since skills now mix
+### C. Make the diagram trigger science-aware
+In `questionWantsDiagram`:
+- For Physics / Chemistry / Biology / General Science, default to **wanting a diagram** for `structured`, `practical`, and `comprehension` types unless the topic is purely descriptive (e.g. "definitions", "history of").
+- Keep the visual-keyword path for MCQ and short-answer.
+- Add per-section soft target: aim for ~40 % of science questions to carry a figure (skip extras gracefully when the cascade returns null).
 
-**3. `supabase/functions/generate-assessment/index.ts`**
-- Mirror the type: `sbq_skills?: string[]`
-- Resolve effective skills: `effectiveSkills = section.sbq_skills ?? (section.sbq_skill ? [section.sbq_skill] : [])`
-- Per-question skill assignment: round-robin across `effectiveSkills`. If empty → no skill block, generator falls back to today's generic SBQ prompt.
-- For multi-source skills among the chosen list: fetch enough sources for the **max** `minSources` across selected skills (so Assertion in the mix means we fetch ≥3 sources for the section), and the prompt tells the model "use all sources for the Assertion question; use Source A for single-source skill questions."
-- Update the per-question prompt block to specify which skill goes to which question slot
+### D. Tighten the AI fallback for science
+In `fromAI`:
+- Pass `subject + level + topic + first learning outcome + question stem snippet` into the prompt so the figure is question-specific (currently it only uses topic + first LO).
+- Keep MOE-style constraints (B&W line art, sans-serif labels, no captions inside the image).
+- Prepend "Singapore MOE {Level} {Subject}" to anchor visual conventions.
 
-**4. No changes needed** to docx export or assessment editor header — they already display section context. The header shows "Source-Based" generically when multiple skills are present (since no single skill label fits).
+### E. UI: nothing structural, just confirm
+Diagrams already render in `assessment.$id.tsx` with caption + citation. No change needed beyond verifying the new specimen-cropped images display correctly.
 
-### Edge cases
+## Files to edit
 
-- 0 skills picked: fallback to current generic SBQ behaviour (existing path, no regression)
-- 1 skill picked: behaves identically to today's single-skill mode
-- 5 skills + 3 questions: skills are sampled (first 3 in order)
-- Assertion among 2+ skills + only 2 questions: Assertion takes 1 slot (8m), other skill takes the other slot
+```
+supabase/functions/parse-paper/index.ts          ← crop figures, store as PNGs
+supabase/functions/generate-assessment/diagrams.ts ← stronger past-paper match,
+                                                     science-friendly trigger,
+                                                     better AI prompt
+supabase/functions/generate-assessment/index.ts  ← (minor) pass stem to fetchDiagram
+```
 
-### Files touched
-- `src/lib/sections.ts`
-- `src/routes/new.tsx` (SectionCard)
-- `supabase/functions/generate-assessment/index.ts`
+No DB migration needed — existing `past_paper_diagrams` columns already cover everything.
+
+## Out of scope
+- Vector / SVG diagrams (Worker runtime can't run native SVG renderers reliably).
+- Editing/regenerating individual diagrams from the review UI (already exists via `generate-diagram` function — unchanged).
+- Cropping diagrams from non-specimen papers automatically (we'll still index them, but the AI cropper runs on every parse since cost is small).
+
+## Result
+After re-uploading a specimen like 5086, its figures land in the `diagrams` bucket as cropped PNGs. New Physics / Chemistry / Biology papers generated for the same level will:
+- Reuse those specimen figures when topic tags overlap (best case — citation reads "MOE 2023 5086 Paper 2").
+- Fall back to web-sourced diagrams from allow-listed science sites.
+- Otherwise generate a clean MOE-style B&W figure with Nano Banana Pro keyed off the question stem.
 
