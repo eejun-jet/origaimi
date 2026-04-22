@@ -412,8 +412,25 @@ function EditorPage() {
                   placeholder="Optional instruction applied to each: 'make harder', 'use Singapore context'…"
                   className="mt-2"
                 />
-                <div className="mt-2 flex gap-2">
-                  <Button size="sm" disabled={bulkBusy} onClick={() => bulkRegenerate(bulkRegenInstr)} className="gap-1">
+                <div className="mt-2 flex items-end gap-3">
+                  <div className="w-44">
+                    <label className="text-xs text-muted-foreground">Target difficulty</label>
+                    <Select value={bulkRegenDifficulty} onValueChange={(v) => setBulkRegenDifficulty(v as typeof bulkRegenDifficulty)}>
+                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="keep">Keep current</SelectItem>
+                        <SelectItem value="easy">Easy</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="hard">Hard</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button
+                    size="sm"
+                    disabled={bulkBusy}
+                    onClick={() => bulkRegenerate(bulkRegenInstr, bulkRegenDifficulty === "keep" ? undefined : bulkRegenDifficulty)}
+                    className="gap-1"
+                  >
                     {bulkBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
                     Regenerate selected
                   </Button>
