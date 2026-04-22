@@ -544,21 +544,23 @@ export async function fetchDiagram(opts: {
   learningOutcomes: string[];
   stem?: string;
   assessmentId: string;
+  usedUrls?: Set<string>;
 }): Promise<DiagramResult | null> {
   const stem = opts.stem ?? "";
+  const usedUrls = opts.usedUrls;
   // 1. Past papers
   try {
-    const r = await fromPastPapers(opts.supabase, opts.topic, opts.learningOutcomes, opts.subject, opts.level, stem);
+    const r = await fromPastPapers(opts.supabase, opts.topic, opts.learningOutcomes, opts.subject, opts.level, stem, usedUrls);
     if (r) return r;
   } catch (e) { console.warn("[diagrams] past_papers stage error", e); }
 
   // 2. Web (Tavily images → Firecrawl fallback)
   try {
-    const r = await fromWeb(opts.kind, opts.topic, opts.learningOutcomes);
+    const r = await fromWeb(opts.kind, opts.topic, opts.learningOutcomes, stem, usedUrls);
     if (r) return r;
   } catch (e) { console.warn("[diagrams] web stage error", e); }
 
-  // 3. AI generation
+  // 3. AI generation (always unique — fresh upload each call)
   try {
     const r = await fromAI(opts.supabase, opts.kind, opts.subject, opts.level, opts.topic, opts.learningOutcomes, stem, opts.assessmentId);
     if (r) return r;
