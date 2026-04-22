@@ -45,6 +45,26 @@ export type SectionTopic = {
   outcome_categories?: string[];
 };
 
+export type DifficultyMix = { easy: number; medium: number; hard: number };
+
+export const DEFAULT_DIFFICULTY_MIX: DifficultyMix = { easy: 20, medium: 60, hard: 20 };
+
+export function isScienceSubject(subject: string | null | undefined): boolean {
+  if (!subject) return false;
+  const s = subject.toLowerCase();
+  return (
+    s.includes("physics") ||
+    s.includes("chemistry") ||
+    s.includes("biology") ||
+    s.includes("science")
+  );
+}
+
+export function difficultyMixTotal(mix: DifficultyMix | undefined | null): number {
+  if (!mix) return 0;
+  return (mix.easy || 0) + (mix.medium || 0) + (mix.hard || 0);
+}
+
 export type Section = {
   id: string;            // stable client id for keys
   letter: string;        // "A", "B", "C"
@@ -57,6 +77,8 @@ export type Section = {
   sbq_skills?: SbqSkill[]; // for History/Social Studies SBQ sections (0–5 skills)
   topic_pool: SectionTopic[];
   instructions?: string;
+  /** Optional difficulty distribution as percentages summing to 100. Science papers only. */
+  difficulty_mix?: DifficultyMix;
 };
 
 export type SectionedBlueprint = { sections: Section[] };
@@ -97,6 +119,7 @@ export function defaultSection(letter: string, totalMarksRemaining: number): Sec
     bloom: "Apply",
     topic_pool: [],
     instructions: "Answer all questions in this section.",
+    difficulty_mix: { ...DEFAULT_DIFFICULTY_MIX },
   };
 }
 
