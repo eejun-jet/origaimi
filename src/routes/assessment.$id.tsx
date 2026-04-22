@@ -19,7 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Loader2, RefreshCw, Trash2, BookmarkPlus, Sparkles, ChevronUp, ChevronDown, X, Download } from "lucide-react";
+import { ArrowLeft, Loader2, RefreshCw, Trash2, BookmarkPlus, Sparkles, ChevronUp, ChevronDown, X, Download, Image as ImageIcon, Wand2 } from "lucide-react";
 import { BLOOMS } from "@/lib/syllabus";
 import { toSectioned, sectionAtPosition, getSbqSkill } from "@/lib/sections";
 import { exportAssessmentDocx } from "@/lib/export-docx";
@@ -185,6 +185,85 @@ function EditorPage() {
     } else {
       toast.success(`${done} questions regenerated`, { id: toastId });
     }
+  };
+
+  const runDiagramAction = async (
+    qId: string,
+    mode: "generate" | "edit" | "regenerate",
+    instruction?: string,
+  ): Promise<boolean> => {
+    if (!assessment) return false;
+    const q = questions.find((x) => x.id === qId);
+    if (!q) return false;
+    const toastId = toast.loading(
+      mode === "edit" ? "Editing diagram…" : mode === "regenerate" ? "Regenerating diagram…" : "Generating diagram…",
+    );
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-diagram", {
+        body: {
+          questionId: qId,
+          topic: q.topic ?? assessment.subject,
+          subject: assessment.subject,
+          mode,
+          instruction,
+          currentDiagramUrl: q.diagram_url ?? undefined,
+        },
+      });
+      if (error) {
+        // supabase.functions.invoke surfaces non-2xx as error; check for rate/credit issues.
+        const ctx = (error as { context?: { status?: number } }).context;
+        if (ctx?.status === 429) {
+          toast.error("Rate-limited, try again shortly", { id: toastId });
+        } else if (ctx?.status === 402) {
+          toast.error("Out of AI credits — top up to continue", { id: toastId });
+        } else {
+          toast.error("Diagram action failed", { id: toastId });
+        }
+        return false;
+      }
+      if (data?.url) {
+        setQuestions((qs) =>
+          qs.map((x) =>
+            x.id === qId
+              ? {
+                  ...x,
+                  diagram_url: data.url as string,
+                  diagram_source: (data.diagram_source as string) ?? (mode === "edit" ? "ai_edited" : "ai_generated"),
+                  diagram_citation: null,
+                  diagram_caption:
+                    mode === "edit" ? x.diagram_caption : `${x.topic ?? assessment.subject} (AI-generated diagram)`,
+                }
+              : x,
+          ),
+        );
+        toast.success(
+          mode === "edit" ? "Diagram updated" : mode === "regenerate" ? "Diagram regenerated" : "Diagram generated",
+          { id: toastId },
+        );
+        return true;
+      }
+      toast.error("No image returned", { id: toastId });
+      return false;
+    } catch (e) {
+      console.error(e);
+      toast.error("Diagram action failed", { id: toastId });
+      return false;
+    }
+  };
+
+  const removeDiagram = async (qId: string) => {
+    setQuestions((qs) =>
+      qs.map((x) =>
+        x.id === qId
+          ? { ...x, diagram_url: null, diagram_source: null, diagram_citation: null, diagram_caption: null }
+          : x,
+      ),
+    );
+    await supabase
+      .from("assessment_questions")
+      .update({ diagram_url: null, diagram_source: null, diagram_citation: null, diagram_caption: null })
+      .eq("id", qId);
+    toast.success("Diagram removed");
   };
 
   const saveQToBank = async (q: Question) => {
@@ -521,6 +600,7 @@ function EditorPage() {
                       isLast={i === questions.length - 1}
                       isFirst={i === 0}
                       isRegen={regenId === q.id}
+                      subject={assessment.subject}
                       selected={selectedIds.has(q.id)}
                       onToggleSelect={() => toggleSelect(q.id)}
                       onUpdate={(patch) => updateQ(q.id, patch)}
@@ -528,6 +608,8 @@ function EditorPage() {
                       onMove={(d) => moveQ(q.id, d)}
                       onRegenerate={(ins, diff) => regenerate(q.id, ins, diff)}
                       onBank={() => saveToBank(q)}
+                      onDiagramAction={(mode, ins) => runDiagramAction(q.id, mode, ins)}
+                      onDiagramRemove={() => removeDiagram(q.id)}
                       hideSourceBlock={isSbqSection}
                     />
                   </div>
@@ -625,10 +707,30 @@ function parseSharedSourcePool(excerpt: string): Array<{ label: string; text: st
   return matches.map((m) => ({ label: m[1], text: m[2].trim() }));
 }
 
+const SCIENCE_MATH_SUBJECTS = [
+  "physics",
+  "chemistry",
+  "biology",
+  "general science",
+  "combined science",
+  "science",
+  "mathematics",
+  "math",
+  "maths",
+  "additional mathematics",
+];
+
+function isScienceOrMathSubject(subject: string | undefined | null): boolean {
+  if (!subject) return false;
+  const s = subject.toLowerCase();
+  return SCIENCE_MATH_SUBJECTS.some((k) => s.includes(k));
+}
+
 function QuestionCard({
-  q, index, isFirst, isLast, isRegen, selected, onToggleSelect, onUpdate, onDelete, onMove, onRegenerate, onBank, hideSourceBlock,
+  q, index, isFirst, isLast, isRegen, subject, selected, onToggleSelect, onUpdate, onDelete, onMove, onRegenerate, onBank, onDiagramAction, onDiagramRemove, hideSourceBlock,
 }: {
   q: Question; index: number; isFirst: boolean; isLast: boolean; isRegen: boolean;
+  subject: string;
   selected: boolean;
   onToggleSelect: () => void;
   onUpdate: (patch: Partial<Question>) => void;
@@ -636,6 +738,8 @@ function QuestionCard({
   onMove: (dir: -1 | 1) => void;
   onRegenerate: (instruction: string, difficulty?: "easy" | "medium" | "hard") => void;
   onBank: () => void;
+  onDiagramAction: (mode: "generate" | "edit" | "regenerate", instruction?: string) => Promise<boolean>;
+  onDiagramRemove: () => void;
   hideSourceBlock?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
@@ -647,6 +751,21 @@ function QuestionCard({
   const [showRegen, setShowRegen] = useState(false);
   const [regenInstr, setRegenInstr] = useState("");
   const [regenDifficulty, setRegenDifficulty] = useState<"keep" | "easy" | "medium" | "hard">("keep");
+  const [diagramMode, setDiagramMode] = useState<"edit" | "regenerate" | null>(null);
+  const [diagramInstr, setDiagramInstr] = useState("");
+  const [diagramBusy, setDiagramBusy] = useState(false);
+
+  const showDiagramTools = isScienceOrMathSubject(subject);
+
+  const runDiagram = async (mode: "generate" | "edit" | "regenerate", instruction?: string) => {
+    setDiagramBusy(true);
+    const ok = await onDiagramAction(mode, instruction);
+    setDiagramBusy(false);
+    if (ok) {
+      setDiagramMode(null);
+      setDiagramInstr("");
+    }
+  };
 
 
   const save = () => {
@@ -761,8 +880,95 @@ function QuestionCard({
                   {q.diagram_source === "ai_generated" && (
                     <div className="mt-0.5 italic">AI-generated exam-style diagram</div>
                   )}
+                  {q.diagram_source === "ai_edited" && (
+                    <div className="mt-0.5 italic">AI-edited exam-style diagram</div>
+                  )}
                 </figcaption>
               </figure>
+            )}
+            {q.diagram_url && showDiagramTools && (
+              <div className="mt-2 flex flex-wrap items-center gap-1">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={diagramBusy}
+                  onClick={() => { setDiagramMode("edit"); setDiagramInstr(""); }}
+                  className="gap-1"
+                >
+                  <Wand2 className="h-3.5 w-3.5" /> Edit with prompt
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={diagramBusy}
+                  onClick={() => { setDiagramMode("regenerate"); setDiagramInstr(""); }}
+                  className="gap-1"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" /> Regenerate diagram
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={diagramBusy}
+                  onClick={() => {
+                    if (confirm("Remove this diagram?")) onDiagramRemove();
+                  }}
+                  className="gap-1 text-destructive hover:text-destructive"
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Remove
+                </Button>
+              </div>
+            )}
+            {!q.diagram_url && showDiagramTools && (
+              <div className="mt-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={diagramBusy}
+                  onClick={() => runDiagram("generate")}
+                  className="gap-1"
+                >
+                  {diagramBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImageIcon className="h-3.5 w-3.5" />}
+                  Generate diagram
+                </Button>
+              </div>
+            )}
+            {diagramMode && showDiagramTools && (
+              <div className="mt-3 rounded-lg border border-border bg-muted/30 p-3">
+                <div className="text-xs font-medium text-foreground">
+                  {diagramMode === "edit" ? "Edit diagram" : "Regenerate diagram"}
+                </div>
+                <Textarea
+                  rows={2}
+                  value={diagramInstr}
+                  onChange={(e) => setDiagramInstr(e.target.value)}
+                  placeholder={
+                    diagramMode === "edit"
+                      ? "Describe the change — e.g. 'add a switch in series', 'relabel R₁ as 4Ω', 'shade the triangle'"
+                      : "Optional: 'show side view instead', 'use a Bunsen burner', 'simpler labels'"
+                  }
+                  className="mt-2"
+                />
+                <div className="mt-2 flex gap-2">
+                  <Button
+                    size="sm"
+                    disabled={diagramBusy || (diagramMode === "edit" && !diagramInstr.trim())}
+                    onClick={() => runDiagram(diagramMode, diagramInstr.trim() || undefined)}
+                    className="gap-1"
+                  >
+                    {diagramBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                    Apply
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={diagramBusy}
+                    onClick={() => { setDiagramMode(null); setDiagramInstr(""); }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
             )}
             {q.options && Array.isArray(q.options) && q.options.length > 0 && (
               <ol className="mt-3 list-inside list-[upper-alpha] space-y-1 font-paper text-sm">
