@@ -133,31 +133,44 @@ async function fromPastPapers(
   learningOutcomes: string[],
   subject: string,
   level: string,
+  stem: string,
 ): Promise<DiagramResult | null> {
-  // Build a tag-pool from topic + LOs.
-  const tags = (topic + " " + learningOutcomes.join(" "))
+  // Build a tag-pool from topic + LOs + stem snippet.
+  const tags = (topic + " " + learningOutcomes.join(" ") + " " + stem.slice(0, 200))
     .toLowerCase()
     .split(/[^a-z0-9]+/)
     .filter((w) => w.length > 3);
   if (tags.length === 0) return null;
 
-  // Find papers matching subject/level first.
-  const { data: papers } = await supabase
+  // Try subject + level first; fall back to subject-only when level has no hits.
+  let { data: papers } = await supabase
     .from("past_papers")
     .select("id, title, exam_board, year, paper_number")
     .eq("subject", subject)
     .eq("level", level)
     .limit(50);
+  if (!papers || papers.length === 0) {
+    const r = await supabase
+      .from("past_papers")
+      .select("id, title, exam_board, year, paper_number")
+      .eq("subject", subject)
+      .limit(50);
+    papers = r.data;
+  }
   const paperIds = (papers ?? []).map((p) => (p as { id: string }).id);
   if (paperIds.length === 0) return null;
 
-  // Pull candidate diagrams; rank by topic_tag overlap with our tags.
+  // Pull candidate diagrams; rank by tag + caption overlap and prefer specimen/sample papers.
   const { data: diagrams } = await supabase
     .from("past_paper_diagrams")
     .select("id, paper_id, image_path, caption, topic_tags, page_number")
     .in("paper_id", paperIds)
     .limit(200);
   if (!diagrams || diagrams.length === 0) return null;
+
+  type Paper = { id: string; title: string; exam_board: string | null; year: number | null; paper_number: string | null };
+  const paperById = new Map<string, Paper>();
+  for (const p of (papers ?? []) as Paper[]) paperById.set(p.id, p);
 
   type Diag = {
     id: string; paper_id: string; image_path: string; caption: string | null;
@@ -166,7 +179,19 @@ async function fromPastPapers(
   const ranked = (diagrams as Diag[])
     .map((d) => {
       const dtags = (d.topic_tags ?? []).map((t) => t.toLowerCase());
-      const score = dtags.filter((t) => tags.some((q) => t.includes(q) || q.includes(t))).length;
+      const caption = (d.caption ?? "").toLowerCase();
+      let score = 0;
+      // Tag overlap (high signal).
+      score += dtags.filter((t) => tags.some((q) => t.includes(q) || q.includes(t))).length * 2;
+      // Caption keyword overlap.
+      for (const t of tags) {
+        if (t.length > 3 && caption.includes(t)) score += 1;
+      }
+      // Specimen / sample paper boost.
+      const title = (paperById.get(d.paper_id)?.title ?? "").toLowerCase();
+      if (title.includes("specimen") || title.includes("sample")) score += 5;
+      // Penalise diagrams that still point at the source PDF (un-cropped legacy rows).
+      if (d.image_path.startsWith("papers/")) score -= 3;
       return { d, score };
     })
     .filter((r) => r.score > 0)
@@ -174,13 +199,9 @@ async function fromPastPapers(
   if (ranked.length === 0) return null;
 
   const best = ranked[0].d;
-  const paper = (papers ?? []).find((p) => (p as { id: string }).id === best.paper_id) as
-    | { title: string; exam_board: string | null; year: number | null; paper_number: string | null }
-    | undefined;
+  const paper = paperById.get(best.paper_id);
 
-  // Resolve a public URL for the image (signed URL since `papers` bucket is private — but
-  // diagram crops live in the public `diagrams` bucket; image_path includes bucket prefix
-  // when crops are stored separately).
+  // Resolve a public URL for the image.
   const url = await resolveStorageUrl(supabase, best.image_path);
   if (!url) return null;
 
@@ -388,16 +409,23 @@ function resolveUrl(href: string, base: string): string | null {
 async function fromAI(
   supabase: ReturnType<typeof createClient>,
   kind: Exclude<ScienceMathKind, null>,
+  subject: string,
+  level: string,
   topic: string,
   learningOutcomes: string[],
+  stem: string,
   assessmentId: string,
 ): Promise<DiagramResult | null> {
   if (!LOVABLE_API_KEY) return null;
   const lo = learningOutcomes[0] ?? "";
-  const subjectName = kind === "general_science" ? "science" : kind;
-  const prompt = `Generate a Singapore MOE exam-style diagram for a ${subjectName} question.
+  const subjectName = subject || (kind === "general_science" ? "Science" : kind);
+  const levelName = level || "Secondary";
+  const stemSnippet = (stem ?? "").trim().slice(0, 320);
+
+  const prompt = `Generate a Singapore MOE ${levelName} ${subjectName} exam-style diagram for a question.
 Topic: ${topic}
 ${lo ? `Learning outcome: ${lo}` : ""}
+${stemSnippet ? `Question context: ${stemSnippet}` : ""}
 
 Requirements:
 - Clean black-and-white line art only (no shading, no colour, no gradients).
@@ -464,11 +492,13 @@ export async function fetchDiagram(opts: {
   level: string;
   topic: string;
   learningOutcomes: string[];
+  stem?: string;
   assessmentId: string;
 }): Promise<DiagramResult | null> {
+  const stem = opts.stem ?? "";
   // 1. Past papers
   try {
-    const r = await fromPastPapers(opts.supabase, opts.topic, opts.learningOutcomes, opts.subject, opts.level);
+    const r = await fromPastPapers(opts.supabase, opts.topic, opts.learningOutcomes, opts.subject, opts.level, stem);
     if (r) return r;
   } catch (e) { console.warn("[diagrams] past_papers stage error", e); }
 
@@ -480,7 +510,7 @@ export async function fetchDiagram(opts: {
 
   // 3. AI generation
   try {
-    const r = await fromAI(opts.supabase, opts.kind, opts.topic, opts.learningOutcomes, opts.assessmentId);
+    const r = await fromAI(opts.supabase, opts.kind, opts.subject, opts.level, opts.topic, opts.learningOutcomes, stem, opts.assessmentId);
     if (r) return r;
   } catch (e) { console.warn("[diagrams] ai stage error", e); }
 
