@@ -771,6 +771,13 @@ Deno.serve(async (req) => {
         for (let qi = 0; qi < section.num_questions; qi++) sourcesForSection.push([null]);
       }
 
+      // Plan per-question difficulty targets for this section (if a mix is set
+      // AND we are not in a deterministic SBQ section). Targets are sliced per
+      // chunk and used both in the prompt and as the saved value of `difficulty`.
+      const sectionDifficultyTargets = section.difficulty_mix
+        ? assignDifficultyToQuestions(section.difficulty_mix, section.num_questions)
+        : null;
+
       let questions: any[] = [];
       if (isHumanitiesSBQ && sharedSourcePool.length > 0) {
         console.log(`[generate] section ${section.letter}: using deterministic SBQ builder to avoid long AI timeout`);
