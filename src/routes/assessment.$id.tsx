@@ -648,11 +648,6 @@ function QuestionCard({
   const [regenInstr, setRegenInstr] = useState("");
   const [regenDifficulty, setRegenDifficulty] = useState<"keep" | "easy" | "medium" | "hard">("keep");
 
-  const difficultyVariant: Record<string, "secondary" | "outline"> = {
-    easy: "secondary",
-    medium: "secondary",
-    hard: "secondary",
-  };
 
   const save = () => {
     onUpdate({ stem, answer, mark_scheme: scheme, marks, bloom_level: bloom || null });
