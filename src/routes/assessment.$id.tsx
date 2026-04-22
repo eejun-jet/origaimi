@@ -265,6 +265,8 @@ function EditorPage() {
       .eq("id", qId);
     toast.success("Diagram removed");
   };
+
+  const saveQToBank = async (q: Question) => {
     if (!user || !assessment) return;
     await supabase.from("question_bank_items").insert({
       user_id: user.id,
