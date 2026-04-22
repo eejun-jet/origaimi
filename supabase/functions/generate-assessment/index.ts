@@ -21,6 +21,8 @@ type SectionTopic = {
   outcome_categories?: string[];
 };
 
+type DifficultyMix = { easy: number; medium: number; hard: number };
+
 type Section = {
   id?: string;
   letter: string;
@@ -33,7 +35,55 @@ type Section = {
   sbq_skills?: string[];
   topic_pool: SectionTopic[];
   instructions?: string;
+  difficulty_mix?: DifficultyMix;
 };
+
+/** Largest-remainder rounding: turn a percentage mix into an array of n difficulty labels. */
+function assignDifficultyToQuestions(
+  mix: DifficultyMix | undefined | null,
+  n: number,
+): ("easy" | "medium" | "hard")[] {
+  if (n <= 0) return [];
+  const fallback: ("easy" | "medium" | "hard")[] = Array(n).fill("medium");
+  if (!mix) return fallback;
+  const total = (mix.easy || 0) + (mix.medium || 0) + (mix.hard || 0);
+  if (total <= 0) return fallback;
+  const levels: ("easy" | "medium" | "hard")[] = ["easy", "medium", "hard"];
+  const raw = {
+    easy: ((mix.easy || 0) / total) * n,
+    medium: ((mix.medium || 0) / total) * n,
+    hard: ((mix.hard || 0) / total) * n,
+  };
+  const counts: Record<"easy" | "medium" | "hard", number> = {
+    easy: Math.floor(raw.easy),
+    medium: Math.floor(raw.medium),
+    hard: Math.floor(raw.hard),
+  };
+  let assigned = counts.easy + counts.medium + counts.hard;
+  // Distribute remaining slots by largest fractional remainder.
+  const remainders = levels
+    .map((l) => ({ l, frac: raw[l] - Math.floor(raw[l]) }))
+    .sort((a, b) => b.frac - a.frac);
+  let ri = 0;
+  while (assigned < n) {
+    counts[remainders[ri % 3].l]++;
+    assigned++;
+    ri++;
+  }
+  // Build a deterministic interleaved sequence: easy, medium, hard repeating
+  // until each level's count is exhausted, so adjacent questions vary.
+  const out: ("easy" | "medium" | "hard")[] = [];
+  while (out.length < n) {
+    for (const l of levels) {
+      if (counts[l] > 0) {
+        out.push(l);
+        counts[l]--;
+        if (out.length >= n) break;
+      }
+    }
+  }
+  return out;
+}
 
 // SBQ skill definitions mirrored from src/lib/sections.ts
 type SbqSkillDef = {
