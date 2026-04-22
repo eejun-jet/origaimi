@@ -38,7 +38,9 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const { questionId, instruction } = await req.json();
+    const { questionId, instruction, difficulty } = await req.json();
+    const targetDifficulty: "easy" | "medium" | "hard" | null =
+      difficulty === "easy" || difficulty === "medium" || difficulty === "hard" ? difficulty : null;
 
     const { data: q, error: qErr } = await supabase
       .from("assessment_questions")
@@ -51,9 +53,12 @@ Deno.serve(async (req) => {
     const a: any = q.assessments;
 
     const sys = `You are an expert Singapore MOE assessment writer for ${a?.level} ${a?.subject}. Use British spelling, SI units, Singapore contexts. Match MOE phrasing.`;
+    const difficultyDirective = targetDifficulty
+      ? `\nTarget difficulty: ${targetDifficulty}. Calibrate stem complexity, distractor closeness, and required reasoning steps to match a typical MOE ${targetDifficulty} item. The returned difficulty MUST be exactly "${targetDifficulty}".`
+      : "";
     const user = `Rewrite the following question. Keep its question_type (${q.question_type}), topic (${q.topic}), Bloom's level (${q.bloom_level}), and marks (${q.marks}).
 Original stem: ${q.stem}
-${instruction ? `Teacher instruction: ${instruction}` : "Make it a fresh, equivalent alternative."}
+${instruction ? `Teacher instruction: ${instruction}` : "Make it a fresh, equivalent alternative."}${difficultyDirective}
 Return via the tool.`;
 
     const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -85,7 +90,7 @@ Return via the tool.`;
       options: updated.options ?? q.options,
       answer: updated.answer,
       mark_scheme: updated.mark_scheme,
-      difficulty: updated.difficulty,
+      difficulty: targetDifficulty ?? updated.difficulty,
     };
 
     const { error: upErr } = await supabase.from("assessment_questions").update(patch).eq("id", questionId);
