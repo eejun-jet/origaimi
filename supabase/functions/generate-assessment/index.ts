@@ -895,11 +895,71 @@ Deno.serve(async (req) => {
     }
 
     if (allRows.length > 0) {
-      const { error: insErr } = await supabase.from("assessment_questions").insert(allRows);
+      // Strip transient diagram-planning fields before insert.
+      const insertRows = allRows.map((r) => {
+        const { _wantDiagram, _diagramTopic, _diagramLOs, _diagramKind, ...rest } = r as any;
+        return rest;
+      });
+      const { data: insertedRows, error: insErr } = await supabase
+        .from("assessment_questions")
+        .insert(insertRows)
+        .select("id, position");
       if (insErr) {
         console.error("Insert error", insErr);
         await markAssessmentStatus("generation_failed");
         return new Response(JSON.stringify({ error: insErr.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ---- Diagram phase: parallel, post-insert. Failures here are non-fatal. ----
+      // MCQs / short-answer only consult past papers (cheap DB lookup); structured /
+      // practical / comprehension may also fall through to web + AI generation.
+      const idByPosition = new Map<number, string>();
+      for (const row of insertedRows ?? []) idByPosition.set(row.position, row.id);
+
+      const diagramTasks = allRows
+        .map((r, idx) => ({ r: r as any, idx }))
+        .filter(({ r }) => r._wantDiagram && r._diagramKind);
+
+      if (diagramTasks.length > 0) {
+        const CONCURRENCY = 5;
+        let cursor = 0;
+        const runOne = async () => {
+          while (cursor < diagramTasks.length) {
+            const myIdx = cursor++;
+            const { r, idx } = diagramTasks[myIdx];
+            const isLightType = r.question_type === "mcq" || r.question_type === "short_answer";
+            try {
+              const diag = await fetchDiagram({
+                supabase,
+                kind: r._diagramKind,
+                subject, level,
+                topic: r._diagramTopic,
+                learningOutcomes: r._diagramLOs,
+                stem: r.stem ?? "",
+                assessmentId,
+                usedUrls: usedDiagramUrls,
+                pastPapersOnly: isLightType,
+              });
+              if (diag) {
+                usedDiagramUrls.add(diag.url);
+                diagramCount++;
+                const id = idByPosition.get(r.position);
+                if (id) {
+                  await supabase.from("assessment_questions").update({
+                    diagram_url: diag.url,
+                    diagram_source: diag.source,
+                    diagram_citation: diag.citation,
+                    diagram_caption: diag.caption,
+                  }).eq("id", id);
+                }
+              }
+            } catch (e) {
+              console.warn(`[generate] diagram task ${idx} failed`, e);
+            }
+          }
+        };
+        const workers = Array.from({ length: Math.min(CONCURRENCY, diagramTasks.length) }, runOne);
+        await Promise.all(workers);
       }
     }
 
