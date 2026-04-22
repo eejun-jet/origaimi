@@ -581,6 +581,25 @@ function NewAssessment() {
                     <p className="text-sm text-muted-foreground">No topics parsed for this paper yet.</p>
                   ) : (
                     <div className="space-y-1.5">
+                      {(() => {
+                        const allIds = selectableSyllabusTopics.map((t) => t.id);
+                        const allChecked = allIds.length > 0 && allIds.every((id) => selectedTopicIds.includes(id));
+                        const someChecked = allIds.some((id) => selectedTopicIds.includes(id));
+                        return (
+                          <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-border p-2 hover:bg-muted/40">
+                            <Checkbox
+                              checked={allChecked ? true : someChecked ? "indeterminate" : false}
+                              onCheckedChange={() => {
+                                setSelectedTopicIds(allChecked ? [] : allIds);
+                              }}
+                            />
+                            <span className="text-xs font-medium">
+                              {allChecked ? "Deselect all" : "Select all"}{" "}
+                              <span className="text-muted-foreground">({selectedTopicIds.length}/{allIds.length})</span>
+                            </span>
+                          </label>
+                        );
+                      })()}
                       {selectableSyllabusTopics.map((t) => {
                         const checked = selectedTopicIds.includes(t.id);
                         const indent = Math.min(t.depth, 3);
