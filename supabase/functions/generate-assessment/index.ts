@@ -843,36 +843,15 @@ Deno.serve(async (req) => {
           source_url = null;
         }
 
-        // Diagram cascade for science/math (only for question types that benefit).
-        let diag: Awaited<ReturnType<typeof fetchDiagram>> | null = null;
-        if (scienceMathKind) {
-          const t = pickTopic(section, qi);
-          const wantDiagram = questionWantsDiagram(
-            scienceMathKind,
-            [question_type],
-            q.topic ?? t?.topic ?? "",
-            t?.learning_outcomes ?? [],
-            q.stem ?? "",
-          );
-          if (wantDiagram) {
-            try {
-              diag = await fetchDiagram({
-                supabase, kind: scienceMathKind, subject, level,
-                topic: q.topic ?? t?.topic ?? "",
-                learningOutcomes: t?.learning_outcomes ?? [],
-                stem: q.stem ?? "",
-                assessmentId,
-                usedUrls: usedDiagramUrls,
-              });
-              if (diag) {
-                diagramCount++;
-                usedDiagramUrls.add(diag.url);
-              }
-            } catch (e) {
-              console.warn("[generate] diagram fetch failed", e);
-            }
-          }
-        }
+        // Decide whether this question wants a diagram (resolved later, in parallel).
+        const t = pickTopic(section, qi);
+        const wantDiagram = !!scienceMathKind && questionWantsDiagram(
+          scienceMathKind,
+          [question_type],
+          q.topic ?? t?.topic ?? "",
+          t?.learning_outcomes ?? [],
+          q.stem ?? "",
+        );
 
         allRows.push({
           assessment_id: assessmentId,
@@ -890,10 +869,20 @@ Deno.serve(async (req) => {
           source_excerpt,
           source_url,
           notes,
-          diagram_url: diag?.url ?? null,
-          diagram_source: diag?.source ?? null,
-          diagram_citation: diag?.citation ?? null,
-          diagram_caption: diag?.caption ?? null,
+          diagram_url: null,
+          diagram_source: null,
+          diagram_citation: null,
+          diagram_caption: null,
+          // transient — used by the post-insert diagram pass, stripped before insert
+          _wantDiagram: wantDiagram,
+          _diagramTopic: q.topic ?? t?.topic ?? "",
+          _diagramLOs: t?.learning_outcomes ?? [],
+          _diagramKind: scienceMathKind,
+        } as EnrichedRow & {
+          _wantDiagram: boolean;
+          _diagramTopic: string;
+          _diagramLOs: string[];
+          _diagramKind: typeof scienceMathKind;
         });
       }
     }
