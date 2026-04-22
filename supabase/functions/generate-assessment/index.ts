@@ -708,39 +708,83 @@ Deno.serve(async (req) => {
         console.log(`[generate] section ${section.letter}: using deterministic SBQ builder to avoid long AI timeout`);
         questions = buildDeterministicSbqQuestions(section, sharedSourcePool, perQSkillsForFetch);
       } else {
-        // Build prompt + call AI for this section only.
-        const messages: Array<{ role: string; content: string }> = [
-          { role: "system", content: buildSystemPrompt(subject, level, paperCode) },
-        ];
-        if (exemplarBlock) messages.push({ role: "system", content: exemplarBlock });
-        messages.push({
-          role: "user",
-          content: buildSectionUserPrompt({
-            title, subject, level, assessmentType, totalMarks, durationMinutes,
-            section, sectionIndex: si, totalSections: sections.length,
-            syllabusCode, paperCode, groundedSources: sourcesForSection,
-            sharedSourcePool: isHumanitiesSBQ ? sharedSourcePool : undefined,
-            subjectKind, instructions,
-          }),
-        });
+        // Chunk large sections so a single AI call never has to emit too many
+        // questions at once (gateway times out around 60s; 40 MCQs in one shot
+        // reliably aborts). We split into batches of CHUNK_SIZE and stitch the
+        // results back together.
+        const CHUNK_SIZE = section.question_type === "mcq" ? 10 : 8;
+        const totalQs = section.num_questions;
+        const numChunks = Math.max(1, Math.ceil(totalQs / CHUNK_SIZE));
+        let chunkFailed = false;
 
-        const ai = await callAI(messages);
-        if (!ai.ok) {
-          console.error(`[generate] section ${section.letter} AI error`, ai.status, (ai.errText ?? "").slice(0, 300));
+        for (let c = 0; c < numChunks; c++) {
+          const startIdx = c * CHUNK_SIZE;
+          const endIdx = Math.min(totalQs, startIdx + CHUNK_SIZE);
+          const chunkQCount = endIdx - startIdx;
+
+          // Build a per-chunk shallow copy of the section with its slice of
+          // questions and the proportional marks for that slice.
+          const chunkMarks = Math.max(
+            chunkQCount,
+            Math.round((section.marks * chunkQCount) / totalQs),
+          );
+          const chunkSection: Section = {
+            ...section,
+            num_questions: chunkQCount,
+            marks: chunkMarks,
+          };
+          const chunkSources = sourcesForSection.slice(startIdx, endIdx);
+
+          const messages: Array<{ role: string; content: string }> = [
+            { role: "system", content: buildSystemPrompt(subject, level, paperCode) },
+          ];
+          if (exemplarBlock) messages.push({ role: "system", content: exemplarBlock });
+          if (numChunks > 1) {
+            messages.push({
+              role: "system",
+              content: `This section has ${totalQs} questions total; you are generating questions ${startIdx + 1}–${endIdx} (batch ${c + 1} of ${numChunks}). Generate EXACTLY ${chunkQCount} questions and do not duplicate topics already used in earlier batches.`,
+            });
+          }
+          messages.push({
+            role: "user",
+            content: buildSectionUserPrompt({
+              title, subject, level, assessmentType, totalMarks, durationMinutes,
+              section: chunkSection, sectionIndex: si, totalSections: sections.length,
+              syllabusCode, paperCode, groundedSources: chunkSources,
+              sharedSourcePool: isHumanitiesSBQ ? sharedSourcePool : undefined,
+              subjectKind, instructions,
+            }),
+          });
+
+          const ai = await callAI(messages);
+          if (!ai.ok) {
+            console.error(`[generate] section ${section.letter} chunk ${c + 1}/${numChunks} AI error`, ai.status, (ai.errText ?? "").slice(0, 300));
+            chunkFailed = true;
+            break;
+          }
+          const toolCall = ai.json?.choices?.[0]?.message?.tool_calls?.[0];
+          if (!toolCall) {
+            console.error(`[generate] section ${section.letter} chunk ${c + 1}/${numChunks}: no tool call`, JSON.stringify(ai.json).slice(0, 300));
+            chunkFailed = true;
+            break;
+          }
+          let parsed: { questions?: any[] };
+          try { parsed = JSON.parse(toolCall.function.arguments); }
+          catch {
+            chunkFailed = true;
+            break;
+          }
+          const chunkQs = parsed.questions ?? [];
+          questions.push(...chunkQs);
+          console.log(`[generate] section ${section.letter} chunk ${c + 1}/${numChunks}: produced ${chunkQs.length} questions (cumulative ${questions.length}/${totalQs})`);
+        }
+
+        if (chunkFailed && questions.length === 0) {
           sectionFailures++;
           continue;
         }
-        const toolCall = ai.json?.choices?.[0]?.message?.tool_calls?.[0];
-        if (!toolCall) {
-          console.error(`[generate] section ${section.letter}: no tool call`, JSON.stringify(ai.json).slice(0, 300));
-          sectionFailures++;
-          continue;
-        }
-        let parsed: { questions?: any[] };
-        try { parsed = JSON.parse(toolCall.function.arguments); }
-        catch { sectionFailures++; continue; }
-        questions = parsed.questions ?? [];
       }
+
 
       // Per-question post-processing: enforce source attachment, drop unsupported.
       for (let qi = 0; qi < questions.length; qi++) {
