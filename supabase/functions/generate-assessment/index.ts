@@ -921,13 +921,12 @@ Deno.serve(async (req) => {
         .filter(({ r }) => r._wantDiagram && r._diagramKind);
 
       if (diagramTasks.length > 0) {
-        const CONCURRENCY = 5;
+        const CONCURRENCY = 8;
         let cursor = 0;
         const runOne = async () => {
           while (cursor < diagramTasks.length) {
             const myIdx = cursor++;
             const { r, idx } = diagramTasks[myIdx];
-            const isLightType = r.question_type === "mcq" || r.question_type === "short_answer";
             try {
               const diag = await fetchDiagram({
                 supabase,
@@ -938,7 +937,11 @@ Deno.serve(async (req) => {
                 stem: r.stem ?? "",
                 assessmentId,
                 usedUrls: usedDiagramUrls,
-                pastPapersOnly: isLightType,
+                // Per-stage timeouts keep total wall-clock bounded even with
+                // 40+ MCQs running 8-wide.
+                pastPapersTimeoutMs: 4000,
+                webTimeoutMs: 8000,
+                aiTimeoutMs: 14000,
               });
               if (diag) {
                 usedDiagramUrls.add(diag.url);
