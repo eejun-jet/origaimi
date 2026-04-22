@@ -606,6 +606,9 @@ Deno.serve(async (req) => {
     let groundedCount = 0;
     let diagramCount = 0;
     let sectionFailures = 0;
+    // Track diagram URLs already used in this assessment to avoid repeating
+    // the same figure across multiple questions.
+    const usedDiagramUrls = new Set<string>();
 
     // Pick a topic pool entry, round-robining so all topics in the pool are covered.
     const pickTopic = (s: Section, qIdx: number): SectionTopic | null => {
@@ -849,6 +852,7 @@ Deno.serve(async (req) => {
             [question_type],
             q.topic ?? t?.topic ?? "",
             t?.learning_outcomes ?? [],
+            q.stem ?? "",
           );
           if (wantDiagram) {
             try {
@@ -856,9 +860,14 @@ Deno.serve(async (req) => {
                 supabase, kind: scienceMathKind, subject, level,
                 topic: q.topic ?? t?.topic ?? "",
                 learningOutcomes: t?.learning_outcomes ?? [],
+                stem: q.stem ?? "",
                 assessmentId,
+                usedUrls: usedDiagramUrls,
               });
-              if (diag) diagramCount++;
+              if (diag) {
+                diagramCount++;
+                usedDiagramUrls.add(diag.url);
+              }
             } catch (e) {
               console.warn("[generate] diagram fetch failed", e);
             }
