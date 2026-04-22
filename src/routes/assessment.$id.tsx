@@ -634,7 +634,7 @@ function QuestionCard({
   onUpdate: (patch: Partial<Question>) => void;
   onDelete: () => void;
   onMove: (dir: -1 | 1) => void;
-  onRegenerate: (instruction: string) => void;
+  onRegenerate: (instruction: string, difficulty?: "easy" | "medium" | "hard") => void;
   onBank: () => void;
   hideSourceBlock?: boolean;
 }) {
@@ -646,6 +646,13 @@ function QuestionCard({
   const [bloom, setBloom] = useState(q.bloom_level ?? "");
   const [showRegen, setShowRegen] = useState(false);
   const [regenInstr, setRegenInstr] = useState("");
+  const [regenDifficulty, setRegenDifficulty] = useState<"keep" | "easy" | "medium" | "hard">("keep");
+
+  const difficultyVariant: Record<string, "secondary" | "outline"> = {
+    easy: "secondary",
+    medium: "secondary",
+    hard: "secondary",
+  };
 
   const save = () => {
     onUpdate({ stem, answer, mark_scheme: scheme, marks, bloom_level: bloom || null });
