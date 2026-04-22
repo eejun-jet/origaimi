@@ -333,6 +333,8 @@ function buildSectionUserPrompt(opts: {
   sharedSourcePool?: GroundedSource[]; // For humanities SBQ: ONE shared pool A–E
   subjectKind?: "humanities" | "english" | null;
   instructions?: string;
+  /** Per-question difficulty targets for THIS chunk (length === section.num_questions). */
+  difficultyTargets?: ("easy" | "medium" | "hard")[];
 }) {
   const { section } = opts;
   const typeLabel = QUESTION_TYPE_LABELS[section.question_type] ?? section.question_type;
