@@ -809,6 +809,9 @@ Deno.serve(async (req) => {
             marks: chunkMarks,
           };
           const chunkSources = sourcesForSection.slice(startIdx, endIdx);
+          const chunkDifficultyTargets = sectionDifficultyTargets
+            ? sectionDifficultyTargets.slice(startIdx, endIdx)
+            : undefined;
 
           const messages: Array<{ role: string; content: string }> = [
             { role: "system", content: buildSystemPrompt(subject, level, paperCode) },
