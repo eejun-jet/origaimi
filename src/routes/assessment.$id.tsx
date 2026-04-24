@@ -20,8 +20,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ArrowLeft, Loader2, RefreshCw, Trash2, BookmarkPlus, Sparkles, ChevronUp, ChevronDown, X, Download, Image as ImageIcon, Wand2 } from "lucide-react";
-import { BLOOMS } from "@/lib/syllabus";
-import { toSectioned, sectionAtPosition, getSbqSkill } from "@/lib/sections";
+import { toSectioned, sectionAtPosition, getSbqSkill, KNOWLEDGE_OUTCOMES, type Section } from "@/lib/sections";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ChevronRight } from "lucide-react";
 import { exportAssessmentDocx } from "@/lib/export-docx";
 import { toast } from "sonner";
 
@@ -48,6 +49,9 @@ type Question = {
   diagram_source: string | null;
   diagram_citation: string | null;
   diagram_caption: string | null;
+  ao_codes: string[] | null;
+  knowledge_outcomes: string[] | null;
+  learning_outcomes: string[] | null;
 };
 
 type Assessment = {
@@ -60,7 +64,10 @@ type Assessment = {
   status: string;
   blueprint: unknown;
   instructions: string | null;
+  syllabus_doc_id: string | null;
 };
+
+type AODef = { code: string; title: string | null; weighting_percent: number | null };
 
 function EditorPage() {
   const { id } = Route.useParams();
