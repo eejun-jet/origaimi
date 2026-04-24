@@ -130,6 +130,42 @@ function EditorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  // While generation is in progress, poll for new questions / status changes.
+  // The edge function may run longer than the API gateway's 150s timeout, so
+  // the client must keep checking until rows actually land.
+  const isGenerating = assessment?.status === "generating";
+  useEffect(() => {
+    if (!isGenerating) return;
+    const interval = setInterval(() => {
+      loadAll();
+    }, 4000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isGenerating, id]);
+
+  // Realtime: also react instantly to new questions / status updates so we
+  // don't have to wait for the next poll tick.
+  useEffect(() => {
+    if (!isGenerating) return;
+    const channel = supabase
+      .channel(`assessment-progress:${id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "assessment_questions", filter: `assessment_id=eq.${id}` },
+        () => loadAll(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "assessments", filter: `id=eq.${id}` },
+        () => loadAll(),
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isGenerating, id]);
+
   // Realtime: keep comments in sync across collaborators
   useEffect(() => {
     const channel = supabase
