@@ -65,6 +65,10 @@ export function difficultyMixTotal(mix: DifficultyMix | undefined | null): numbe
   return (mix.easy || 0) + (mix.medium || 0) + (mix.hard || 0);
 }
 
+/** Fixed list of Knowledge Outcome categories used across the app. */
+export const KNOWLEDGE_OUTCOMES = ["Knowledge", "Understanding", "Application", "Skills"] as const;
+export type KnowledgeOutcome = typeof KNOWLEDGE_OUTCOMES[number];
+
 export type Section = {
   id: string;            // stable client id for keys
   letter: string;        // "A", "B", "C"
@@ -79,6 +83,10 @@ export type Section = {
   instructions?: string;
   /** Optional difficulty distribution as percentages summing to 100. Science papers only. */
   difficulty_mix?: DifficultyMix;
+  /** Per-section objective targets — narrow the global picks from Step 2.5. */
+  ao_codes?: string[];
+  knowledge_outcomes?: string[];
+  learning_outcomes?: string[];
 };
 
 export type SectionedBlueprint = { sections: Section[] };
