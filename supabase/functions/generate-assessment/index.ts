@@ -36,6 +36,10 @@ type Section = {
   topic_pool: SectionTopic[];
   instructions?: string;
   difficulty_mix?: DifficultyMix;
+  /** Per-section objective targets — narrow the global picks. */
+  ao_codes?: string[];
+  knowledge_outcomes?: string[];
+  learning_outcomes?: string[];
 };
 
 /** Largest-remainder rounding: turn a percentage mix into an array of n difficulty labels. */
