@@ -283,14 +283,9 @@ function EditorPage() {
   };
 
   const setCommentStatus = async (commentId: string, status: CommentStatus) => {
-    const patch: Record<string, unknown> = { status };
-    if (status === "resolved") {
-      patch.resolved_by = identity.name;
-      patch.resolved_at = new Date().toISOString();
-    } else {
-      patch.resolved_by = null;
-      patch.resolved_at = null;
-    }
+    const patch = status === "resolved"
+      ? { status, resolved_by: identity.name, resolved_at: new Date().toISOString() }
+      : { status, resolved_by: null, resolved_at: null };
     const { error } = await supabase.from("assessment_comments").update(patch).eq("id", commentId);
     if (error) toast.error("Could not update comment");
   };
