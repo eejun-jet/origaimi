@@ -19,12 +19,22 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Loader2, RefreshCw, Trash2, BookmarkPlus, Sparkles, ChevronUp, ChevronDown, X, Download, Image as ImageIcon, Wand2 } from "lucide-react";
+import { ArrowLeft, Loader2, RefreshCw, Trash2, BookmarkPlus, Sparkles, ChevronUp, ChevronDown, X, Download, Image as ImageIcon, Wand2, MessageCircle, UserPlus } from "lucide-react";
 import { BLOOMS } from "@/lib/syllabus";
 import { toSectioned, sectionAtPosition, getSbqSkill, KNOWLEDGE_OUTCOMES, type Section } from "@/lib/sections";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ChevronRight } from "lucide-react";
 import { exportAssessmentDocx } from "@/lib/export-docx";
+import { CommentThread } from "@/components/CommentThread";
+import { CommentDock } from "@/components/CommentDock";
+import { InviteReviewerDialog } from "@/components/InviteReviewerDialog";
+import {
+  type AssessmentComment,
+  type CommentScope,
+  type CommentStatus,
+  useReviewerIdentity,
+} from "@/lib/comments";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/assessment/$id")({
