@@ -33,6 +33,7 @@ import {
   type AssessmentComment,
   type CommentScope,
   type CommentStatus,
+  type ReviewerIdentity,
   useReviewerIdentity,
 } from "@/lib/comments";
 import { toast } from "sonner";
@@ -456,6 +457,11 @@ function EditorPage() {
   const totalActual = questions.reduce((s, q) => s + q.marks, 0);
   const allSelected = questions.length > 0 && selectedIds.size === questions.length;
   const coverage = computeCoverage(questions, sectionedBlueprint.sections, aoDefs, assessment.total_marks);
+  const questionLabels: Record<string, string> = {};
+  questions.forEach((q, i) => {
+    const sec = sectionAtPosition(sectionedBlueprint, i);
+    questionLabels[q.id] = sec ? `Q${i + 1} · Section ${sec.letter}` : `Q${i + 1}`;
+  });
 
   return (
     <div className="min-h-screen bg-background">
@@ -632,9 +638,9 @@ function EditorPage() {
                   ? parseSharedSourcePool(q.source_excerpt)
                   : null;
                 return (
-                  <div key={q.id} className="space-y-3">
+                  <div key={q.id} id={`q-${q.id}`} className="space-y-3 scroll-mt-24">
                     {showHeader && sec && (
-                      <div className="space-y-3" id={`section-${sec.letter}`}>
+                      <div className="space-y-3 scroll-mt-24" id={`section-${sec.letter}`}>
                         <div className="rounded-lg border border-primary/30 bg-primary-soft/20 px-4 py-2">
                           <p className="text-sm font-semibold">
                             Section {sec.letter}
@@ -702,6 +708,11 @@ function EditorPage() {
                       onDiagramAction={(mode, ins) => runDiagramAction(q.id, mode, ins)}
                       onDiagramRemove={() => removeDiagram(q.id)}
                       hideSourceBlock={isSbqSection}
+                      comments={comments.filter((c) => c.question_id === q.id || (c.parent_id && comments.find((x) => x.id === c.parent_id)?.question_id === q.id))}
+                      identity={identity}
+                      onAddComment={(input) => addComment({ ...input, scope: "question", sectionLetter: sec?.letter ?? null, questionId: q.id })}
+                      onSetCommentStatus={setCommentStatus}
+                      onDeleteComment={deleteComment}
                     />
                   </div>
                 );
@@ -710,35 +721,77 @@ function EditorPage() {
           </div>
 
           <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
-            <CoveragePanel
-              coverage={coverage}
-              totalMarks={assessment.total_marks}
-              totalActual={totalActual}
-            />
+            <Tabs value={sidebarTab} onValueChange={(v) => setSidebarTab(v as "coverage" | "comments")}>
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="coverage">Coverage</TabsTrigger>
+                <TabsTrigger value="comments" className="gap-1.5">
+                  <MessageCircle className="h-3.5 w-3.5" />
+                  Comments
+                  {(() => {
+                    const open = comments.filter((c) => !c.parent_id && c.status === "open").length;
+                    return open > 0 ? (
+                      <Badge variant="outline" className="h-4 border-destructive/30 px-1 text-[9px] text-destructive">
+                        {open}
+                      </Badge>
+                    ) : null;
+                  })()}
+                </TabsTrigger>
+              </TabsList>
 
-            <div className="rounded-xl border border-border bg-card p-5">
-              <div className="flex items-center justify-between">
-                <h3 className="font-medium">Assessment Coach</h3>
-                <span className="rounded-full bg-warm px-2 py-0.5 text-[10px] uppercase tracking-wide text-warm-foreground">
-                  Coming soon
-                </span>
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Your embedded Assessment Literacy Coach will evaluate this paper against
-                AO frameworks and surface actionable insights.
-              </p>
-            </div>
+              <TabsContent value="coverage" className="mt-4 space-y-4">
+                <CoveragePanel
+                  coverage={coverage}
+                  totalMarks={assessment.total_marks}
+                  totalActual={totalActual}
+                />
 
-            <div className="rounded-xl border border-border bg-card p-5">
-              <h3 className="font-medium">Total marks</h3>
-              <div className="mt-2 flex items-baseline gap-1">
-                <span className={`font-paper text-3xl font-semibold ${totalActual === assessment.total_marks ? "text-success" : "text-foreground"}`}>{totalActual}</span>
-                <span className="text-sm text-muted-foreground">/ {assessment.total_marks}</span>
-              </div>
-            </div>
+                <div className="rounded-xl border border-border bg-card p-5">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-medium">Assessment Coach</h3>
+                    <span className="rounded-full bg-warm px-2 py-0.5 text-[10px] uppercase tracking-wide text-warm-foreground">
+                      Coming soon
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Your embedded Assessment Literacy Coach will evaluate this paper against
+                    AO frameworks and surface actionable insights.
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-border bg-card p-5">
+                  <h3 className="font-medium">Total marks</h3>
+                  <div className="mt-2 flex items-baseline gap-1">
+                    <span className={`font-paper text-3xl font-semibold ${totalActual === assessment.total_marks ? "text-success" : "text-foreground"}`}>{totalActual}</span>
+                    <span className="text-sm text-muted-foreground">/ {assessment.total_marks}</span>
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="comments" className="mt-4">
+                <CommentDock
+                  comments={comments}
+                  identity={identity}
+                  onIdentityChange={setIdentity}
+                  sectionLetters={sectionedBlueprint.sections.map((s) => s.letter)}
+                  questionLabels={questionLabels}
+                  onAdd={addComment}
+                  onSetStatus={setCommentStatus}
+                  onDelete={deleteComment}
+                  onScrollToQuestion={scrollToQuestion}
+                  onScrollToSection={scrollToSection}
+                  onOpenInvite={() => setInviteOpen(true)}
+                />
+              </TabsContent>
+            </Tabs>
           </aside>
         </div>
       </main>
+
+      <InviteReviewerDialog
+        assessmentId={id}
+        open={inviteOpen}
+        onOpenChange={setInviteOpen}
+      />
 
       <AlertDialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
         <AlertDialogContent>
@@ -798,6 +851,7 @@ function isScienceOrMathSubject(subject: string | undefined | null): boolean {
 
 function QuestionCard({
   q, index, isFirst, isLast, isRegen, subject, selected, onToggleSelect, onUpdate, onDelete, onMove, onRegenerate, onBank, onDiagramAction, onDiagramRemove, hideSourceBlock,
+  comments, identity, onAddComment, onSetCommentStatus, onDeleteComment,
 }: {
   q: Question; index: number; isFirst: boolean; isLast: boolean; isRegen: boolean;
   subject: string;
@@ -811,6 +865,11 @@ function QuestionCard({
   onDiagramAction: (mode: "generate" | "edit" | "regenerate", instruction?: string) => Promise<boolean>;
   onDiagramRemove: () => void;
   hideSourceBlock?: boolean;
+  comments: AssessmentComment[];
+  identity: ReviewerIdentity;
+  onAddComment: (input: { body: string; parentId: string | null }) => Promise<void>;
+  onSetCommentStatus: (id: string, status: CommentStatus) => Promise<void>;
+  onDeleteComment: (id: string) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
   const [stem, setStem] = useState(q.stem);
@@ -824,6 +883,9 @@ function QuestionCard({
   const [diagramMode, setDiagramMode] = useState<"edit" | "regenerate" | null>(null);
   const [diagramInstr, setDiagramInstr] = useState("");
   const [diagramBusy, setDiagramBusy] = useState(false);
+  const [showComments, setShowComments] = useState(false);
+  const commentRootCount = comments.filter((c) => !c.parent_id).length;
+  const openCommentCount = comments.filter((c) => !c.parent_id && c.status === "open").length;
 
   const showDiagramTools = isScienceOrMathSubject(subject);
 
@@ -1096,9 +1158,34 @@ function QuestionCard({
           <Button size="sm" variant="ghost" onClick={onBank} className="gap-1">
             <BookmarkPlus className="h-3.5 w-3.5" /> Save to bank
           </Button>
+          <Button size="sm" variant="ghost" onClick={() => setShowComments((v) => !v)} className="gap-1">
+            <MessageCircle className="h-3.5 w-3.5" />
+            {commentRootCount > 0 ? `${commentRootCount} comment${commentRootCount === 1 ? "" : "s"}` : "Comment"}
+            {openCommentCount > 0 && (
+              <Badge variant="outline" className="ml-1 h-4 border-destructive/30 px-1 text-[9px] text-destructive">
+                {openCommentCount} open
+              </Badge>
+            )}
+          </Button>
           <Button size="sm" variant="ghost" onClick={onDelete} className="ml-auto gap-1 text-destructive hover:text-destructive">
             <Trash2 className="h-3.5 w-3.5" /> Delete
           </Button>
+        </div>
+      )}
+
+      {showComments && !editing && (
+        <div className="mt-3 border-t border-border pt-3">
+          <CommentThread
+            comments={comments}
+            identity={identity}
+            scope="question"
+            anchor={{ questionId: q.id, sectionLetter: null }}
+            onAdd={({ body, parentId }) => onAddComment({ body, parentId })}
+            onSetStatus={onSetCommentStatus}
+            onDelete={onDeleteComment}
+            compact
+            hideScopeBadge
+          />
         </div>
       )}
     </div>
