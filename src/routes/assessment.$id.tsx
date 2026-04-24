@@ -1140,7 +1140,7 @@ function MeterRow({
           <span className="font-medium text-foreground">{label}</span>
           {sublabel && <span className="ml-1 text-muted-foreground">{sublabel}</span>}
         </span>
-        <span className={ok ? "text-success" : over ? "text-warning" : "text-muted-foreground"}>
+        <span className={ok ? "text-success" : over ? "text-destructive" : "text-muted-foreground"}>
           {actual}{showTarget ? ` / ${target || "—"}` : ""} {ok && !over && "✓"}
         </span>
       </div>
@@ -1243,7 +1243,7 @@ function CoveragePanel({
         )}
         {uncoveredLOs.length > 0 && (
           <Collapsible defaultOpen className="mt-3">
-            <CollapsibleTrigger className="flex w-full items-center gap-1 text-xs font-medium text-warning hover:underline">
+            <CollapsibleTrigger className="flex w-full items-center gap-1 text-xs font-medium text-destructive hover:underline">
               <ChevronRight className="h-3.5 w-3.5 transition-transform data-[state=open]:rotate-90" />
               {uncoveredLOs.length} uncovered
             </CollapsibleTrigger>
@@ -1306,7 +1306,7 @@ function CoveragePanel({
                       </p>
                       <ul className="mt-1 space-y-0.5">
                         {s.los.map((lo) => (
-                          <li key={lo.text} className={`text-[11px] leading-snug ${lo.covered ? "text-foreground" : "text-warning"}`}>
+                          <li key={lo.text} className={`text-[11px] leading-snug ${lo.covered ? "text-foreground" : "text-destructive"}`}>
                             {lo.covered ? "✓" : "○"} {lo.text}
                           </li>
                         ))}
