@@ -19,12 +19,22 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Loader2, RefreshCw, Trash2, BookmarkPlus, Sparkles, ChevronUp, ChevronDown, X, Download, Image as ImageIcon, Wand2 } from "lucide-react";
+import { ArrowLeft, Loader2, RefreshCw, Trash2, BookmarkPlus, Sparkles, ChevronUp, ChevronDown, X, Download, Image as ImageIcon, Wand2, MessageCircle, UserPlus } from "lucide-react";
 import { BLOOMS } from "@/lib/syllabus";
 import { toSectioned, sectionAtPosition, getSbqSkill, KNOWLEDGE_OUTCOMES, type Section } from "@/lib/sections";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ChevronRight } from "lucide-react";
 import { exportAssessmentDocx } from "@/lib/export-docx";
+import { CommentThread } from "@/components/CommentThread";
+import { CommentDock } from "@/components/CommentDock";
+import { InviteReviewerDialog } from "@/components/InviteReviewerDialog";
+import {
+  type AssessmentComment,
+  type CommentScope,
+  type CommentStatus,
+  useReviewerIdentity,
+} from "@/lib/comments";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/assessment/$id")({
@@ -84,6 +94,10 @@ function EditorPage() {
   const [bulkRegenDifficulty, setBulkRegenDifficulty] = useState<"keep" | "easy" | "medium" | "hard">("keep");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [aoDefs, setAoDefs] = useState<AODef[]>([]);
+  const [comments, setComments] = useState<AssessmentComment[]>([]);
+  const [identity, setIdentity] = useReviewerIdentity();
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [sidebarTab, setSidebarTab] = useState<"coverage" | "comments">("coverage");
 
   const loadAll = async () => {
     const { data: a } = await supabase.from("assessments").select("*").eq("id", id).single();
@@ -101,12 +115,50 @@ function EditorPage() {
     } else {
       setAoDefs([]);
     }
+    const { data: cs } = await supabase
+      .from("assessment_comments")
+      .select("*")
+      .eq("assessment_id", id)
+      .order("created_at", { ascending: true });
+    setComments((cs as AssessmentComment[]) ?? []);
     setFetching(false);
   };
 
   useEffect(() => {
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  // Realtime: keep comments in sync across collaborators
+  useEffect(() => {
+    const channel = supabase
+      .channel(`comments:${id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "assessment_comments", filter: `assessment_id=eq.${id}` },
+        (payload) => {
+          setComments((prev) => {
+            if (payload.eventType === "INSERT") {
+              const next = payload.new as AssessmentComment;
+              if (prev.some((c) => c.id === next.id)) return prev;
+              return [...prev, next].sort((a, b) => a.created_at.localeCompare(b.created_at));
+            }
+            if (payload.eventType === "UPDATE") {
+              const next = payload.new as AssessmentComment;
+              return prev.map((c) => (c.id === next.id ? next : c));
+            }
+            if (payload.eventType === "DELETE") {
+              const oldRow = payload.old as { id: string };
+              return prev.filter((c) => c.id !== oldRow.id);
+            }
+            return prev;
+          });
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [id]);
 
   const toggleSelect = (qId: string) => {
@@ -205,6 +257,51 @@ function EditorPage() {
     } else {
       toast.success(`${done} questions regenerated`, { id: toastId });
     }
+  };
+
+  // ─── Comments handlers ───────────────────────────────────────────────
+  const addComment = async (input: {
+    body: string;
+    scope: CommentScope;
+    parentId: string | null;
+    sectionLetter: string | null;
+    questionId: string | null;
+  }) => {
+    const { error } = await supabase.from("assessment_comments").insert({
+      assessment_id: id,
+      scope: input.scope,
+      section_letter: input.sectionLetter,
+      question_id: input.questionId,
+      parent_id: input.parentId,
+      author_name: identity.name,
+      author_email: identity.email,
+      author_role: identity.role,
+      body: input.body,
+      status: "open",
+    });
+    if (error) toast.error("Could not post comment");
+  };
+
+  const setCommentStatus = async (commentId: string, status: CommentStatus) => {
+    const patch = status === "resolved"
+      ? { status, resolved_by: identity.name, resolved_at: new Date().toISOString() }
+      : { status, resolved_by: null, resolved_at: null };
+    const { error } = await supabase.from("assessment_comments").update(patch).eq("id", commentId);
+    if (error) toast.error("Could not update comment");
+  };
+
+  const deleteComment = async (commentId: string) => {
+    const { error } = await supabase.from("assessment_comments").delete().eq("id", commentId);
+    if (error) toast.error("Could not delete comment");
+  };
+
+  const scrollToQuestion = (questionId: string) => {
+    const el = document.getElementById(`q-${questionId}`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+  const scrollToSection = (letter: string) => {
+    const el = document.getElementById(`section-${letter}`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const runDiagramAction = async (qId: string, mode: "generate" | "edit" | "regenerate", instruction?: string) => {
@@ -417,6 +514,9 @@ function EditorPage() {
               }}
             >
               <Download className="h-4 w-4" /> Download .docx
+            </Button>
+            <Button variant="outline" size="sm" className="gap-1" onClick={() => setInviteOpen(true)}>
+              <UserPlus className="h-4 w-4" /> Invite reviewer
             </Button>
             <Select value={assessment.status} onValueChange={setStatus}>
               <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>

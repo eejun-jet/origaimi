@@ -14,6 +14,60 @@ export type Database = {
   }
   public: {
     Tables: {
+      assessment_comments: {
+        Row: {
+          assessment_id: string
+          author_email: string | null
+          author_name: string
+          author_role: string
+          body: string
+          created_at: string
+          id: string
+          parent_id: string | null
+          question_id: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          scope: string
+          section_letter: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          assessment_id: string
+          author_email?: string | null
+          author_name: string
+          author_role?: string
+          body: string
+          created_at?: string
+          id?: string
+          parent_id?: string | null
+          question_id?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          scope: string
+          section_letter?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          assessment_id?: string
+          author_email?: string | null
+          author_name?: string
+          author_role?: string
+          body?: string
+          created_at?: string
+          id?: string
+          parent_id?: string | null
+          question_id?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          scope?: string
+          section_letter?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       assessment_questions: {
         Row: {
           answer: string | null
