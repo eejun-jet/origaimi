@@ -20,7 +20,7 @@ import {
 import {
   type Section, type SectionTopic, type SectionedBlueprint, type DifficultyMix,
   defaultSection, nextSectionLetter, blueprintTotalMarks, isScienceSubject,
-  difficultyMixTotal, DEFAULT_DIFFICULTY_MIX,
+  difficultyMixTotal, DEFAULT_DIFFICULTY_MIX, KNOWLEDGE_OUTCOMES,
   SBQ_SKILLS, MAX_SBQ_SKILLS, getSectionSkills, isHumanitiesSubject, type SbqSkill,
 } from "@/lib/sections";
 import { ChevronLeft, ChevronRight, Sparkles, Loader2, BookOpen, Upload, Plus, Trash2, ChevronUp, ChevronDown } from "lucide-react";
@@ -232,6 +232,66 @@ function NewAssessment() {
     setSelectedTopicIds([]);
     setTopics([]);
   }, [selectedPaperKey, subject, level, activeSection]);
+
+  // Step 2.5 — Objectives (AOs / KOs / LOs).
+  // Globally chosen targets the paper must hit; each section can later narrow them.
+  const [selectedAoCodes, setSelectedAoCodes] = useState<string[]>([]);
+  const [selectedKos, setSelectedKos] = useState<string[]>([]);
+  const [selectedLos, setSelectedLos] = useState<string[]>([]);
+  const [customLoInput, setCustomLoInput] = useState("");
+
+  // LO union derived from currently-selected topics (deduped, capped for UI).
+  const derivedLos = useMemo(() => {
+    if (useSyllabus) {
+      const set = new Set<string>();
+      for (const t of selectableSyllabusTopics) {
+        if (!selectedTopicIds.includes(t.id)) continue;
+        for (const lo of t.learningOutcomes ?? []) {
+          const trimmed = lo.trim();
+          if (trimmed) set.add(trimmed);
+        }
+      }
+      return Array.from(set);
+    }
+    return [];
+  }, [useSyllabus, selectableSyllabusTopics, selectedTopicIds]);
+
+  // KO categories actually present in the chosen topics — used to highlight
+  // which of the fixed 4 categories are syllabus-supported.
+  const availableKos = useMemo(() => {
+    if (!useSyllabus) return KNOWLEDGE_OUTCOMES.slice();
+    const set = new Set<string>();
+    for (const t of selectableSyllabusTopics) {
+      if (!selectedTopicIds.includes(t.id)) continue;
+      for (const c of t.outcomeCategories ?? []) {
+        const lower = c.toLowerCase();
+        const match = KNOWLEDGE_OUTCOMES.find((k) => k.toLowerCase() === lower);
+        if (match) set.add(match);
+      }
+    }
+    // Always allow the 4 standard categories — but mark which are syllabus-derived.
+    return KNOWLEDGE_OUTCOMES.filter((k) => set.size === 0 || set.has(k));
+  }, [useSyllabus, selectableSyllabusTopics, selectedTopicIds]);
+
+  // Reset objective picks whenever topics change, keeping any custom LOs the
+  // teacher typed (anything not in derivedLos is preserved as custom).
+  useEffect(() => {
+    setSelectedAoCodes((prev) => prev.filter((c) => docAOs.some((a) => a.code === c)));
+    setSelectedKos((prev) => prev.filter((k) => availableKos.includes(k as typeof KNOWLEDGE_OUTCOMES[number])));
+    setSelectedLos((prev) => {
+      // keep selections that are still derivable OR were custom (not in derivedLos)
+      const derivedSet = new Set(derivedLos);
+      return prev.filter((lo) => derivedSet.has(lo) || !derivedLos.includes(lo));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docAOs, availableKos.join("|"), derivedLos.join("|")]);
+
+  const addCustomLo = () => {
+    const v = customLoInput.trim();
+    if (!v) return;
+    setSelectedLos((prev) => (prev.includes(v) ? prev : [...prev, v]));
+    setCustomLoInput("");
+  };
 
   // Step 3 — sections (replaces old blueprint + question types steps)
   const [sections, setSections] = useState<Section[]>([]);
@@ -785,7 +845,9 @@ function paperLabel(p: SyllabusLibraryPaper) {
 }
 
 function Stepper({ step }: { step: number }) {
-  const labels = ["Basics", "Topics", "TOS", "Types", "References", "Generate"];
+  // NOTE: Objectives step (Step 2.5) UI is being added in a follow-up; keep
+  // the original 5-stage labels until the new step's render block is wired.
+  const labels = ["Basics", "Topics", "Sections", "References", "Generate"];
   return (
     <div className="flex items-center gap-2">
       {labels.map((l, i) => {

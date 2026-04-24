@@ -36,6 +36,10 @@ type Section = {
   topic_pool: SectionTopic[];
   instructions?: string;
   difficulty_mix?: DifficultyMix;
+  /** Per-section objective targets — narrow the global picks. */
+  ao_codes?: string[];
+  knowledge_outcomes?: string[];
+  learning_outcomes?: string[];
 };
 
 /** Largest-remainder rounding: turn a percentage mix into an array of n difficulty labels. */
@@ -486,6 +490,24 @@ ${lines}
 Calibrate stem complexity, distractor closeness (for MCQ), required reasoning steps and number of marks-bearing inferences to the target difficulty for each slot.`;
   }
 
+  // Resolve effective objective pool for this section: prefer section-level
+  // overrides, fall back to whatever the topic pool already carries.
+  const sectionAOs = (section.ao_codes && section.ao_codes.length > 0)
+    ? section.ao_codes
+    : Array.from(new Set(section.topic_pool.flatMap((t) => t.ao_codes ?? [])));
+  const sectionKOs = (section.knowledge_outcomes && section.knowledge_outcomes.length > 0)
+    ? section.knowledge_outcomes
+    : Array.from(new Set(section.topic_pool.flatMap((t) => t.outcome_categories ?? [])));
+  const sectionLOs = (section.learning_outcomes && section.learning_outcomes.length > 0)
+    ? section.learning_outcomes
+    : Array.from(new Set(section.topic_pool.flatMap((t) => t.learning_outcomes ?? [])));
+
+  const objectivesBlock = (sectionAOs.length + sectionKOs.length + sectionLOs.length) > 0 ? `
+
+OBJECTIVES TO COVER (each generated question MUST list the AO codes, KO categories, and LO statements it actually addresses — set ao_codes, knowledge_outcomes and learning_outcomes accordingly):
+${sectionAOs.length > 0 ? `  - Assessment Objectives pool: ${sectionAOs.join(", ")}\n` : ""}${sectionKOs.length > 0 ? `  - Knowledge Outcome categories pool: ${sectionKOs.join(", ")}\n` : ""}${sectionLOs.length > 0 ? `  - Learning Outcomes pool (verbatim statements):\n${sectionLOs.slice(0, 20).map((lo) => `      • ${lo}`).join("\n")}\n` : ""}
+Across the ${section.num_questions} questions in this section, COLLECTIVELY cover every item in the pools above. Each individual question must tag the specific AOs / KOs / LOs it addresses (do not blanket-tag every objective on every question).` : "";
+
   return `${grounding}You are drafting ${sectionLabel} of "${opts.title}" (${opts.level} ${opts.subject}, ${opts.assessmentType}, ${opts.durationMinutes} min, ${opts.totalMarks} total marks across ${opts.totalSections} sections).
 
 THIS SECTION:
@@ -495,7 +517,7 @@ THIS SECTION:
   - ${marksGuide}
   - Bloom's level focus: ${section.bloom ?? "Apply"} (use other levels only if the topic clearly demands it)
   ${section.instructions ? `- Section instructions for the rubric: ${section.instructions}` : ""}
-${skillBlock}${difficultyBlock}
+${skillBlock}${difficultyBlock}${objectivesBlock}
 ${humanitiesSourceGuidance}${sbqSectionPreamble}
 ALLOWED TOPICS (pick from these only — DO NOT invent topics outside this pool):
 ${topicLines}
@@ -508,6 +530,7 @@ For every question:
   - difficulty: easy | medium | hard.
   - bloom_level: Remember | Understand | Apply | Analyse | Evaluate | Create.
   - The topic field must be one of the allowed topics above (verbatim).
+  - ao_codes, knowledge_outcomes, learning_outcomes: the SPECIFIC objectives this question addresses (drawn from the pools above where provided).
 ${section.question_type === "source_based" || section.question_type === "comprehension"
     ? `  - Each sub-question must explicitly NAME the source(s) it uses by letter and require analysis/inference — never generic content recall that ignores the source.`
     : ""}
@@ -539,6 +562,9 @@ const TOOL = {
               mark_scheme: { type: "string", description: "Marking rubric showing how to award marks." },
               source_excerpt: { type: ["string", "null"], description: "Verbatim source passage used in the stem (only when a GROUNDED SOURCE was provided)." },
               source_url: { type: ["string", "null"], description: "URL of the source (only when a GROUNDED SOURCE was provided)." },
+              ao_codes: { type: ["array", "null"], items: { type: "string" }, description: "Assessment Objective codes addressed by this question (e.g. AO1, AO2)." },
+              knowledge_outcomes: { type: ["array", "null"], items: { type: "string" }, description: "Knowledge Outcome categories this question exercises (Knowledge, Understanding, Application, Skills)." },
+              learning_outcomes: { type: ["array", "null"], items: { type: "string" }, description: "Learning outcome statements this question covers, drawn verbatim from the section's LO pool when supplied." },
             },
             required: ["question_type", "topic", "bloom_level", "difficulty", "marks", "stem", "answer", "mark_scheme"],
             additionalProperties: false,
@@ -664,6 +690,7 @@ Deno.serve(async (req) => {
       source_excerpt: string | null; source_url: string | null; notes: string | null;
       diagram_url: string | null; diagram_source: string | null;
       diagram_citation: string | null; diagram_caption: string | null;
+      ao_codes: string[]; knowledge_outcomes: string[]; learning_outcomes: string[];
     };
 
     const allRows: EnrichedRow[] = [];
@@ -929,6 +956,21 @@ Deno.serve(async (req) => {
           q.stem ?? "",
         );
 
+        // Resolve per-question objective tags. Honour what the model emitted;
+        // otherwise fall back to the section overrides, then the topic defaults.
+        const fallbackAOs = (section.ao_codes && section.ao_codes.length > 0)
+          ? section.ao_codes
+          : (t?.ao_codes ?? []);
+        const fallbackKOs = (section.knowledge_outcomes && section.knowledge_outcomes.length > 0)
+          ? section.knowledge_outcomes
+          : (t?.outcome_categories ?? []);
+        const fallbackLOs = (section.learning_outcomes && section.learning_outcomes.length > 0)
+          ? section.learning_outcomes
+          : (t?.learning_outcomes ?? []);
+        const qAOs: string[] = Array.isArray(q.ao_codes) && q.ao_codes.length > 0 ? q.ao_codes : fallbackAOs;
+        const qKOs: string[] = Array.isArray(q.knowledge_outcomes) && q.knowledge_outcomes.length > 0 ? q.knowledge_outcomes : fallbackKOs;
+        const qLOs: string[] = Array.isArray(q.learning_outcomes) && q.learning_outcomes.length > 0 ? q.learning_outcomes : fallbackLOs;
+
         allRows.push({
           assessment_id: assessmentId,
           user_id: userId,
@@ -949,6 +991,9 @@ Deno.serve(async (req) => {
           diagram_source: null,
           diagram_citation: null,
           diagram_caption: null,
+          ao_codes: qAOs,
+          knowledge_outcomes: qKOs,
+          learning_outcomes: qLOs,
           // transient — used by the post-insert diagram pass, stripped before insert
           _wantDiagram: wantDiagram,
           _diagramTopic: q.topic ?? t?.topic ?? "",

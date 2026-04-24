@@ -17,6 +17,7 @@ export type Database = {
       assessment_questions: {
         Row: {
           answer: string | null
+          ao_codes: string[]
           assessment_id: string
           bloom_level: string | null
           created_at: string
@@ -26,6 +27,8 @@ export type Database = {
           diagram_url: string | null
           difficulty: string | null
           id: string
+          knowledge_outcomes: string[]
+          learning_outcomes: string[]
           mark_scheme: string | null
           marks: number
           notes: string | null
@@ -42,6 +45,7 @@ export type Database = {
         }
         Insert: {
           answer?: string | null
+          ao_codes?: string[]
           assessment_id: string
           bloom_level?: string | null
           created_at?: string
@@ -51,6 +55,8 @@ export type Database = {
           diagram_url?: string | null
           difficulty?: string | null
           id?: string
+          knowledge_outcomes?: string[]
+          learning_outcomes?: string[]
           mark_scheme?: string | null
           marks?: number
           notes?: string | null
@@ -67,6 +73,7 @@ export type Database = {
         }
         Update: {
           answer?: string | null
+          ao_codes?: string[]
           assessment_id?: string
           bloom_level?: string | null
           created_at?: string
@@ -76,6 +83,8 @@ export type Database = {
           diagram_url?: string | null
           difficulty?: string | null
           id?: string
+          knowledge_outcomes?: string[]
+          learning_outcomes?: string[]
           mark_scheme?: string | null
           marks?: number
           notes?: string | null
