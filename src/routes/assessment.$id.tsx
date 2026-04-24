@@ -1223,7 +1223,12 @@ function QuestionCard({
           <Button size="sm" variant="ghost" onClick={onBank} className="gap-1">
             <BookmarkPlus className="h-3.5 w-3.5" /> Save to bank
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => setShowComments((v) => !v)} className="gap-1">
+          <Button
+            size="sm"
+            variant={showComments ? "secondary" : "outline"}
+            onClick={() => setShowComments((v) => !v)}
+            className="gap-1 border-primary/40 text-primary hover:text-primary"
+          >
             <MessageCircle className="h-3.5 w-3.5" />
             {commentRootCount > 0 ? `${commentRootCount} comment${commentRootCount === 1 ? "" : "s"}` : "Comment"}
             {openCommentCount > 0 && (
