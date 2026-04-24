@@ -1108,9 +1108,34 @@ function QuestionCard({
           <Button size="sm" variant="ghost" onClick={onBank} className="gap-1">
             <BookmarkPlus className="h-3.5 w-3.5" /> Save to bank
           </Button>
+          <Button size="sm" variant="ghost" onClick={() => setShowComments((v) => !v)} className="gap-1">
+            <MessageCircle className="h-3.5 w-3.5" />
+            {commentRootCount > 0 ? `${commentRootCount} comment${commentRootCount === 1 ? "" : "s"}` : "Comment"}
+            {openCommentCount > 0 && (
+              <Badge variant="outline" className="ml-1 h-4 border-destructive/30 px-1 text-[9px] text-destructive">
+                {openCommentCount} open
+              </Badge>
+            )}
+          </Button>
           <Button size="sm" variant="ghost" onClick={onDelete} className="ml-auto gap-1 text-destructive hover:text-destructive">
             <Trash2 className="h-3.5 w-3.5" /> Delete
           </Button>
+        </div>
+      )}
+
+      {showComments && !editing && (
+        <div className="mt-3 border-t border-border pt-3">
+          <CommentThread
+            comments={comments}
+            identity={identity}
+            scope="question"
+            anchor={{ questionId: q.id, sectionLetter: null }}
+            onAdd={({ body, parentId }) => onAddComment({ body, parentId })}
+            onSetStatus={onSetCommentStatus}
+            onDelete={onDeleteComment}
+            compact
+            hideScopeBadge
+          />
         </div>
       )}
     </div>
