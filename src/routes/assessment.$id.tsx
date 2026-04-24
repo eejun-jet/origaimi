@@ -83,12 +83,24 @@ function EditorPage() {
   const [bulkRegenInstr, setBulkRegenInstr] = useState("");
   const [bulkRegenDifficulty, setBulkRegenDifficulty] = useState<"keep" | "easy" | "medium" | "hard">("keep");
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [aoDefs, setAoDefs] = useState<AODef[]>([]);
 
   const loadAll = async () => {
     const { data: a } = await supabase.from("assessments").select("*").eq("id", id).single();
-    setAssessment(a as Assessment | null);
+    const asm = a as Assessment | null;
+    setAssessment(asm);
     const { data: q } = await supabase.from("assessment_questions").select("*").eq("assessment_id", id).order("position");
     setQuestions((q as Question[]) ?? []);
+    if (asm?.syllabus_doc_id) {
+      const { data: aos } = await supabase
+        .from("syllabus_assessment_objectives")
+        .select("code,title,weighting_percent")
+        .eq("source_doc_id", asm.syllabus_doc_id)
+        .order("position");
+      setAoDefs((aos as AODef[]) ?? []);
+    } else {
+      setAoDefs([]);
+    }
     setFetching(false);
   };
 
