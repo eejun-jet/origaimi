@@ -1504,7 +1504,7 @@ function SectionCard({
         </div>
       </div>
 
-      <div className="mt-3 grid gap-3 sm:grid-cols-4">
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
         <div>
           <Label className="text-xs">Question type</Label>
           <Select value={section.question_type} onValueChange={(v) => onUpdate({ question_type: v, ...(v !== "source_based" ? { sbq_skill: undefined, sbq_skills: undefined } : {}) })}>
@@ -1513,15 +1513,6 @@ function SectionCard({
               {visibleQuestionTypes.map((q) => (
                 <SelectItem key={q.id} value={q.id}>{q.label}</SelectItem>
               ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label className="text-xs">Bloom's level</Label>
-          <Select value={section.bloom ?? "Apply"} onValueChange={(v) => onUpdate({ bloom: v })}>
-            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {BLOOMS.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
