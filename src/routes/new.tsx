@@ -364,7 +364,13 @@ function NewAssessment() {
   };
   const addSection = () => {
     const remaining = Math.max(1, totalMarks - sectionsTotalMarks);
-    setSections((sx) => [...sx, { ...defaultSection(nextSectionLetter(sx), remaining), topic_pool: masterTopicPool }]);
+    setSections((sx) => [...sx, {
+      ...defaultSection(nextSectionLetter(sx), remaining),
+      topic_pool: masterTopicPool,
+      ao_codes: selectedAoCodes.slice(),
+      knowledge_outcomes: selectedKos.slice(),
+      learning_outcomes: selectedLos.slice(),
+    }]);
   };
   const removeSection = (id: string) => {
     setSections((sx) => {
