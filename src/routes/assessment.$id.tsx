@@ -836,6 +836,9 @@ function QuestionCard({
   const [diagramMode, setDiagramMode] = useState<"edit" | "regenerate" | null>(null);
   const [diagramInstr, setDiagramInstr] = useState("");
   const [diagramBusy, setDiagramBusy] = useState(false);
+  const [showComments, setShowComments] = useState(false);
+  const commentRootCount = comments.filter((c) => !c.parent_id).length;
+  const openCommentCount = comments.filter((c) => !c.parent_id && c.status === "open").length;
 
   const showDiagramTools = isScienceOrMathSubject(subject);
 
