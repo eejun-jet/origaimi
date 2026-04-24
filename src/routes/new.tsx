@@ -322,6 +322,9 @@ function NewAssessment() {
         question_type: seedType,
         num_questions: Math.max(1, masterPool.length),
         topic_pool: masterPool,
+        ao_codes: selectedAoCodes.slice(),
+        knowledge_outcomes: selectedKos.slice(),
+        learning_outcomes: selectedLos.slice(),
       }]);
     }
     // intentionally no `sections` dep — only seed when pool first becomes non-empty
