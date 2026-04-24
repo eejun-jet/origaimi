@@ -845,9 +845,7 @@ function paperLabel(p: SyllabusLibraryPaper) {
 }
 
 function Stepper({ step }: { step: number }) {
-  // NOTE: Objectives step (Step 2.5) UI is being added in a follow-up; keep
-  // the original 5-stage labels until the new step's render block is wired.
-  const labels = ["Basics", "Topics", "Sections", "References", "Generate"];
+  const labels = ["Basics", "Topics", "Objectives", "Sections", "References", "Generate"];
   return (
     <div className="flex items-center gap-2">
       {labels.map((l, i) => {
