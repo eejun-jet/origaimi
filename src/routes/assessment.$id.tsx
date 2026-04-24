@@ -803,6 +803,7 @@ function isScienceOrMathSubject(subject: string | undefined | null): boolean {
 
 function QuestionCard({
   q, index, isFirst, isLast, isRegen, subject, selected, onToggleSelect, onUpdate, onDelete, onMove, onRegenerate, onBank, onDiagramAction, onDiagramRemove, hideSourceBlock,
+  comments, identity, onAddComment, onSetCommentStatus, onDeleteComment,
 }: {
   q: Question; index: number; isFirst: boolean; isLast: boolean; isRegen: boolean;
   subject: string;
@@ -816,6 +817,11 @@ function QuestionCard({
   onDiagramAction: (mode: "generate" | "edit" | "regenerate", instruction?: string) => Promise<boolean>;
   onDiagramRemove: () => void;
   hideSourceBlock?: boolean;
+  comments: AssessmentComment[];
+  identity: ReviewerIdentity;
+  onAddComment: (input: { body: string; parentId: string | null }) => Promise<void>;
+  onSetCommentStatus: (id: string, status: CommentStatus) => Promise<void>;
+  onDeleteComment: (id: string) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
   const [stem, setStem] = useState(q.stem);
