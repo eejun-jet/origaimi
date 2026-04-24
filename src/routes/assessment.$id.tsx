@@ -653,12 +653,41 @@ function EditorPage() {
 
             {questions.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border bg-card/50 p-12 text-center">
-                <Sparkles className="mx-auto h-8 w-8 text-primary" />
-                <p className="mt-3 text-sm text-muted-foreground">
-                  {assessment.status === "generation_failed"
-                    ? "Generation failed because no usable source-backed questions could be created for this topic."
-                    : "No questions yet. Generation is still in progress."}
-                </p>
+                {assessment.status === "generating" ? (
+                  <>
+                    <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
+                    <p className="mt-3 text-sm font-medium text-foreground">
+                      Drafting your paper…
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Source-grounded items can take 2–4 minutes. Questions will
+                      appear here as soon as they are ready — you don't need to
+                      refresh.
+                    </p>
+                    <div className="mt-4 flex items-center justify-center gap-2">
+                      <Button size="sm" variant="outline" onClick={() => loadAll()} className="gap-1.5">
+                        <RefreshCw className="h-3.5 w-3.5" /> Check now
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-muted-foreground"
+                        onClick={() => setStatus("generation_failed")}
+                      >
+                        Stop and mark as failed
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="mx-auto h-8 w-8 text-primary" />
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      {assessment.status === "generation_failed"
+                        ? "Generation failed before any questions could be saved. This usually means the source-fetching step took too long. Try a narrower topic or a different question type."
+                        : "No questions yet."}
+                    </p>
+                  </>
+                )}
               </div>
             ) : (
               questions.map((q, i) => {
