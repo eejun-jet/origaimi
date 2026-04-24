@@ -1,109 +1,85 @@
 ## Goal
-Let multiple roles — **peer-setter**, **vetter**, **clearance** (and the original author) — leave threaded comments on a paper, on a section, or on a specific question, with statuses (open / addressed / resolved). Comments become a visible audit trail that justifies the paper's professional quality before finalisation.
 
-## What's there today
-- App runs in **free-trial mode** with a single demo user (`src/lib/auth-context.tsx`). There is no real login flow yet.
-- The editor (`src/routes/assessment.$id.tsx`) renders an assessment, sections, and `QuestionCard` components — perfect insertion points for comment threads.
-- All RLS is currently `true` (open), so a comments table can be added without an auth refactor and tightened later when real auth lands.
+Replace the placeholder Social-Studies content currently sitting on the History syllabi (`2126` N(A) Combined Humanities (History) and `2261` Sec 4 Combined Humanities (History)) with the **canonical AO/Objective + LO/KO/Section dataset** you uploaded. After this, generating a History paper will tag every question with the correct AO (with command-word descriptors), the right LO, the correct KO content block, and the correct Section (A/B).
 
-## Plan
+## What I read from your spreadsheet
 
-### 1. Database — `assessment_comments`
-Single migration, one new table:
-```text
-assessment_comments
-├─ id              uuid pk
-├─ assessment_id   uuid     -- which paper
-├─ scope           text     -- 'paper' | 'section' | 'question'
-├─ section_letter  text     -- nullable, e.g. 'A'
-├─ question_id     uuid     -- nullable, FK-style to assessment_questions.id
-├─ parent_id       uuid     -- nullable, for threaded replies
-├─ author_name     text     -- e.g. 'Mrs Tan'
-├─ author_email    text     -- nullable
-├─ author_role     text     -- 'author' | 'peer_setter' | 'vetter' | 'clearance' | 'other'
-├─ body            text
-├─ status          text     -- 'open' | 'addressed' | 'resolved'
-├─ resolved_by     text     -- nullable
-├─ resolved_at     timestamptz
-├─ created_at      timestamptz default now()
-└─ updated_at      timestamptz default now()
-```
-- Indexes on `(assessment_id)`, `(question_id)`, `(status)`.
-- RLS: trial-open (matches the rest of the project) — tighten when real auth is wired.
-- Realtime: `ALTER PUBLICATION supabase_realtime ADD TABLE assessment_comments;` so collaborators see new comments live.
+**Sheet 1 — Assessment Objectives (3 AOs, with sub-objective command words)**
+- **AO1 — Deploy Knowledge**: select, organise and use relevant historical knowledge in context.
+- **AO2 — Construct Explanation & Communicate Historical Knowledge**: analyse/explain using causation, consequence, change, continuity, significance. Command: *Explain… / How far do you agree…*
+- **AO3 — Interpret and Evaluate Source Materials**, with **7 sub-descriptors**:
+  1. Comprehend & extract relevant information
+  2. Draw inferences — *infer, message, what does it tell you*
+  3. Compare & contrast — *compare, how similar/different, how far similar/different*
+  4. Distinguish fact / opinion / judgement — *how reliable, how far can we trust, how accurate, how far can one source prove another wrong, are you surprised*
+  5. Recognise values & detect bias — *purpose, why was this source created, would X have agreed, are you surprised*
+  6. Establish utility — *how useful, how far can one source prove another wrong*
+  7. Draw conclusions from evidence — *given a hypothesis, how far do the sources support…*
 
-### 2. Sharing model
-Add a lightweight **share link** so a paper-setter can hand a URL to a vetter without forcing them to sign up:
-- `/assessment/$id?as=vetter&name=Mrs%20Lim` — the editor reads `as` and `name` from the URL and uses them as the comment author identity (stored in `localStorage` so they persist on refresh).
-- An "Invite reviewer" button in the editor header opens a small modal that builds these URLs for each role with one-click copy. (When real auth lands later, this is swapped for a proper invite/email flow with no UI change.)
+**Sheet 2 — LO ↔ KO ↔ Section mapping (6 LO bands)**
+1. Post-war peace settlements (Treaty of Versailles, redrawing of boundaries) — Section **B**
+2. Collective security in the 1920s (League of Nations) — Section **B**
+3. Authoritarian regimes — **Nazi Germany** case study (Sections **A, B**) and **Militarist Japan 1920s–30s** (Section **B**)
+4. Outbreak & end of WWII in Europe (Sections **A, B**) and Asia–Pacific (Section **B**); reasons for end of WWII (Section **B**)
+5. The Cold War — Origins in Europe (A, B), Korean War 1950–53 case study (A, B), Vietnam War 1954–75 case study (B)
+6. End of the Cold War / decline of the USSR — Section **B**
 
-### 3. Editor UI — comments everywhere they matter
+`*` items in your sheet are flagged as the **examined case studies**; the bullet text under each is the verbatim KO content block to seed.
 
-**A. Comment dock (right-hand sidebar tab)**
-A new "Comments" tab next to the AO/KO/LO coverage panel. Shows a filterable feed:
-```text
-Comments  [3 open · 1 addressed · 8 resolved]
-Filter: [All] [Open] [By role ▾] [By section ▾]
+## Implementation plan
 
-● Mrs Tan · vetter · 2h          [Q4 · Section B]
-  "Distractor C is too obviously wrong — Year 4 cohort
-   will eliminate it instantly."         [Reply] [Mark addressed]
-  └─ You · author · 1h
-     "Rewritten — please re-check."
+### 1. Data migration — re-seed the two History syllabus docs
 
-○ Dr Lee · clearance · yesterday   [Paper]
-  "Total marks (52) doesn't match the cover page (50)."
-                                          [Reply] [Resolve]
-```
+Apply to **both** `syllabus_documents.id` values:
+- `51ed087a-c0bc-4c94-ac32-e676095b9796` — Sec 4 Combined Humanities (History) 2261
+- `e648a761-8542-4809-a008-cbc246fb4d0b` — Sec 4N(A) Combined Humanities (History) 2126
 
-**B. Inline thread on each `QuestionCard`**
-- A small badge "💬 2" appears on the card when comments exist (red dot if any are open).
-- Clicking expands an inline thread under the card with a textarea: *"Add a comment as **Mrs Lim (vetter)**"*. Each comment shows author + role pill + timestamp + status chip + reply/resolve buttons.
+Steps inside one SQL migration (data-only, idempotent):
 
-**C. Section-level threads**
-- Each section header gets the same affordance (`💬 Add section comment`) for cross-cutting issues ("Section B is heavily AO1 — needs more AO2").
+a. **Wipe stale objectives & topics** for those two doc IDs (they currently hold Social-Studies/citizenship content and a duplicated AO/Objective set).
 
-**D. Paper-level thread**
-- A dedicated panel at the top of the comments dock for paper-wide remarks.
+b. **Re-seed `syllabus_assessment_objectives`** with exactly **3 rows per doc** (AO1, AO2, AO3), each carrying:
+   - `code` = `AO1` / `AO2` / `AO3`
+   - `title` = "Deploy Knowledge" / "Construct Explanation and Communicate Historical Knowledge" / "Interpret and Evaluate Source Materials"
+   - `description` = full objective text from the sheet
+   - For AO3, append the 7 sub-descriptors with their command words inside `description` (one bullet each) so the generator surfaces them in the prompt.
 
-### 4. Roles & visual distinction
-Color-coded role pills so reviewers are instantly recognisable:
-```text
-author        muted grey
-peer_setter   indigo
-vetter        amber
-clearance     emerald
-other         neutral
-```
-Role is implicit from the share link (`?as=vetter`) but editable in the comment composer dropdown if a reviewer wears multiple hats.
+c. **Re-seed `syllabus_topics`** with one row per LO/KO pairing from Sheet 2 (≈ 22 rows per doc). Each row carries:
+   - `title` = the LO statement (e.g. *"Assess the impact of post-war peace settlements on Europe."*)
+   - `learning_outcomes` = `[ <full LO text> ]` (verbatim, used by the generator's LO pool)
+   - `outcome_categories` = the **KO content block** parsed into discrete bullets (e.g. *"Treaty of Versailles — War Guilt Clause, reparations, demilitarisation, territorial reductions"*). These become the **KO pool** the generator must collectively cover.
+   - `ao_codes` = appropriate AOs for that band — Section A bands (SBQ source-based) get `AO3`; essay/structured bands get `AO1, AO2`; case-study bands tagged for both A and B get all three.
+   - `section` = `A`, `B`, or `A, B` exactly as in the dataset
+   - `topic_code` = `1`–`6` matching the LO band number from your sheet
+   - `parent_code` = the KO heading (e.g. `War in Europe and the Asia-Pacific`, `The Cold War`, `End of the Cold War`) so reviewers can group rows in the admin UI
+   - `position` = stable order following the spreadsheet
+   - Skip the *Non-examinable* overview rows (LO band 1 row 1 "Overview of WWI" and LO band 3 row 1 "Overview of attempts at viable political systems") so the generator never picks them.
+   - `paper_id` is left NULL (a single content pool spans the whole History paper — both 2126 and 2261 use a single "Paper 1" component, and the generator's `loadDocTopics` fallback already handles doc-level pools).
 
-### 5. Realtime updates
-Subscribe to `assessment_comments` filtered by `assessment_id` in the editor — new comments, replies, and status changes appear live for everyone viewing the paper. No refresh needed.
+d. Mark `syllabus_documents.parse_status = 'parsed'` (already true) and bump `updated_at`.
 
-### 6. Final-review integration
-The "Review & finalise" gate (already on the roadmap) gains one more check:
-```text
-⚠ 3 open comments from vetters — resolve or override
-```
-Finalising auto-records the comment summary into `assessment_versions.snapshot` so the audit trail survives.
+### 2. (No code changes needed in the generator)
 
-### 7. Export integration (later, optional)
-The DOCX exporter can emit an "Internal review log" appendix listing all resolved/addressed comments per question, useful for clearance documentation. Behind a checkbox in the export dialog so the student-facing paper stays clean.
+The current `generate-assessment` edge function already:
+- Pulls `ao_codes`, `outcome_categories` (KO), and `learning_outcomes` from `syllabus_topics` into each section's pool (lines 251–303 of `index.ts`).
+- Lists the AO codes, KO categories, and verbatim LO statements in the prompt (lines 493–509) and instructs the model to collectively cover them and per-question tag them.
+- Stores `ao_codes`, `knowledge_outcomes`, `learning_outcomes` on each generated row, which feeds the **TOS Alignment Meter** you built last iteration.
+
+So once the data is reseeded, the AO/KO/LO meter and the per-section breakdown will *immediately* reflect the History dataset — no app/edge changes required.
+
+### 3. Optional polish (only if you want it now)
+
+- Surface AO3's command-word descriptors in the editor sidebar (small "command words" chip under each AO3 question) so reviewers see *why* the model picked the AO3 sub-skill. This is a 1-file change in `assessment.$id.tsx` reading from a static map. **Tell me if you want this included.**
 
 ## Files touched
-```
-supabase/migrations/<new>.sql                 create assessment_comments + realtime publication
-src/integrations/supabase/types.ts            (auto-regenerated)
-src/lib/comments.ts                           NEW — types, role colors, share-URL helpers, identity hook
-src/components/CommentThread.tsx              NEW — reusable thread (paper / section / question scope)
-src/components/CommentDock.tsx                NEW — sidebar feed with filters
-src/components/InviteReviewerDialog.tsx       NEW — share-link generator
-src/routes/assessment.$id.tsx                 wire dock tab, per-question + per-section threads, header invite button, realtime subscription, identity from ?as / ?name
-src/lib/export-docx.ts                        (later, optional) review-log appendix
-```
 
-## Result
-- Anyone with the share link reviews the paper as their named role — no account creation needed for the trial.
-- Comments live at three scopes (paper / section / question) with threaded replies and an open → addressed → resolved lifecycle.
-- A live, filterable feed gives the author a single place to triage feedback; inline threads keep context next to the question being discussed.
-- Open comments block finalisation by default, so peer-setter / vetter / clearance sign-off becomes visible and enforceable rather than implicit.
+- **New**: `supabase/migrations/<ts>_seed_history_aos_los_kos.sql` — data migration (DELETE + INSERT) for both History docs.
+- **No app code changes** — generator already consumes these fields correctly.
+
+## Verification after apply
+
+1. Open `/admin/syllabus/51ed087a-…` (Sec 4 History 2261). Confirm 3 AOs (AO1/AO2/AO3 with the History descriptors, AO3 lists 7 command-word bullets) and ~22 LO/KO topic rows tagged with sections A / B / A,B.
+2. Repeat for the 2126 N(A) doc.
+3. From `/new`, pick "Combined Humanities (History) 2261", add a Section A (source-based, AO3) and Section B (essay/structured, AO1+AO2), generate. Confirm questions are tagged with the correct AO/KO/LO and that the **TOS Alignment Meter** shows AO3 dominating Section A and AO1/AO2 dominating Section B.
+
+**Approve to proceed and I'll write the migration.**
