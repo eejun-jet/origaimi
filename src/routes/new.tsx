@@ -754,8 +754,7 @@ function NewAssessment() {
               <div>
                 <h2 className="font-paper text-xl font-semibold">Objectives</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Set the Assessment Objectives, Knowledge Outcomes and Learning Outcomes the paper must hit.
-                  These travel with every generated question and gate the final review.
+                  Pick the AOs, KOs and LOs the <strong>whole paper</strong> must hit. You can refine each section's coverage in Step 4.
                 </p>
               </div>
 
@@ -963,6 +962,11 @@ function NewAssessment() {
                   masterPool={masterTopicPool}
                   visibleQuestionTypes={visibleQuestionTypes}
                   subject={subject}
+                  allAOs={docAOs}
+                  allKOs={availableKos}
+                  globalAoCodes={selectedAoCodes}
+                  globalKos={selectedKos}
+                  globalLos={selectedLos}
                   onUpdate={(patch) => updateSection(s.id, patch)}
                   onRemove={() => removeSection(s.id)}
                   onMove={(d) => moveSection(s.id, d)}
@@ -1363,14 +1367,82 @@ type SectionCardProps = {
   masterPool: SectionTopic[];
   visibleQuestionTypes: { id: string; label: string }[];
   subject: string;
+  allAOs: AssessmentObjective[];
+  allKOs: readonly string[];
+  globalAoCodes: string[];
+  globalKos: string[];
+  globalLos: string[];
   onUpdate: (patch: Partial<Section>) => void;
   onRemove: () => void;
   onMove: (dir: -1 | 1) => void;
 };
 
 function SectionCard({
-  section, isFirst, isLast, masterPool, visibleQuestionTypes, subject, onUpdate, onRemove, onMove,
+  section, isFirst, isLast, masterPool, visibleQuestionTypes, subject,
+  allAOs, allKOs, globalAoCodes, globalKos, globalLos,
+  onUpdate, onRemove, onMove,
 }: SectionCardProps) {
+  const [customLo, setCustomLo] = useState("");
+  const [customAo, setCustomAo] = useState("");
+
+  const sectionAos = section.ao_codes ?? [];
+  const sectionKos = section.knowledge_outcomes ?? [];
+  const sectionLos = section.learning_outcomes ?? [];
+
+  // AO candidates: union of syllabus AOs, global picks, anything already on this section.
+  const aoCandidates = useMemo(() => {
+    const map = new Map<string, { code: string; title?: string | null; description?: string | null }>();
+    for (const a of allAOs) map.set(a.code, { code: a.code, title: a.title, description: a.description });
+    for (const c of globalAoCodes) if (!map.has(c)) map.set(c, { code: c });
+    for (const c of sectionAos) if (!map.has(c)) map.set(c, { code: c });
+    return Array.from(map.values());
+  }, [allAOs, globalAoCodes, sectionAos]);
+
+  // KO candidates: always show all 4, mark which are syllabus-supported.
+  const koCandidates = KNOWLEDGE_OUTCOMES;
+
+  // LO candidates: union of (a) LOs from this section's topic_pool, (b) global LOs, (c) anything already on the section.
+  const loCandidates = useMemo(() => {
+    const set = new Set<string>();
+    for (const t of section.topic_pool) {
+      for (const lo of t.learning_outcomes ?? []) {
+        const v = lo.trim();
+        if (v) set.add(v);
+      }
+    }
+    for (const lo of globalLos) set.add(lo);
+    for (const lo of sectionLos) set.add(lo);
+    return Array.from(set);
+  }, [section.topic_pool, globalLos, sectionLos]);
+
+  const toggleAo = (code: string) => {
+    const next = sectionAos.includes(code) ? sectionAos.filter((c) => c !== code) : [...sectionAos, code];
+    onUpdate({ ao_codes: next });
+  };
+  const toggleKo = (ko: string) => {
+    const next = sectionKos.includes(ko) ? sectionKos.filter((c) => c !== ko) : [...sectionKos, ko];
+    onUpdate({ knowledge_outcomes: next });
+  };
+  const toggleLo = (lo: string) => {
+    const next = sectionLos.includes(lo) ? sectionLos.filter((c) => c !== lo) : [...sectionLos, lo];
+    onUpdate({ learning_outcomes: next });
+  };
+  const addCustomAo = () => {
+    const v = customAo.trim();
+    if (!v) return;
+    if (!sectionAos.includes(v)) onUpdate({ ao_codes: [...sectionAos, v] });
+    setCustomAo("");
+  };
+  const addCustomLoLocal = () => {
+    const v = customLo.trim();
+    if (!v) return;
+    if (!sectionLos.includes(v)) onUpdate({ learning_outcomes: [...sectionLos, v] });
+    setCustomLo("");
+  };
+
+  const allAoSelected = aoCandidates.length > 0 && aoCandidates.every((a) => sectionAos.includes(a.code));
+  const allKoSelected = koCandidates.every((k) => sectionKos.includes(k));
+  const allLoSelected = loCandidates.length > 0 && loCandidates.every((l) => sectionLos.includes(l));
   const pickedKeys = new Set(section.topic_pool.map((t) => `${t.topic_code ?? ""}::${t.topic}`));
   const toggleTopic = (t: SectionTopic) => {
     const key = `${t.topic_code ?? ""}::${t.topic}`;
