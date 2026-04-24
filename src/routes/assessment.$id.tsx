@@ -130,6 +130,42 @@ function EditorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  // While generation is in progress, poll for new questions / status changes.
+  // The edge function may run longer than the API gateway's 150s timeout, so
+  // the client must keep checking until rows actually land.
+  const isGenerating = assessment?.status === "generating";
+  useEffect(() => {
+    if (!isGenerating) return;
+    const interval = setInterval(() => {
+      loadAll();
+    }, 4000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isGenerating, id]);
+
+  // Realtime: also react instantly to new questions / status updates so we
+  // don't have to wait for the next poll tick.
+  useEffect(() => {
+    if (!isGenerating) return;
+    const channel = supabase
+      .channel(`assessment-progress:${id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "assessment_questions", filter: `assessment_id=eq.${id}` },
+        () => loadAll(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "assessments", filter: `id=eq.${id}` },
+        () => loadAll(),
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isGenerating, id]);
+
   // Realtime: keep comments in sync across collaborators
   useEffect(() => {
     const channel = supabase
@@ -617,12 +653,41 @@ function EditorPage() {
 
             {questions.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border bg-card/50 p-12 text-center">
-                <Sparkles className="mx-auto h-8 w-8 text-primary" />
-                <p className="mt-3 text-sm text-muted-foreground">
-                  {assessment.status === "generation_failed"
-                    ? "Generation failed because no usable source-backed questions could be created for this topic."
-                    : "No questions yet. Generation is still in progress."}
-                </p>
+                {assessment.status === "generating" ? (
+                  <>
+                    <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
+                    <p className="mt-3 text-sm font-medium text-foreground">
+                      Drafting your paper…
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Source-grounded items can take 2–4 minutes. Questions will
+                      appear here as soon as they are ready — you don't need to
+                      refresh.
+                    </p>
+                    <div className="mt-4 flex items-center justify-center gap-2">
+                      <Button size="sm" variant="outline" onClick={() => loadAll()} className="gap-1.5">
+                        <RefreshCw className="h-3.5 w-3.5" /> Check now
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-muted-foreground"
+                        onClick={() => setStatus("generation_failed")}
+                      >
+                        Stop and mark as failed
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="mx-auto h-8 w-8 text-primary" />
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      {assessment.status === "generation_failed"
+                        ? "Generation failed before any questions could be saved. This usually means the source-fetching step took too long. Try a narrower topic or a different question type."
+                        : "No questions yet."}
+                    </p>
+                  </>
+                )}
               </div>
             ) : (
               questions.map((q, i) => {

@@ -454,32 +454,41 @@ function NewAssessment() {
       return toast.error(e1?.message ?? "Could not create assessment");
     }
 
-    const { data: gen, error: e2 } = await supabase.functions.invoke("generate-assessment", {
-      body: {
-        assessmentId: created.id,
-        userId: user.id,
-        title, subject, level,
-        assessmentType: aType,
-        durationMinutes: duration,
-        totalMarks,
-        topics: allTopics,
-        blueprint: blueprintForDb,
-        objectives: {
-          ao_codes: selectedAoCodes,
-          knowledge_outcomes: selectedKos,
-          learning_outcomes: selectedLos,
+    // Kick off generation but DO NOT await — the edge function can run longer
+    // than the API gateway's 150s timeout. The assessment editor page polls
+    // status + questions and surfaces partial / final results as they appear.
+    void supabase.functions
+      .invoke("generate-assessment", {
+        body: {
+          assessmentId: created.id,
+          userId: user.id,
+          title, subject, level,
+          assessmentType: aType,
+          durationMinutes: duration,
+          totalMarks,
+          topics: allTopics,
+          blueprint: blueprintForDb,
+          objectives: {
+            ao_codes: selectedAoCodes,
+            knowledge_outcomes: selectedKos,
+            learning_outcomes: selectedLos,
+          },
+          questionTypes: allQTypes,
+          itemSources: ["ai"],
+          instructions: referenceNote,
+          syllabusCode: selected?.doc.syllabusCode ?? null,
+          paperCode: selected?.paper.paperCode ?? null,
         },
-        questionTypes: allQTypes,
-        itemSources: ["ai"],
-        instructions: referenceNote,
-        syllabusCode: selected?.doc.syllabusCode ?? null,
-        paperCode: selected?.paper.paperCode ?? null,
-      },
-    });
+      })
+      .catch((err) => {
+        // Gateway timeout (504) is expected for long generations — the worker
+        // keeps running and the editor page will pick up rows via polling.
+        // Only log; never block the navigation or scare the user with a toast.
+        console.warn("[generate-assessment] invoke threw (likely gateway timeout)", err);
+      });
 
     setBusy(false);
-    if (e2) toast.error("Generation failed — opening failed draft");
-    else if (gen) toast.success(`Drafted ${gen.questionCount ?? "your"} questions`);
+    toast.success("Drafting your paper… questions will appear as they are ready.");
     navigate({ to: "/assessment/$id", params: { id: created.id } });
   };
 
