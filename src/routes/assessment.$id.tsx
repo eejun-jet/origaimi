@@ -49,9 +49,9 @@ type Question = {
   diagram_source: string | null;
   diagram_citation: string | null;
   diagram_caption: string | null;
-  ao_codes: string[] | null;
-  knowledge_outcomes: string[] | null;
-  learning_outcomes: string[] | null;
+  ao_codes: string[];
+  knowledge_outcomes: string[];
+  learning_outcomes: string[];
 };
 
 type Assessment = {
