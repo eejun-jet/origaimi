@@ -533,8 +533,8 @@ function EditorPage() {
                   : null;
                 return (
                   <div key={q.id} className="space-y-3">
-                    {showHeader && (
-                      <div className="space-y-3">
+                    {showHeader && sec && (
+                      <div className="space-y-3" id={`section-${sec.letter}`}>
                         <div className="rounded-lg border border-primary/30 bg-primary-soft/20 px-4 py-2">
                           <p className="text-sm font-semibold">
                             Section {sec.letter}
@@ -609,33 +609,12 @@ function EditorPage() {
             )}
           </div>
 
-          <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start">
-            <div className="rounded-xl border border-border bg-card p-5">
-              <h3 className="font-medium">TOS Alignment Meter</h3>
-              <p className="mt-1 text-xs text-muted-foreground">Marks per Bloom's level</p>
-              <div className="mt-3 space-y-2">
-                {BLOOMS.filter((b) => targetByBloom[b]).map((b) => {
-                  const target = targetByBloom[b] ?? 0;
-                  const actual = actualByBloom[b] ?? 0;
-                  const pct = target ? Math.min(100, (actual / target) * 100) : 0;
-                  const ok = actual === target;
-                  return (
-                    <div key={b}>
-                      <div className="flex justify-between text-xs">
-                        <span className="text-muted-foreground">{b}</span>
-                        <span className={ok ? "text-success" : "text-foreground"}>{actual} / {target} {ok && "✓"}</span>
-                      </div>
-                      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
-                        <div className={`h-full transition-all ${ok ? "bg-success" : "bg-primary"}`} style={{ width: `${pct}%` }} />
-                      </div>
-                    </div>
-                  );
-                })}
-                {Object.keys(targetByBloom).length === 0 && (
-                  <p className="text-xs text-muted-foreground">No TOS set.</p>
-                )}
-              </div>
-            </div>
+          <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
+            <CoveragePanel
+              coverage={coverage}
+              totalMarks={assessment.total_marks}
+              totalActual={totalActual}
+            />
 
             <div className="rounded-xl border border-border bg-card p-5">
               <div className="flex items-center justify-between">
