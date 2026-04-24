@@ -690,6 +690,7 @@ Deno.serve(async (req) => {
       source_excerpt: string | null; source_url: string | null; notes: string | null;
       diagram_url: string | null; diagram_source: string | null;
       diagram_citation: string | null; diagram_caption: string | null;
+      ao_codes: string[]; knowledge_outcomes: string[]; learning_outcomes: string[];
     };
 
     const allRows: EnrichedRow[] = [];
