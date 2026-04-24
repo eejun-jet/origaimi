@@ -464,6 +464,11 @@ function NewAssessment() {
         totalMarks,
         topics: allTopics,
         blueprint: blueprintForDb,
+        objectives: {
+          ao_codes: selectedAoCodes,
+          knowledge_outcomes: selectedKos,
+          learning_outcomes: selectedLos,
+        },
         questionTypes: allQTypes,
         itemSources: ["ai"],
         instructions: referenceNote,
