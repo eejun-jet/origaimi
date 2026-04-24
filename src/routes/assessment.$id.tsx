@@ -1004,3 +1004,328 @@ function QuestionCard({
     </div>
   );
 }
+
+// ───────────────────────────── Coverage helpers ─────────────────────────────
+
+type Coverage = {
+  paper: {
+    aos: { code: string; title: string | null; target: number; actual: number; weighting: number | null }[];
+    kos: { name: string; target: number; actual: number }[];
+    los: { text: string; target: number; actual: number; covered: boolean }[];
+    sectionMarks: { letter: string; target: number; actual: number }[];
+  };
+  bySection: Record<string, {
+    letter: string;
+    name: string;
+    marks: { target: number; actual: number };
+    aos: { code: string; title: string | null; actual: number }[];
+    kos: { name: string; actual: number }[];
+    los: { text: string; actual: number; covered: boolean }[];
+  }>;
+};
+
+function computeCoverage(
+  questions: Question[],
+  sections: Section[],
+  aoDefs: AODef[],
+  totalMarks: number,
+): Coverage {
+  // Build a flat blueprint to map question position → section
+  const sectionByPos: Section[] = [];
+  let cursor = 0;
+  for (const s of sections) {
+    for (let i = 0; i < (s.num_questions || 0); i++) sectionByPos[cursor++] = s;
+  }
+
+  // ── Paper-wide AO targets from syllabus weightings + actuals from questions
+  const aoCodeSet = new Set<string>();
+  aoDefs.forEach((d) => aoCodeSet.add(d.code));
+  sections.forEach((s) => (s.ao_codes ?? []).forEach((c) => aoCodeSet.add(c)));
+  questions.forEach((q) => (q.ao_codes ?? []).forEach((c) => aoCodeSet.add(c)));
+
+  const paperAOs = Array.from(aoCodeSet).sort().map((code) => {
+    const def = aoDefs.find((d) => d.code === code) ?? null;
+    const weighting = def?.weighting_percent ?? null;
+    const target = weighting != null ? Math.round((weighting / 100) * totalMarks) : 0;
+    const actual = questions.reduce((sum, q) => sum + ((q.ao_codes ?? []).includes(code) ? q.marks : 0), 0);
+    return { code, title: def?.title ?? null, target, actual, weighting };
+  });
+
+  // ── Paper-wide KO targets from sections.knowledge_outcomes (sum of section marks
+  //    listing the KO) + actuals from question.knowledge_outcomes
+  const koSet = new Set<string>(KNOWLEDGE_OUTCOMES as readonly string[]);
+  sections.forEach((s) => (s.knowledge_outcomes ?? []).forEach((k) => koSet.add(k)));
+  questions.forEach((q) => (q.knowledge_outcomes ?? []).forEach((k) => koSet.add(k)));
+
+  const paperKOs = Array.from(koSet).map((name) => {
+    const target = sections.reduce((sum, s) => sum + ((s.knowledge_outcomes ?? []).includes(name) ? s.marks : 0), 0);
+    const actual = questions.reduce((sum, q) => sum + ((q.knowledge_outcomes ?? []).includes(name) ? q.marks : 0), 0);
+    return { name, target, actual };
+  }).filter((k) => k.target > 0 || k.actual > 0);
+
+  // ── Paper-wide LO list: union of every section's LOs + any LO seen on questions
+  const loSet = new Set<string>();
+  sections.forEach((s) => (s.learning_outcomes ?? []).forEach((lo) => loSet.add(lo)));
+  questions.forEach((q) => (q.learning_outcomes ?? []).forEach((lo) => loSet.add(lo)));
+
+  const paperLOs = Array.from(loSet).map((text) => {
+    const target = sections.reduce((sum, s) => sum + ((s.learning_outcomes ?? []).includes(text) ? 1 : 0), 0);
+    const actual = questions.reduce((sum, q) => sum + ((q.learning_outcomes ?? []).includes(text) ? 1 : 0), 0);
+    return { text, target, actual, covered: actual > 0 };
+  });
+
+  // ── Section marks
+  const sectionMarks = sections.map((s) => {
+    let actual = 0;
+    questions.forEach((q) => {
+      const sec = sectionByPos[q.position];
+      if (sec && sec.id === s.id) actual += q.marks;
+    });
+    return { letter: s.letter, target: s.marks, actual };
+  });
+
+  // ── Per-section breakdown
+  const bySection: Coverage["bySection"] = {};
+  for (const s of sections) {
+    const qs = questions.filter((q) => sectionByPos[q.position]?.id === s.id);
+    const aoCodes = new Set<string>([...(s.ao_codes ?? [])]);
+    qs.forEach((q) => (q.ao_codes ?? []).forEach((c) => aoCodes.add(c)));
+    const kos = new Set<string>([...(s.knowledge_outcomes ?? [])]);
+    qs.forEach((q) => (q.knowledge_outcomes ?? []).forEach((c) => kos.add(c)));
+    const los = new Set<string>([...(s.learning_outcomes ?? [])]);
+    qs.forEach((q) => (q.learning_outcomes ?? []).forEach((c) => los.add(c)));
+
+    bySection[s.id] = {
+      letter: s.letter,
+      name: s.name ?? "",
+      marks: {
+        target: s.marks,
+        actual: qs.reduce((sum, q) => sum + q.marks, 0),
+      },
+      aos: Array.from(aoCodes).sort().map((code) => ({
+        code,
+        title: aoDefs.find((d) => d.code === code)?.title ?? null,
+        actual: qs.reduce((sum, q) => sum + ((q.ao_codes ?? []).includes(code) ? q.marks : 0), 0),
+      })),
+      kos: Array.from(kos).map((name) => ({
+        name,
+        actual: qs.reduce((sum, q) => sum + ((q.knowledge_outcomes ?? []).includes(name) ? q.marks : 0), 0),
+      })),
+      los: Array.from(los).map((text) => ({
+        text,
+        actual: qs.reduce((sum, q) => sum + ((q.learning_outcomes ?? []).includes(text) ? 1 : 0), 0),
+        covered: qs.some((q) => (q.learning_outcomes ?? []).includes(text)),
+      })),
+    };
+  }
+
+  return {
+    paper: { aos: paperAOs, kos: paperKOs, los: paperLOs, sectionMarks },
+    bySection,
+  };
+}
+
+// ───────────────────────────── Coverage panel UI ─────────────────────────────
+
+function MeterRow({
+  label, sublabel, actual, target, showTarget = true,
+}: { label: string; sublabel?: string | null; actual: number; target: number; showTarget?: boolean }) {
+  const pct = target ? Math.min(100, (actual / target) * 100) : actual > 0 ? 100 : 0;
+  const ok = target > 0 && actual >= target;
+  const over = target > 0 && actual > target;
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-2 text-xs">
+        <span className="min-w-0 truncate">
+          <span className="font-medium text-foreground">{label}</span>
+          {sublabel && <span className="ml-1 text-muted-foreground">{sublabel}</span>}
+        </span>
+        <span className={ok ? "text-success" : over ? "text-warning" : "text-muted-foreground"}>
+          {actual}{showTarget ? ` / ${target || "—"}` : ""} {ok && !over && "✓"}
+        </span>
+      </div>
+      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+        <div
+          className={`h-full transition-all ${ok ? "bg-success" : "bg-primary"}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function scrollToSection(letter: string) {
+  const el = document.getElementById(`section-${letter}`);
+  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function CoveragePanel({
+  coverage, totalMarks, totalActual,
+}: { coverage: Coverage; totalMarks: number; totalActual: number }) {
+  const { paper, bySection } = coverage;
+  const uncoveredLOs = paper.los.filter((l) => !l.covered);
+
+  return (
+    <>
+      {/* Paper overview */}
+      <div className="rounded-xl border border-border bg-card p-5">
+        <h3 className="font-medium">Paper overview</h3>
+        <div className="mt-3 flex items-baseline gap-1">
+          <span className={`font-paper text-3xl font-semibold ${totalActual === totalMarks ? "text-success" : "text-foreground"}`}>{totalActual}</span>
+          <span className="text-sm text-muted-foreground">/ {totalMarks} marks</span>
+        </div>
+        {paper.sectionMarks.length > 0 && (
+          <div className="mt-3 space-y-1.5">
+            {paper.sectionMarks.map((s) => {
+              const ok = s.actual === s.target;
+              return (
+                <button
+                  key={s.letter}
+                  type="button"
+                  onClick={() => scrollToSection(s.letter)}
+                  className="flex w-full items-center justify-between rounded px-1 py-0.5 text-xs hover:bg-muted"
+                >
+                  <span className="text-muted-foreground">Section {s.letter}</span>
+                  <span className={ok ? "text-success" : "text-foreground"}>
+                    {s.actual} / {s.target} {ok && "✓"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* AO Coverage */}
+      <div className="rounded-xl border border-border bg-card p-5">
+        <h3 className="font-medium">AO Coverage</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Marks per Assessment Objective {paper.aos.some((a) => a.weighting != null) ? "(targets from syllabus weightings)" : ""}
+        </p>
+        <div className="mt-3 space-y-2.5">
+          {paper.aos.length === 0 && (
+            <p className="text-xs text-muted-foreground">No AOs tagged on this paper yet.</p>
+          )}
+          {paper.aos.map((a) => (
+            <MeterRow
+              key={a.code}
+              label={a.code}
+              sublabel={a.title ? `· ${a.title}${a.weighting != null ? ` (${a.weighting}%)` : ""}` : a.weighting != null ? `(${a.weighting}%)` : null}
+              actual={a.actual}
+              target={a.target}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* KO Coverage */}
+      <div className="rounded-xl border border-border bg-card p-5">
+        <h3 className="font-medium">KO Coverage</h3>
+        <p className="mt-1 text-xs text-muted-foreground">Marks per Knowledge Outcome</p>
+        <div className="mt-3 space-y-2.5">
+          {paper.kos.length === 0 && (
+            <p className="text-xs text-muted-foreground">No Knowledge Outcomes targeted.</p>
+          )}
+          {paper.kos.map((k) => (
+            <MeterRow key={k.name} label={k.name} actual={k.actual} target={k.target} />
+          ))}
+        </div>
+      </div>
+
+      {/* LO Coverage */}
+      <div className="rounded-xl border border-border bg-card p-5">
+        <h3 className="font-medium">LO Coverage</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {paper.los.length - uncoveredLOs.length} / {paper.los.length} learning outcomes covered
+        </p>
+        {paper.los.length === 0 && (
+          <p className="mt-3 text-xs text-muted-foreground">No Learning Outcomes targeted.</p>
+        )}
+        {uncoveredLOs.length > 0 && (
+          <Collapsible defaultOpen className="mt-3">
+            <CollapsibleTrigger className="flex w-full items-center gap-1 text-xs font-medium text-warning hover:underline">
+              <ChevronRight className="h-3.5 w-3.5 transition-transform data-[state=open]:rotate-90" />
+              {uncoveredLOs.length} uncovered
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-2 space-y-1">
+              {uncoveredLOs.map((lo) => (
+                <p key={lo.text} className="rounded bg-muted/50 px-2 py-1 text-[11px] leading-snug text-muted-foreground">
+                  · {lo.text}
+                </p>
+              ))}
+            </CollapsibleContent>
+          </Collapsible>
+        )}
+      </div>
+
+      {/* Per-section breakdown */}
+      {Object.keys(bySection).length > 0 && (
+        <div className="rounded-xl border border-border bg-card p-5">
+          <h3 className="font-medium">Per-section breakdown</h3>
+          <div className="mt-3 space-y-2">
+            {Object.values(bySection).map((s, idx) => (
+              <Collapsible key={s.letter} defaultOpen={idx === 0}>
+                <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2 text-left text-sm hover:bg-muted/50">
+                  <span className="flex items-center gap-2">
+                    <ChevronRight className="h-3.5 w-3.5 transition-transform group-data-[state=open]:rotate-90" />
+                    <span className="font-medium">Section {s.letter}{s.name ? ` — ${s.name}` : ""}</span>
+                  </span>
+                  <span className={`text-xs ${s.marks.actual === s.marks.target ? "text-success" : "text-muted-foreground"}`}>
+                    {s.marks.actual} / {s.marks.target}
+                  </span>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-2 space-y-3 px-3 pb-2">
+                  {s.aos.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">AOs</p>
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        {s.aos.map((a) => (
+                          <Badge key={a.code} variant="outline" className="text-[10px]">
+                            {a.code} · {a.actual}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {s.kos.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">KOs</p>
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        {s.kos.map((k) => (
+                          <Badge key={k.name} variant="outline" className="text-[10px]">
+                            {k.name} · {k.actual}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {s.los.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        LOs · {s.los.filter((l) => l.covered).length} / {s.los.length} covered
+                      </p>
+                      <ul className="mt-1 space-y-0.5">
+                        {s.los.map((lo) => (
+                          <li key={lo.text} className={`text-[11px] leading-snug ${lo.covered ? "text-foreground" : "text-warning"}`}>
+                            {lo.covered ? "✓" : "○"} {lo.text}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => scrollToSection(s.letter)}
+                    className="text-[11px] text-primary hover:underline"
+                  >
+                    Jump to section →
+                  </button>
+                </CollapsibleContent>
+              </Collapsible>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
