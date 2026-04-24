@@ -956,6 +956,21 @@ Deno.serve(async (req) => {
           q.stem ?? "",
         );
 
+        // Resolve per-question objective tags. Honour what the model emitted;
+        // otherwise fall back to the section overrides, then the topic defaults.
+        const fallbackAOs = (section.ao_codes && section.ao_codes.length > 0)
+          ? section.ao_codes
+          : (t?.ao_codes ?? []);
+        const fallbackKOs = (section.knowledge_outcomes && section.knowledge_outcomes.length > 0)
+          ? section.knowledge_outcomes
+          : (t?.outcome_categories ?? []);
+        const fallbackLOs = (section.learning_outcomes && section.learning_outcomes.length > 0)
+          ? section.learning_outcomes
+          : (t?.learning_outcomes ?? []);
+        const qAOs: string[] = Array.isArray(q.ao_codes) && q.ao_codes.length > 0 ? q.ao_codes : fallbackAOs;
+        const qKOs: string[] = Array.isArray(q.knowledge_outcomes) && q.knowledge_outcomes.length > 0 ? q.knowledge_outcomes : fallbackKOs;
+        const qLOs: string[] = Array.isArray(q.learning_outcomes) && q.learning_outcomes.length > 0 ? q.learning_outcomes : fallbackLOs;
+
         allRows.push({
           assessment_id: assessmentId,
           user_id: userId,
@@ -976,6 +991,9 @@ Deno.serve(async (req) => {
           diagram_source: null,
           diagram_citation: null,
           diagram_caption: null,
+          ao_codes: qAOs,
+          knowledge_outcomes: qKOs,
+          learning_outcomes: qLOs,
           // transient — used by the post-insert diagram pass, stripped before insert
           _wantDiagram: wantDiagram,
           _diagramTopic: q.topic ?? t?.topic ?? "",
