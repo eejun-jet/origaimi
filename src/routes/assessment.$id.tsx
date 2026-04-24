@@ -702,6 +702,11 @@ function EditorPage() {
                       onDiagramAction={(mode, ins) => runDiagramAction(q.id, mode, ins)}
                       onDiagramRemove={() => removeDiagram(q.id)}
                       hideSourceBlock={isSbqSection}
+                      comments={comments.filter((c) => c.question_id === q.id || (c.parent_id && comments.find((x) => x.id === c.parent_id)?.question_id === q.id))}
+                      identity={identity}
+                      onAddComment={(input) => addComment({ ...input, scope: "question", sectionLetter: sec?.letter ?? null, questionId: q.id })}
+                      onSetCommentStatus={setCommentStatus}
+                      onDeleteComment={deleteComment}
                     />
                   </div>
                 );
