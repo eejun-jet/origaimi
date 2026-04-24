@@ -1,75 +1,104 @@
 ## Goal
-Today Step 3 picks **global** AOs / KOs / LOs and each section card only shows them as **read-only chips with an × to drop**. There's no way to *add* an objective back to a single section, or to give different sections different objective coverage. Make every section's AO / KO / LO list **fully editable and independent**, so e.g. Section A covers AO1+AO2 (Knowledge / Understanding), Section B covers AO2+AO3 (Application / Skills), and each can target a different subset of LOs.
+Replace the Bloom-only **TOS Alignment Meter** in the assessment editor with a richer AO / KO / LO coverage panel that:
+- shows actual vs. target marks per **AO**, **KO**, and per **LO**,
+- gives a **per-section breakdown** (marks per section, KO/LO marks within each section),
+- gives a **whole-paper overview** at the top of the sidebar.
+
+## What's there today (in `src/routes/assessment.$id.tsx`)
+- Sidebar block "TOS Alignment Meter" only computes `targetByBloom` / `actualByBloom` from `section.bloom` and `q.bloom_level`.
+- Each `Question` row already has `ao_codes`, `learning_outcomes`, `knowledge_outcomes` (added in the recent migration).
+- Each `Section` (in `src/lib/sections.ts`) already carries `ao_codes`, `knowledge_outcomes`, `learning_outcomes`, plus `marks` and `num_questions`.
+- AO weightings per syllabus doc live in `syllabus_assessment_objectives` (`code`, `title`, `weighting_percent`) and the assessment row already stores `syllabus_doc_id`.
 
 ## Plan
 
-### 1. SectionCard becomes the source of truth for per-section objectives
-In `src/routes/new.tsx`, replace the existing read-only "Inherited from Step 3 — × to drop" panel inside `SectionCard` (lines ~1609–1655) with a proper **"Objectives for this section"** sub-panel that mirrors the Step 3 UI but scoped to the section.
+### 1. Load AO definitions for the editor
+On `loadAll()` in `assessment.$id.tsx`, after fetching the assessment row, if `assessment.syllabus_doc_id` is present, also fetch:
+```ts
+supabase.from("syllabus_assessment_objectives")
+  .select("code,title,weighting_percent")
+  .eq("source_doc_id", assessment.syllabus_doc_id)
+  .order("position");
+```
+Store as `aoDefs: { code, title, weighting_percent }[]`. Used to label AO rows and compute target marks (`weighting_percent / 100 * total_marks`).
 
-Three collapsible blocks:
+### 2. Compute coverage from questions + sections
+Add a single `computeCoverage(questions, sections, aoDefs, totalMarks)` helper that returns:
+```ts
+{
+  paper: {
+    aos:   { code, title, target, actual }[],     // target = aoDef.weighting % of total_marks; actual = sum of marks of questions tagged with that AO
+    kos:   { name, target, actual }[],            // target = sum of section.marks where section.knowledge_outcomes includes name; actual = sum of marks of questions tagged with KO
+    los:   { text, target, actual, covered }[],   // target = number of section-targeted occurrences (binary 1 per section that lists the LO); actual = number of questions covering it; covered = actual > 0
+    sectionMarks: { letter, target, actual }[],   // target = section.marks; actual = sum of question marks in that section
+  },
+  bySection: Record<sectionId, {
+    marks: { target, actual },
+    aos:   { code, title, actual }[],            // marks per AO inside this section
+    kos:   { name, actual }[],
+    los:   { text, actual, covered }[],
+  }>,
+}
+```
+Tagging multi-AO/multi-KO questions: count the question's full marks once per tag (so a 4-mark question tagged AO1+AO2 contributes 4 to AO1 and 4 to AO2). Show this convention in a small tooltip ("Marks count once per tagged objective").
+
+### 3. Replace the TOS Alignment Meter
+Rewrite the sidebar `<aside>` block. New structure:
 
 ```text
-┌── Objectives for this section ─────────────────────────┐
-│ ▾ AOs (2 / 3)                                          │
-│   ☑ AO1  Knowledge with understanding                  │
-│   ☑ AO2  Handling information                          │
-│   ☐ AO3  Experimental skills                           │
-│   [+ Add custom AO]                                    │
-│                                                        │
-│ ▾ KOs (3 / 4)                                          │
-│   ☑ Knowledge  ☑ Understanding  ☑ Application  ☐ Skills│
-│                                                        │
-│ ▾ LOs (4 selected)                                     │
-│   ☑ State that …                                       │
-│   ☐ Explain how …                                      │
-│   ☑ Calculate the resultant force …                    │
-│   [+ Add custom LO]                                    │
-└────────────────────────────────────────────────────────┘
+┌── Paper overview ───────────────────────────────┐
+│ Total marks   42 / 50                           │
+│ Sections      A 18/20 · B 14/15 · C 10/15       │
+└─────────────────────────────────────────────────┘
+
+┌── AO Coverage (paper) ──────────────────────────┐
+│ AO1  ███████░  18 / 20   (40 %)                 │
+│ AO2  ████░░░░  12 / 25   (50 %)                 │
+│ AO3  ░░░░░░░░   0 / 5    (10 %)                 │
+└─────────────────────────────────────────────────┘
+
+┌── KO Coverage (paper) ──────────────────────────┐
+│ Knowledge      ████  8 / 10                     │
+│ Understanding  ██    6 / 12                     │
+│ Application    ███   12 / 18                    │
+│ Skills         █     2 / 10                     │
+└─────────────────────────────────────────────────┘
+
+┌── LO Coverage (paper) ──────────────────────────┐
+│ 12 / 14 LOs covered                             │
+│ ▾ 2 uncovered                                   │
+│   · Define momentum                             │
+│   · Calculate the resultant force…              │
+└─────────────────────────────────────────────────┘
+
+┌── Per-section breakdown ────────────────────────┐
+│ [ Section A ▾ ]                                 │
+│   Marks   18 / 20                               │
+│   AOs     AO1 · 12   AO2 · 6                    │
+│   KOs     Knowledge 8  Understanding 4 …        │
+│   LOs     5 / 6 covered  ▸ show uncovered       │
+│ [ Section B ▾ ] …                               │
+└─────────────────────────────────────────────────┘
 ```
 
-Behaviour:
-- Each checkbox toggles the value on `section.ao_codes` / `section.knowledge_outcomes` / `section.learning_outcomes` via the existing `onUpdate({...})` callback — no new state needed.
-- The **candidate pool** shown in each block is the union of: (a) the global Step 3 picks, plus (b) anything already on this section, plus (c) the underlying full universe (all `docAOs`, all 4 KOs, all `derivedLos` from this section's topic_pool). That way teachers can both *narrow* and *broaden* per section.
-- Section LO pool is recomputed from `section.topic_pool` (so a section limited to 2 topics only offers those topics' LOs), unioned with global `selectedLos` and any custom LOs already on the section.
-- "+ Add custom AO / LO" inputs let teachers append bespoke strings just for this section.
+- Bars use the same primary/success colour scheme already in the file (`bg-primary` filling, `bg-success` when actual ≥ target).
+- Each per-section block is a `<Collapsible>` (already imported pattern in the project) — Section A open by default.
+- Clicking an uncovered LO scrolls/highlights its section card so the teacher can fix it (use existing `id={`q-${q.id}`}` pattern; for sections we'll add `id={`section-${letter}`}` anchors above the first question of each section).
+- If `aoDefs` is empty (no syllabus doc) we still render AO rows from the union of AO codes seen in questions/sections, with `target = "—"`.
 
-### 2. New props on SectionCard
-Pass the candidate universes down so the card can render full lists, not just inherited:
+### 4. Section anchors
+In the questions list render, wrap each section's first question with `<div id={`section-${letter}`}>` so the LO/section drill-down can scroll to it.
 
-```ts
-type SectionCardProps = {
-  // ...existing
-  allAOs: AssessmentObjective[];        // = docAOs
-  allKOs: readonly string[];            // = KNOWLEDGE_OUTCOMES (filtered by availableKos)
-  globalAoCodes: string[];              // = selectedAoCodes (for "inherited" hint dot)
-  globalKos: string[];
-  globalLos: string[];
-};
-```
-
-The existing call site at line 957-969 passes the new four/five props. Inside the card, an inherited item gets a small "(global)" muted label so teachers can tell which picks came from Step 3 vs. were added section-only.
-
-### 3. Seeding stays the same, but is now just a default
-`addSection` and the auto-seed effect (lines ~321-373) keep pre-filling new sections with the global picks — that becomes the *initial* state, which the teacher can then freely edit per section.
-
-### 4. Generator already supports it
-`supabase/functions/generate-assessment/index.ts` already reads `section.ao_codes`, `section.knowledge_outcomes`, `section.learning_outcomes` per section in its OBJECTIVES TO COVER block. No change required — once the UI writes section-specific arrays, the generator will already prompt the model to cover *that section's* objectives only.
-
-### 5. Step 3 copy tweak
-Update Step 3's intro line to read: *"Pick the AOs, KOs and LOs the **whole paper** must hit. You can refine each section's coverage in Step 4."* so teachers know section-level overrides are coming.
+### 5. Remove Bloom dependency
+Delete the `targetByBloom` / `actualByBloom` blocks in `EditorPage` and the `BLOOMS` import (kept elsewhere if still used — verify and only remove the import if unused). Bloom badges on individual `QuestionCard` stay (they're a separate concern).
 
 ## Files touched
-
 ```
-src/routes/new.tsx    SectionCard: replace read-only chip panel with full
-                      per-section AO/KO/LO checklists + custom inputs;
-                      pass docAOs / availableKos / global picks as new props;
-                      tweak Step 3 helper copy
+src/routes/assessment.$id.tsx    new coverage helper, fetch aoDefs, replace TOS sidebar, add section anchors
 ```
-
-No DB migration, no edge function changes, no schema changes — `Section` already carries the three arrays.
+No DB changes, no new dependencies — all required fields (`ao_codes`, `knowledge_outcomes`, `learning_outcomes`, `syllabus_doc_id`, AO weightings) already exist.
 
 ## Result
-- Each section card has its own AO / KO / LO picker, pre-seeded from the global picks but fully editable.
-- Sections can intentionally diverge: Section A on AO1, Section B on AO2+AO3, Section C with a different LO subset, etc.
-- Generator and (future) coverage meters automatically reflect the per-section choices because they already read off `section.ao_codes` / `knowledge_outcomes` / `learning_outcomes`.
+- The sidebar shows a paper-wide overview (total marks, marks per section), then AO / KO / LO coverage for the whole paper, then a collapsible per-section breakdown with marks and KO/LO tallies.
+- Bloom's taxonomy is no longer the alignment yardstick; AOs / KOs / LOs are.
+- Teachers can spot at a glance which section is under-marked, which AO is under-weighted, and which LOs are still uncovered — and jump straight to the relevant section.
