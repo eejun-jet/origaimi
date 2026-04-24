@@ -33,6 +33,7 @@ import {
   type AssessmentComment,
   type CommentScope,
   type CommentStatus,
+  type ReviewerIdentity,
   useReviewerIdentity,
 } from "@/lib/comments";
 import { toast } from "sonner";
