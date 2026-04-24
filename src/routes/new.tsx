@@ -20,7 +20,7 @@ import {
 import {
   type Section, type SectionTopic, type SectionedBlueprint, type DifficultyMix,
   defaultSection, nextSectionLetter, blueprintTotalMarks, isScienceSubject,
-  difficultyMixTotal, DEFAULT_DIFFICULTY_MIX,
+  difficultyMixTotal, DEFAULT_DIFFICULTY_MIX, KNOWLEDGE_OUTCOMES,
   SBQ_SKILLS, MAX_SBQ_SKILLS, getSectionSkills, isHumanitiesSubject, type SbqSkill,
 } from "@/lib/sections";
 import { ChevronLeft, ChevronRight, Sparkles, Loader2, BookOpen, Upload, Plus, Trash2, ChevronUp, ChevronDown } from "lucide-react";
