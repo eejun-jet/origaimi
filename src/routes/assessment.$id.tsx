@@ -632,9 +632,9 @@ function EditorPage() {
                   ? parseSharedSourcePool(q.source_excerpt)
                   : null;
                 return (
-                  <div key={q.id} className="space-y-3">
+                  <div key={q.id} id={`q-${q.id}`} className="space-y-3 scroll-mt-24">
                     {showHeader && sec && (
-                      <div className="space-y-3" id={`section-${sec.letter}`}>
+                      <div className="space-y-3 scroll-mt-24" id={`section-${sec.letter}`}>
                         <div className="rounded-lg border border-primary/30 bg-primary-soft/20 px-4 py-2">
                           <p className="text-sm font-semibold">
                             Section {sec.letter}
