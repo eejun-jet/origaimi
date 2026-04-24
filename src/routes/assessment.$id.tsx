@@ -571,7 +571,7 @@ function EditorPage() {
           </div>
         </div>
 
-        <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px]">
+        <div className="mt-6 grid gap-6 md:grid-cols-[1fr_300px] xl:grid-cols-[1fr_340px]">
           <div className="space-y-4">
             {selectedIds.size > 0 && (
               <div className="sticky top-16 z-20 flex flex-wrap items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 p-3 shadow-sm backdrop-blur">
@@ -785,7 +785,7 @@ function EditorPage() {
             )}
           </div>
 
-          <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
+          <aside className="space-y-4 md:sticky md:top-20 md:self-start md:max-h-[calc(100vh-6rem)] md:overflow-y-auto">
             <Tabs value={sidebarTab} onValueChange={(v) => setSidebarTab(v as "coverage" | "comments")}>
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="coverage">Coverage</TabsTrigger>
@@ -1223,7 +1223,12 @@ function QuestionCard({
           <Button size="sm" variant="ghost" onClick={onBank} className="gap-1">
             <BookmarkPlus className="h-3.5 w-3.5" /> Save to bank
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => setShowComments((v) => !v)} className="gap-1">
+          <Button
+            size="sm"
+            variant={showComments ? "secondary" : "outline"}
+            onClick={() => setShowComments((v) => !v)}
+            className="gap-1 border-primary/40 text-primary hover:text-primary"
+          >
             <MessageCircle className="h-3.5 w-3.5" />
             {commentRootCount > 0 ? `${commentRootCount} comment${commentRootCount === 1 ? "" : "s"}` : "Comment"}
             {openCommentCount > 0 && (
