@@ -356,19 +356,9 @@ function EditorPage() {
 
   const sectionedBlueprint = toSectioned(assessment.blueprint);
 
-  // Blueprint compliance: marks per Bloom level
-  const targetByBloom: Record<string, number> = {};
-  sectionedBlueprint.sections.forEach((section) => {
-    const bloom = section.bloom?.trim();
-    if (!bloom) return;
-    targetByBloom[bloom] = (targetByBloom[bloom] ?? 0) + section.marks;
-  });
-  const actualByBloom: Record<string, number> = {};
-  questions.forEach((q) => {
-    if (q.bloom_level) actualByBloom[q.bloom_level] = (actualByBloom[q.bloom_level] ?? 0) + q.marks;
-  });
   const totalActual = questions.reduce((s, q) => s + q.marks, 0);
   const allSelected = questions.length > 0 && selectedIds.size === questions.length;
+  const coverage = computeCoverage(questions, sectionedBlueprint.sections, aoDefs, assessment.total_marks);
 
   return (
     <div className="min-h-screen bg-background">
