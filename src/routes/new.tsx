@@ -173,7 +173,10 @@ function NewAssessment() {
     setTopicsLoading(true);
     Promise.all([
       loadPaperTopics(paper.id).then(async (t) => {
-        if (t.length === 0 && (paper.trackTags?.length ?? 0) > 1) {
+        // Fallback to doc-level topics when the paper has none of its own.
+        // This covers multi-track papers (e.g. Combined Sci) AND syllabi
+        // where topics are shared across all papers (e.g. History 2261/2126).
+        if (t.length === 0) {
           return loadDocTopics(doc.id);
         }
         return t;
