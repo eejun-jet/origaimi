@@ -259,6 +259,56 @@ function EditorPage() {
     }
   };
 
+  // ─── Comments handlers ───────────────────────────────────────────────
+  const addComment = async (input: {
+    body: string;
+    scope: CommentScope;
+    parentId: string | null;
+    sectionLetter: string | null;
+    questionId: string | null;
+  }) => {
+    const { error } = await supabase.from("assessment_comments").insert({
+      assessment_id: id,
+      scope: input.scope,
+      section_letter: input.sectionLetter,
+      question_id: input.questionId,
+      parent_id: input.parentId,
+      author_name: identity.name,
+      author_email: identity.email,
+      author_role: identity.role,
+      body: input.body,
+      status: "open",
+    });
+    if (error) toast.error("Could not post comment");
+  };
+
+  const setCommentStatus = async (commentId: string, status: CommentStatus) => {
+    const patch: Record<string, unknown> = { status };
+    if (status === "resolved") {
+      patch.resolved_by = identity.name;
+      patch.resolved_at = new Date().toISOString();
+    } else {
+      patch.resolved_by = null;
+      patch.resolved_at = null;
+    }
+    const { error } = await supabase.from("assessment_comments").update(patch).eq("id", commentId);
+    if (error) toast.error("Could not update comment");
+  };
+
+  const deleteComment = async (commentId: string) => {
+    const { error } = await supabase.from("assessment_comments").delete().eq("id", commentId);
+    if (error) toast.error("Could not delete comment");
+  };
+
+  const scrollToQuestion = (questionId: string) => {
+    const el = document.getElementById(`q-${questionId}`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+  const scrollToSection = (letter: string) => {
+    const el = document.getElementById(`section-${letter}`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   const runDiagramAction = async (qId: string, mode: "generate" | "edit" | "regenerate", instruction?: string) => {
     if (!assessment) return false;
     const q = questions.find((x) => x.id === qId);
@@ -469,6 +519,9 @@ function EditorPage() {
               }}
             >
               <Download className="h-4 w-4" /> Download .docx
+            </Button>
+            <Button variant="outline" size="sm" className="gap-1" onClick={() => setInviteOpen(true)}>
+              <UserPlus className="h-4 w-4" /> Invite reviewer
             </Button>
             <Select value={assessment.status} onValueChange={setStatus}>
               <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
