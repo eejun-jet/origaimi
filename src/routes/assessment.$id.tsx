@@ -94,6 +94,10 @@ function EditorPage() {
   const [bulkRegenDifficulty, setBulkRegenDifficulty] = useState<"keep" | "easy" | "medium" | "hard">("keep");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [aoDefs, setAoDefs] = useState<AODef[]>([]);
+  const [comments, setComments] = useState<AssessmentComment[]>([]);
+  const [identity, setIdentity] = useReviewerIdentity();
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [sidebarTab, setSidebarTab] = useState<"coverage" | "comments">("coverage");
 
   const loadAll = async () => {
     const { data: a } = await supabase.from("assessments").select("*").eq("id", id).single();
@@ -111,12 +115,50 @@ function EditorPage() {
     } else {
       setAoDefs([]);
     }
+    const { data: cs } = await supabase
+      .from("assessment_comments")
+      .select("*")
+      .eq("assessment_id", id)
+      .order("created_at", { ascending: true });
+    setComments((cs as AssessmentComment[]) ?? []);
     setFetching(false);
   };
 
   useEffect(() => {
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  // Realtime: keep comments in sync across collaborators
+  useEffect(() => {
+    const channel = supabase
+      .channel(`comments:${id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "assessment_comments", filter: `assessment_id=eq.${id}` },
+        (payload) => {
+          setComments((prev) => {
+            if (payload.eventType === "INSERT") {
+              const next = payload.new as AssessmentComment;
+              if (prev.some((c) => c.id === next.id)) return prev;
+              return [...prev, next].sort((a, b) => a.created_at.localeCompare(b.created_at));
+            }
+            if (payload.eventType === "UPDATE") {
+              const next = payload.new as AssessmentComment;
+              return prev.map((c) => (c.id === next.id ? next : c));
+            }
+            if (payload.eventType === "DELETE") {
+              const oldRow = payload.old as { id: string };
+              return prev.filter((c) => c.id !== oldRow.id);
+            }
+            return prev;
+          });
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [id]);
 
   const toggleSelect = (qId: string) => {
