@@ -716,35 +716,77 @@ function EditorPage() {
           </div>
 
           <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
-            <CoveragePanel
-              coverage={coverage}
-              totalMarks={assessment.total_marks}
-              totalActual={totalActual}
-            />
+            <Tabs value={sidebarTab} onValueChange={(v) => setSidebarTab(v as "coverage" | "comments")}>
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="coverage">Coverage</TabsTrigger>
+                <TabsTrigger value="comments" className="gap-1.5">
+                  <MessageCircle className="h-3.5 w-3.5" />
+                  Comments
+                  {(() => {
+                    const open = comments.filter((c) => !c.parent_id && c.status === "open").length;
+                    return open > 0 ? (
+                      <Badge variant="outline" className="h-4 border-destructive/30 px-1 text-[9px] text-destructive">
+                        {open}
+                      </Badge>
+                    ) : null;
+                  })()}
+                </TabsTrigger>
+              </TabsList>
 
-            <div className="rounded-xl border border-border bg-card p-5">
-              <div className="flex items-center justify-between">
-                <h3 className="font-medium">Assessment Coach</h3>
-                <span className="rounded-full bg-warm px-2 py-0.5 text-[10px] uppercase tracking-wide text-warm-foreground">
-                  Coming soon
-                </span>
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Your embedded Assessment Literacy Coach will evaluate this paper against
-                AO frameworks and surface actionable insights.
-              </p>
-            </div>
+              <TabsContent value="coverage" className="mt-4 space-y-4">
+                <CoveragePanel
+                  coverage={coverage}
+                  totalMarks={assessment.total_marks}
+                  totalActual={totalActual}
+                />
 
-            <div className="rounded-xl border border-border bg-card p-5">
-              <h3 className="font-medium">Total marks</h3>
-              <div className="mt-2 flex items-baseline gap-1">
-                <span className={`font-paper text-3xl font-semibold ${totalActual === assessment.total_marks ? "text-success" : "text-foreground"}`}>{totalActual}</span>
-                <span className="text-sm text-muted-foreground">/ {assessment.total_marks}</span>
-              </div>
-            </div>
+                <div className="rounded-xl border border-border bg-card p-5">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-medium">Assessment Coach</h3>
+                    <span className="rounded-full bg-warm px-2 py-0.5 text-[10px] uppercase tracking-wide text-warm-foreground">
+                      Coming soon
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Your embedded Assessment Literacy Coach will evaluate this paper against
+                    AO frameworks and surface actionable insights.
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-border bg-card p-5">
+                  <h3 className="font-medium">Total marks</h3>
+                  <div className="mt-2 flex items-baseline gap-1">
+                    <span className={`font-paper text-3xl font-semibold ${totalActual === assessment.total_marks ? "text-success" : "text-foreground"}`}>{totalActual}</span>
+                    <span className="text-sm text-muted-foreground">/ {assessment.total_marks}</span>
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="comments" className="mt-4">
+                <CommentDock
+                  comments={comments}
+                  identity={identity}
+                  onIdentityChange={setIdentity}
+                  sectionLetters={sectionedBlueprint.sections.map((s) => s.letter)}
+                  questionLabels={questionLabels}
+                  onAdd={addComment}
+                  onSetStatus={setCommentStatus}
+                  onDelete={deleteComment}
+                  onScrollToQuestion={scrollToQuestion}
+                  onScrollToSection={scrollToSection}
+                  onOpenInvite={() => setInviteOpen(true)}
+                />
+              </TabsContent>
+            </Tabs>
           </aside>
         </div>
       </main>
+
+      <InviteReviewerDialog
+        assessmentId={id}
+        open={inviteOpen}
+        onOpenChange={setInviteOpen}
+      />
 
       <AlertDialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
         <AlertDialogContent>
