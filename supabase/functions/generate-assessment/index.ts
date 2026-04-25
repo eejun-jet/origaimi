@@ -275,48 +275,196 @@ const SBQ_STEM_TEMPLATES: Record<string, string[]> = {
   ],
 };
 
+/** Themed primary-source bundles for MOE Sec History inquiry topics.
+ *  Each bundle has a topic-keyword regex; a topic matches if EITHER the topic
+ *  string OR any LO contains a keyword from its trigger set. Bundles can match
+ *  multiply (e.g. "Cold War" + "decolonisation") and are merged. */
+type CuratedBundle = {
+  trigger: RegExp;
+  sources: GroundedSource[];
+};
+
+const CURATED_HUMANITIES_BUNDLES: CuratedBundle[] = [
+  // --- WWII outbreak / appeasement ---
+  {
+    trigger: /(world war ii|wwii|second world war|outbreak of war|appeasement|munich|league of nations|abyssinia|rhineland|anschluss|non-aggression pact|invasion of poland)/i,
+    sources: [
+      { excerpt: `In September 1938, the British Prime Minister Neville Chamberlain returned from Munich and told the public that the agreement over Czechoslovakia had brought "peace for our time". He argued that Britain had avoided a war for which many ordinary people were not ready, and that disputes between nations should be settled by negotiation rather than force. To supporters, the agreement showed that statesmen could prevent another catastrophe like the First World War. To critics, it showed that Britain and France had accepted Hitler's demands and encouraged further aggression by sacrificing Czechoslovakia without its full consent.`, source_url: "https://avalon.law.yale.edu/imt/munich1.asp", source_title: "Munich Agreement, 1938", publisher: "Avalon Project" },
+      { excerpt: `In March 1936, German troops entered the Rhineland, an area that Germany had agreed to keep demilitarised under the Treaty of Versailles and the Locarno Treaties. Hitler presented the move as Germany merely entering its own territory and claimed that Germany wanted peace with its neighbours. The remilitarisation was popular in Germany because it appeared to restore national pride after Versailles. Britain and France protested but did not use force. The lack of military response made Germany's position stronger and suggested that treaty restrictions could be challenged without immediate consequences.`, source_url: "https://www.nationalarchives.gov.uk/education/resources/interwar/", source_title: "German remilitarisation of the Rhineland", publisher: "UK National Archives" },
+      { excerpt: `The League of Nations' response to Italy's invasion of Abyssinia in 1935 exposed serious weaknesses in collective security. The League condemned the invasion and imposed sanctions, but these did not include oil and did not stop Italy's campaign. Britain and France were reluctant to act too strongly because they hoped to keep Mussolini as a possible ally against Hitler. The crisis damaged the League's credibility: a major power had used force against a weaker state, and the international organisation set up to prevent aggression had failed to protect it effectively.`, source_url: "https://www.nationalarchives.gov.uk/education/resources/league-of-nations/", source_title: "League of Nations and the Abyssinian Crisis", publisher: "UK National Archives" },
+      { excerpt: `In the German-Soviet Non-Aggression Pact of August 1939, Germany and the Soviet Union promised not to attack one another. A secret protocol divided parts of Eastern Europe into German and Soviet spheres of influence, including arrangements over Poland. The pact shocked many observers because Nazi Germany and the communist Soviet Union were ideological enemies. For Hitler, it reduced the danger of fighting a war on two fronts if Germany attacked Poland. For Stalin, it bought time and offered territorial gains. The agreement removed a major obstacle to German action in Eastern Europe.`, source_url: "https://avalon.law.yale.edu/20th_century/nonagres.asp", source_title: "German-Soviet Non-Aggression Pact, 1939", publisher: "Avalon Project" },
+      { excerpt: `After Germany invaded Poland on 1 September 1939, Britain issued an ultimatum demanding German withdrawal. When no satisfactory reply was received, Britain declared war on Germany on 3 September. In his broadcast, Chamberlain said that Hitler had rejected all efforts for a peaceful settlement and had attacked an independent country that Britain had promised to support. The declaration suggested that appeasement had reached its limit: Britain could no longer accept further German expansion without destroying its own credibility and the European balance of power.`, source_url: "https://www.nationalarchives.gov.uk/education/resources/chamberlain-and-hitler/", source_title: "Britain declares war on Germany, 1939", publisher: "UK National Archives" },
+    ],
+  },
+
+  // --- Rise of Nazism / Weimar Germany / authoritarian rule in Germany ---
+  {
+    trigger: /(nazi|nazism|hitler|weimar|reichstag|enabling act|third reich|nuremberg laws|authoritarian.*germany|rise of authoritarian|fascis)/i,
+    sources: [
+      { excerpt: `On 30 January 1933, President Paul von Hindenburg appointed Adolf Hitler as Chancellor of Germany. Hitler led the largest party in the Reichstag but did not have a majority. Conservative politicians around Hindenburg believed they could control Hitler by surrounding him with non-Nazi ministers. The appointment came after months of political deadlock and a series of short-lived governments. Many Germans hoped a Hitler-led coalition would restore stability after years of economic depression and political violence; others warned that handing the chancellorship to the Nazi leader was a dangerous gamble.`, source_url: "https://encyclopedia.ushmm.org/content/en/article/the-nazi-rise-to-power", source_title: "Hindenburg appoints Hitler Chancellor, January 1933", publisher: "United States Holocaust Memorial Museum" },
+      { excerpt: `On the night of 27 February 1933, the German Reichstag building was destroyed by fire. The Nazi government blamed a communist conspiracy. The next day, President Hindenburg signed the Decree of the Reich President for the Protection of People and State, suspending most civil liberties guaranteed by the Weimar Constitution, including freedom of the press, freedom of assembly, and protection from arbitrary arrest. The decree allowed the Nazi regime to arrest political opponents, especially communists, and to silence opposition newspapers in the weeks before the March 1933 election.`, source_url: "https://encyclopedia.ushmm.org/content/en/article/the-reichstag-fire", source_title: "Reichstag Fire Decree, 28 February 1933", publisher: "United States Holocaust Memorial Museum" },
+      { excerpt: `The Law to Remedy the Distress of People and Reich, known as the Enabling Act, was passed by the Reichstag on 23 March 1933. It allowed Hitler's cabinet to issue laws without the approval of the Reichstag or the President for four years, including laws that conflicted with the constitution. The vote took place in an atmosphere of intimidation: communist deputies had already been arrested, SA stormtroopers surrounded the building, and only the Social Democrats voted against. The act effectively ended parliamentary democracy in Germany and gave Hitler a legal basis for dictatorship.`, source_url: "https://encyclopedia.ushmm.org/content/en/article/enabling-act", source_title: "The Enabling Act, March 1933", publisher: "United States Holocaust Memorial Museum" },
+      { excerpt: `Following the death of President Hindenburg on 2 August 1934, Hitler combined the offices of Chancellor and President and took the title Führer. Members of the German armed forces were required to swear a personal oath of loyalty not to the constitution but to "Adolf Hitler, the Führer of the German Reich and people". This new oath bound the army directly to Hitler as an individual rather than to the state, removing one of the last institutional checks on his power.`, source_url: "https://encyclopedia.ushmm.org/content/en/article/the-fuehrer-oath", source_title: "Oath of Loyalty to Hitler, August 1934", publisher: "United States Holocaust Memorial Museum" },
+      { excerpt: `The Weimar Republic faced repeated crises from its founding in 1919: the loss of the First World War, the punitive terms of the Treaty of Versailles, hyperinflation in 1923, and mass unemployment after the 1929 Wall Street Crash. By 1932, more than six million Germans were unemployed, and street battles between Nazi and Communist paramilitaries were a regular occurrence. Many voters lost faith in democratic parties and turned to extremist movements that promised order, work and national renewal. The Nazi Party's vote share rose from 2.6% in 1928 to 37.4% in July 1932.`, source_url: "https://www.nationalarchives.gov.uk/education/resources/weimar-republic/", source_title: "The fall of the Weimar Republic", publisher: "UK National Archives" },
+      { excerpt: `Joseph Goebbels, appointed Reich Minister of Public Enlightenment and Propaganda in March 1933, used radio, film, posters and mass rallies to project a single image of Hitler as the saviour of Germany. The regime distributed cheap "People's Receivers" so that Hitler's speeches could reach as many homes as possible, while opposition newspapers were shut down or absorbed. Propaganda presented economic recovery, public works such as the Autobahn, and rearmament as evidence that authoritarian rule was succeeding where the Weimar parties had failed.`, source_url: "https://www.bbc.co.uk/bitesize/guides/zqksgdm/revision/1", source_title: "Nazi propaganda and the consolidation of power", publisher: "BBC Bitesize" },
+    ],
+  },
+
+  // --- Stalinist USSR / authoritarian rule in the Soviet Union ---
+  {
+    trigger: /(stalin|soviet union|ussr|five-year plan|collectivisation|collectivization|gulag|great purge|show trial|authoritarian.*soviet|authoritarian.*russia|bolshevik)/i,
+    sources: [
+      { excerpt: `In January 1933, Stalin told the Central Committee of the Communist Party that the First Five-Year Plan had been completed in four years and three months. He claimed that the Soviet Union had been transformed from an agrarian into an industrial country. Steel, coal and electricity output had risen sharply, and entire new industrial cities such as Magnitogorsk had been built from nothing. Stalin presented these results as proof that planned socialist industry could outperform capitalism, especially during the Great Depression. He did not mention the famine then unfolding in Ukraine and other grain-producing regions.`, source_url: "https://www.marxists.org/reference/archive/stalin/works/1933/01/07.htm", source_title: "Stalin: Results of the First Five-Year Plan, 1933", publisher: "Marxists Internet Archive" },
+      { excerpt: `Collectivisation, launched in 1929, forced Soviet peasants to give up their land, animals and tools and join state-controlled collective farms (kolkhozy). Peasants who resisted, especially better-off farmers labelled "kulaks", were arrested, deported to Siberia or shot. Grain was requisitioned to feed cities and to export for industrial machinery. In 1932–33, requisitioning combined with poor harvests produced a famine in which several million people died, particularly in Ukraine, the North Caucasus and Kazakhstan. The state denied the famine and continued to export grain throughout the crisis.`, source_url: "https://www.britannica.com/event/Soviet-famine-of-1932-33", source_title: "The Soviet Famine of 1932–33", publisher: "Encyclopaedia Britannica" },
+      { excerpt: `Between 1936 and 1938, the Soviet leadership organised three large public "show trials" of leading Old Bolsheviks in Moscow. The defendants confessed to fantastic charges of conspiring with foreign powers, plotting to assassinate Stalin and sabotaging Soviet industry. Most were executed shortly afterwards. Confessions had been extracted by long interrogations, threats against families and torture. The trials gave a public, judicial face to a much wider campaign — the Great Terror — in which the secret police (NKVD) arrested roughly 1.5 million people, executing over 680,000 of them.`, source_url: "https://www.bbc.co.uk/bitesize/guides/z7t87p3/revision/1", source_title: "The Show Trials and Great Terror", publisher: "BBC Bitesize" },
+      { excerpt: `The Gulag was a system of forced-labour camps run by the Soviet secret police. By the late 1930s it held more than a million prisoners, including ordinary criminals, peasants accused of resisting collectivisation, members of national minorities and people convicted of political "crimes" under Article 58 of the criminal code. Prisoners worked on canals, railways, mines and timber camps in remote regions of Siberia and the Arctic. Conditions were harsh and death rates from cold, hunger and disease were high. The camps both terrorised the population and supplied cheap labour for Stalin's industrialisation drive.`, source_url: "https://www.gulag.online/articles/an-introduction-to-the-gulag", source_title: "The Soviet Gulag system", publisher: "Gulag Online (Memorial)" },
+      { excerpt: `Soviet propaganda built a "cult of personality" around Stalin. Newspapers, schoolbooks, films and posters portrayed him as the wise teacher of the peoples, the natural successor to Lenin and the architect of every Soviet success. Cities, factories and mountains were renamed in his honour. Public criticism was effectively impossible: even casual jokes about Stalin could lead to arrest under article 58, paragraph 10, of the criminal code. The cult helped present authoritarian rule as the personal expression of the wisdom of one man.`, source_url: "https://www.nationalarchives.gov.uk/education/resources/stalin/", source_title: "The Stalin cult of personality", publisher: "UK National Archives" },
+    ],
+  },
+
+  // --- Cold War origins ---
+  {
+    trigger: /(cold war|truman doctrine|marshall plan|long telegram|iron curtain|berlin blockade|berlin airlift|nato|warsaw pact|containment|ideological polari|superpower rivalry)/i,
+    sources: [
+      { excerpt: `In February 1946, George Kennan, the American chargé d'affaires in Moscow, sent an 8,000-word telegram to Washington. He argued that Soviet leaders believed in an unending struggle between capitalism and communism, and that the USSR would expand its influence wherever it could without risking war. Kennan recommended that the United States respond with "long-term, patient but firm and vigilant containment of Russian expansive tendencies". The telegram became the intellectual foundation of US Cold War policy.`, source_url: "https://www.trumanlibrary.gov/library/research-files/telegram-george-kennan-james-byrnes-long-telegram", source_title: "Kennan's Long Telegram, February 1946", publisher: "Truman Library" },
+      { excerpt: `Speaking at Westminster College in Fulton, Missouri, in March 1946, Winston Churchill declared: "From Stettin in the Baltic to Trieste in the Adriatic, an iron curtain has descended across the Continent. Behind that line lie all the capitals of the ancient states of Central and Eastern Europe... all are subject in one form or another, not only to Soviet influence but to a very high and, in some cases, increasing measure of control from Moscow." The speech publicly framed Europe as already divided into two hostile blocs.`, source_url: "https://winstonchurchill.org/resources/speeches/1946-1963-elder-statesman/the-sinews-of-peace/", source_title: "Churchill's 'Iron Curtain' speech, March 1946", publisher: "International Churchill Society" },
+      { excerpt: `Addressing Congress on 12 March 1947, President Harry Truman asked for $400 million in aid for Greece and Turkey, then under pressure from communist insurgents and Soviet demands. He stated: "I believe that it must be the policy of the United States to support free peoples who are resisting attempted subjugation by armed minorities or by outside pressures." This commitment, soon known as the Truman Doctrine, generalised American support to any state threatened by communism and marked an open break with the wartime alliance.`, source_url: "https://avalon.law.yale.edu/20th_century/trudoc.asp", source_title: "Truman Doctrine address, March 1947", publisher: "Avalon Project" },
+      { excerpt: `In June 1947, US Secretary of State George Marshall proposed a programme of large-scale economic aid to help Europe recover from the war. Marshall said that American policy was "directed not against any country or doctrine but against hunger, poverty, desperation and chaos". The European Recovery Program, soon called the Marshall Plan, eventually delivered around $13 billion in grants and loans to sixteen Western European states between 1948 and 1952. The Soviet Union refused to participate and forbade Eastern European governments from accepting aid, deepening the division of Europe.`, source_url: "https://www.oecd.org/general/themarshallplanspeechatharvarduniversity5june1947.htm", source_title: "Marshall Plan speech, Harvard, June 1947", publisher: "OECD" },
+      { excerpt: `In June 1948, the Soviet Union closed all road, rail and canal routes from the Western occupation zones of Germany into West Berlin in an attempt to force the Western Allies out of the city. The United States and Britain responded with the Berlin Airlift, flying in food, fuel and supplies on a continuous basis for almost a year. At its peak, an aircraft landed in West Berlin every minute. Stalin lifted the blockade in May 1949 without achieving his objective. The crisis confirmed the East–West split and led directly to the formation of NATO that same year.`, source_url: "https://history.state.gov/milestones/1945-1952/berlin-airlift", source_title: "The Berlin Blockade and Airlift, 1948–49", publisher: "US Department of State, Office of the Historian" },
+      { excerpt: `In September 1947, at the founding meeting of the Cominform in Poland, Soviet ideologist Andrei Zhdanov declared that the post-war world had split into "two camps": an "imperialist and anti-democratic camp" led by the United States, and a "democratic and anti-imperialist camp" led by the USSR. Zhdanov accused the Marshall Plan of being a tool to subordinate Europe to American capital. The Two-Camps doctrine became the official Soviet justification for tightening control over Eastern Europe and breaking with former wartime allies.`, source_url: "https://digitalarchive.wilsoncenter.org/document/zhdanovs-speech-cominform", source_title: "Zhdanov's 'Two Camps' speech, 1947", publisher: "Wilson Center Digital Archive" },
+    ],
+  },
+
+  // --- End of the Cold War / collapse of the USSR ---
+  {
+    trigger: /(end of the cold war|gorbachev|perestroika|glasnost|reagan|tear down this wall|fall of the berlin wall|collapse of the (ussr|soviet union)|decline of the (ussr|soviet union)|arms race|reykjavik|inf treaty)/i,
+    sources: [
+      { excerpt: `Speaking to the 27th Party Congress in Moscow in February 1986, Mikhail Gorbachev called for "radical reform" of the Soviet economy. He admitted that growth had stalled and that Soviet industry lagged badly behind Western technology. The reforms he proposed — perestroika (restructuring) and uskorenie (acceleration) — sought to make state enterprises more responsive to consumer demand and to reduce central planning. Critics inside the party warned that loosening controls might unravel the socialist system; supporters argued that reform was the only way to preserve it.`, source_url: "https://digitalarchive.wilsoncenter.org/document/gorbachev-political-report-27th-congress", source_title: "Gorbachev's report to the 27th Party Congress, 1986", publisher: "Wilson Center Digital Archive" },
+      { excerpt: `Standing at the Brandenburg Gate in West Berlin on 12 June 1987, US President Ronald Reagan addressed the Soviet leadership directly: "General Secretary Gorbachev, if you seek peace, if you seek prosperity for the Soviet Union and Eastern Europe, if you seek liberalisation: come here to this gate. Mr Gorbachev, open this gate. Mr Gorbachev, tear down this wall!" The speech framed the Berlin Wall as the visible symbol of an unfree system and put public pressure on the Soviet Union to match its rhetoric of openness with action.`, source_url: "https://www.reaganlibrary.gov/archives/speech/remarks-east-west-relations-brandenburg-gate-west-berlin", source_title: "Reagan at the Brandenburg Gate, June 1987", publisher: "Ronald Reagan Presidential Library" },
+      { excerpt: `In December 1987 in Washington, Reagan and Gorbachev signed the Intermediate-Range Nuclear Forces (INF) Treaty. It was the first arms-control agreement to eliminate an entire class of nuclear weapons: all American and Soviet land-based missiles with ranges between 500 and 5,500 kilometres. The treaty included on-site inspections of each side's missile bases — an unprecedented level of intrusion into Soviet territory. The agreement marked a dramatic step away from the arms race that had defined US–Soviet relations for decades.`, source_url: "https://2009-2017.state.gov/t/avc/trty/102360.htm", source_title: "INF Treaty, December 1987", publisher: "US Department of State" },
+      { excerpt: `On the evening of 9 November 1989, an East German official announced at a televised press conference that East Germans could cross the inner-German border "immediately". Within hours, large crowds gathered at checkpoints in Berlin. Overwhelmed border guards opened the gates and East Germans poured into West Berlin for the first time since 1961. Within days, sections of the Wall were being broken open by the public. The fall of the Wall became the symbolic end of the division of Europe and accelerated the collapse of communist regimes across the Eastern Bloc.`, source_url: "https://www.bbc.co.uk/news/world-europe-50013048", source_title: "The fall of the Berlin Wall, November 1989", publisher: "BBC News" },
+      { excerpt: `On 25 December 1991, Mikhail Gorbachev resigned as President of the Soviet Union and the hammer-and-sickle flag was lowered over the Kremlin for the last time. In his television address, Gorbachev said the country had inherited "many achievements" but that "the old system collapsed before the new one had time to start working". By the end of the day, the USSR had ceased to exist; in its place stood fifteen independent republics. Both supporters and critics agreed that Gorbachev's reforms — intended to save Soviet socialism — had unintentionally accelerated its end.`, source_url: "https://www.cnn.com/world/cold-war/episodes/24/script.html", source_title: "Gorbachev's resignation address, December 1991", publisher: "CNN Cold War Series Archive" },
+    ],
+  },
+
+  // --- Decolonisation in Southeast Asia / Singapore independence ---
+  {
+    trigger: /(decolonisation|decolonization|singapore|merger|separation|lee kuan yew|malaysia|self-government|british withdrawal|konfrontasi|federation of malaya)/i,
+    sources: [
+      { excerpt: `Announcing the merger of Singapore, Malaya, Sabah and Sarawak on 16 September 1963, Tunku Abdul Rahman declared the formation of Malaysia. The merger was presented as the natural decolonisation outcome for the region: it would end British colonial rule in the territories, provide Singapore with a wider economic hinterland, and combine the populations of the Federation, Singapore and the Borneo states in a single multi-racial state. The British government supported merger as a way of withdrawing from its remaining Southeast Asian responsibilities while keeping the region out of communist control.`, source_url: "https://www.nas.gov.sg/archivesonline/speeches/record-details/7269b6e6-115d-11e3-83d5-0050568939ad", source_title: "Tunku Abdul Rahman on the formation of Malaysia, 1963", publisher: "National Archives of Singapore" },
+      { excerpt: `In a televised press conference on 9 August 1965, Prime Minister Lee Kuan Yew announced Singapore's separation from Malaysia: "For me, it is a moment of anguish. All my life, my whole adult life, I have believed in merger and the unity of these two territories." He explained that political and racial differences with the central government in Kuala Lumpur had become impossible to resolve. Singapore was now an independent and sovereign nation, responsible for its own defence, economy and survival.`, source_url: "https://www.nas.gov.sg/archivesonline/speeches/record-details/7314e57c-115d-11e3-83d5-0050568939ad", source_title: "Lee Kuan Yew's Separation press conference, 9 August 1965", publisher: "National Archives of Singapore" },
+      { excerpt: `The Independence of Singapore Agreement, signed on 7 August 1965 between the Government of Malaysia and the Government of Singapore, formally provided that "Singapore shall on the 9th day of August 1965 cease to be a State of Malaysia and shall become an independent and sovereign state and nation separate from and independent of Malaysia". The agreement also dealt with the division of assets, citizenship and the continued operation of bases, and was given legal effect by acts of both parliaments.`, source_url: "https://www.nlb.gov.sg/main/article-detail?cmsuuid=2c7c0baa-bf5c-4c34-9ee6-5dffe2c79ecc", source_title: "Independence of Singapore Agreement, August 1965", publisher: "National Library Board, Singapore" },
+      { excerpt: `In December 1955, the British government convened the Constitutional Conference in London to discuss self-government for Singapore. The Singapore delegation, led by Chief Minister David Marshall, demanded full internal self-government and an immediate end to British control over internal security. Britain refused to give up control of internal security, fearing communist subversion, and the talks broke down. Marshall resigned on his return. The episode showed both how far Singapore's politicians had moved towards demanding self-rule and how cautious the colonial power remained.`, source_url: "https://www.nlb.gov.sg/main/article-detail?cmsuuid=8a36dc1f-1b5a-4f7d-9c06-2c11afb0b9d0", source_title: "1956 Constitutional Talks in London", publisher: "National Library Board, Singapore" },
+      { excerpt: `Indonesia's policy of Konfrontasi (Confrontation), launched by President Sukarno in 1963, opposed the formation of Malaysia as a "neo-colonial" project. Indonesian forces carried out armed incursions and bombings in Malaysian and Singaporean territory, including the MacDonald House bombing in Singapore in March 1965. Konfrontasi exposed the fragility of the new Federation, strained relations between Singapore and Kuala Lumpur over defence policy, and reinforced the case in Singapore for a separate, more pragmatic approach to regional security.`, source_url: "https://www.nas.gov.sg/archivesonline/data/pdfdoc/19650311.pdf", source_title: "Indonesian Confrontation and the MacDonald House bombing, 1965", publisher: "National Archives of Singapore" },
+    ],
+  },
+];
+
 function curatedHumanitiesSourcePool(topic: string, learningOutcomes: string[] = []): GroundedSource[] {
-  const haystack = `${topic} ${learningOutcomes.join(" ")}`.toLowerCase();
-  const isWwiiOutbreak = /(world war ii|wwii|second world war|outbreak of war|appeasement|munich|poland|league of nations|abyssinia|rhineland|anschluss)/i.test(haystack);
-  if (!isWwiiOutbreak) return [];
-  return [
-    {
-      excerpt: `In September 1938, the British Prime Minister Neville Chamberlain returned from Munich and told the public that the agreement over Czechoslovakia had brought “peace for our time”. He argued that Britain had avoided a war for which many ordinary people were not ready, and that disputes between nations should be settled by negotiation rather than force. To supporters, the agreement showed that statesmen could prevent another catastrophe like the First World War. To critics, it showed that Britain and France had accepted Hitler's demands and encouraged further aggression by sacrificing Czechoslovakia without its full consent.`,
-      source_url: "https://avalon.law.yale.edu/imt/munich1.asp",
-      source_title: "Munich Agreement, 1938",
-      publisher: "Avalon Project",
-    },
-    {
-      excerpt: `In March 1936, German troops entered the Rhineland, an area that Germany had agreed to keep demilitarised under the Treaty of Versailles and the Locarno Treaties. Hitler presented the move as Germany merely entering its own territory and claimed that Germany wanted peace with its neighbours. The remilitarisation was popular in Germany because it appeared to restore national pride after Versailles. Britain and France protested but did not use force. The lack of military response made Germany's position stronger and suggested that treaty restrictions could be challenged without immediate consequences.`,
-      source_url: "https://www.nationalarchives.gov.uk/education/resources/interwar/",
-      source_title: "German remilitarisation of the Rhineland",
-      publisher: "UK National Archives",
-    },
-    {
-      excerpt: `The League of Nations' response to Italy's invasion of Abyssinia in 1935 exposed serious weaknesses in collective security. The League condemned the invasion and imposed sanctions, but these did not include oil and did not stop Italy's campaign. Britain and France were reluctant to act too strongly because they hoped to keep Mussolini as a possible ally against Hitler. The crisis damaged the League's credibility: a major power had used force against a weaker state, and the international organisation set up to prevent aggression had failed to protect it effectively.`,
-      source_url: "https://www.nationalarchives.gov.uk/education/resources/league-of-nations/",
-      source_title: "League of Nations and the Abyssinian Crisis",
-      publisher: "UK National Archives",
-    },
-    {
-      excerpt: `In the German-Soviet Non-Aggression Pact of August 1939, Germany and the Soviet Union promised not to attack one another. A secret protocol divided parts of Eastern Europe into German and Soviet spheres of influence, including arrangements over Poland. The pact shocked many observers because Nazi Germany and the communist Soviet Union were ideological enemies. For Hitler, it reduced the danger of fighting a war on two fronts if Germany attacked Poland. For Stalin, it bought time and offered territorial gains. The agreement removed a major obstacle to German action in Eastern Europe.`,
-      source_url: "https://avalon.law.yale.edu/20th_century/nonagres.asp",
-      source_title: "German-Soviet Non-Aggression Pact, 1939",
-      publisher: "Avalon Project",
-    },
-    {
-      excerpt: `After Germany invaded Poland on 1 September 1939, Britain issued an ultimatum demanding German withdrawal. When no satisfactory reply was received, Britain declared war on Germany on 3 September. In his broadcast, Chamberlain said that Hitler had rejected all efforts for a peaceful settlement and had attacked an independent country that Britain had promised to support. The declaration suggested that appeasement had reached its limit: Britain could no longer accept further German expansion without destroying its own credibility and the European balance of power.`,
-      source_url: "https://www.nationalarchives.gov.uk/education/resources/chamberlain-and-hitler/",
-      source_title: "Britain declares war on Germany, 1939",
-      publisher: "UK National Archives",
-    },
-  ];
+  const haystack = `${topic} ${learningOutcomes.join(" ")}`;
+  const matched: GroundedSource[] = [];
+  const seenUrls = new Set<string>();
+  for (const bundle of CURATED_HUMANITIES_BUNDLES) {
+    if (!bundle.trigger.test(haystack)) continue;
+    for (const src of bundle.sources) {
+      if (seenUrls.has(src.source_url)) continue;
+      seenUrls.add(src.source_url);
+      matched.push(src);
+    }
+  }
+  return matched;
+}
+
+// ---------- Topic / Inquiry derivation for SBQ stems ----------
+//
+// The "topic" string stored on a section is whatever the syllabus document
+// gave us (e.g. "3 · Examine the rise of authoritarian regimes (Nazi Germany)
+// and evaluate the roles of key players in the establishment of authoritarian
+// rule."). For SBQ stems we need a CONCISE NOUN PHRASE — never a directive
+// command-word sentence pasted verbatim. These helpers do that cleaning.
+
+const LO_COMMAND_WORDS_RE = /^(examine|evaluate|analyse|analyze|assess|discuss|explain|describe|compare|consider|investigate|justify|argue|outline)\b\s*/i;
+
+function stripCodePrefix(s: string): string {
+  // "3 · Examine …" / "1.2 · Foo" / "1.2.3 — Bar"
+  return s.replace(/^\s*[\w.]+\s*[·•—–-]\s*/, "").trim();
+}
+
+/** Reduce a raw syllabus topic / LO directive to a noun-phrase suitable for
+ *  insertion inside an analytical question stem ("about {T}", "in {T}", etc). */
+function deriveTopicNoun(rawTopic: string, learningOutcomes: string[] = []): string {
+  let s = stripCodePrefix(rawTopic).replace(/\*+$/, "").trim();
+
+  // If the title is a directive ("Examine the rise of …"), drop the verb and
+  // any "and evaluate / and explain …" tail so we keep only the subject matter.
+  if (LO_COMMAND_WORDS_RE.test(s)) {
+    // Prefer a parenthetical scope if present: "… (Nazi Germany) …"
+    const paren = s.match(/\(([^)]{2,80})\)/);
+    s = s.replace(LO_COMMAND_WORDS_RE, "");
+    // Drop any trailing "and <verb> …" clause.
+    s = s.replace(/\s+and\s+(evaluate|explain|describe|analyse|analyze|assess|discuss|consider|investigate|justify|argue|outline)\b.*$/i, "");
+    // Drop redundant tails such as "… in the establishment of authoritarian rule".
+    s = s.replace(/\s+in the (establishment|development|emergence|making) of [^.]*$/i, "");
+    s = s.replace(/[.!?]+\s*$/, "").trim();
+    if (paren) s = paren[1].trim();
+  }
+
+  // Lower-case the very first word unless it's a proper noun (kept if word starts
+  // with an uppercase letter followed by a lowercase letter AND isn't a verb-like
+  // gerund). Cheap heuristic: keep capitalisation as-is if it contains a known
+  // proper-noun marker (place/era).
+  const looksProper = /\b(Nazi|Soviet|USSR|USA|Britain|British|German|Germany|Singapore|Malaysia|Cold War|World War|League of Nations|Berlin|European|American|Russian|China|Chinese|Japan|Japanese|Vietnam)\b/.test(s);
+  if (!looksProper && s.length > 0 && /^[A-Z][a-z]/.test(s)) {
+    s = s.charAt(0).toLowerCase() + s.slice(1);
+  }
+
+  // Final guard: if cleaning failed (still starts with a directive verb or
+  // starts with the topic code), try to pull the most history-flavoured noun
+  // phrase from the LOs.
+  if (!s || LO_COMMAND_WORDS_RE.test(s)) {
+    const loBlob = learningOutcomes.join(" ");
+    const m = loBlob.match(/\b(rise of [\w\s]+|fall of [\w\s]+|origins of [\w\s]+|end of the cold war|cold war|world war [iI]+|decolonisation|merger|separation|appeasement)\b/i);
+    if (m) s = m[1];
+  }
+
+  // Trim length: question stems read poorly with 15+ word noun phrases.
+  const words = s.split(/\s+/).filter(Boolean);
+  if (words.length > 12) s = words.slice(0, 12).join(" ");
+
+  return s || "this issue";
+}
+
+/** Build the opening Key Inquiry Question for an SBQ section. The phrasing is
+ *  chosen deterministically based on which SBQ skills appear in the section so
+ *  the inquiry meshes with the assertion / hypothesis sub-part below it. */
+function buildInquiryQuestion(topicNoun: string, skills: (SbqSkillDef | null)[]): string {
+  const has = (id: string) => skills.some((s) => s?.id === id);
+  if (has("assertion")) {
+    return `How far was ${topicNoun} shaped by the actions of the major actors involved?`;
+  }
+  if (has("comparison")) {
+    return `How far do contemporary accounts agree on the nature of ${topicNoun}?`;
+  }
+  if (has("utility") || has("reliability")) {
+    return `How useful are these sources for understanding ${topicNoun}?`;
+  }
+  if (has("purpose")) {
+    return `Why did contemporaries portray ${topicNoun} in the ways that they did?`;
+  }
+  return `What can these sources tell us about ${topicNoun}?`;
 }
 
 function buildDeterministicSbqQuestions(section: Section, sources: GroundedSource[], skills: (SbqSkillDef | null)[]): any[] {
-  const topic = section.topic_pool[0]?.topic ?? "the issue";
-  const cleanTopic = topic.replace(/\*$/, "");
-  const inquiry = `How far did the developments in ${cleanTopic} shape the issue being studied?`;
+  const rawTopic = section.topic_pool[0]?.topic ?? "";
+  const sectionLOs = section.topic_pool[0]?.learning_outcomes
+    ?? section.learning_outcomes
+    ?? [];
+  // Concise noun phrase for {T} — never paste the LO directive into the stem.
+  const topicNoun = deriveTopicNoun(rawTopic, sectionLOs);
+  // Topic field stored on the row (used for tagging only, not the stem).
+  const topicTag = stripCodePrefix(rawTopic).replace(/\*+$/, "").trim() || topicNoun;
+  const inquiry = buildInquiryQuestion(topicNoun, skills);
+
   const perQMarks = Math.floor(section.marks / Math.max(1, section.num_questions));
   const remainder = section.marks - perQMarks * section.num_questions;
   const labels = sources.map((_, i) => String.fromCharCode(65 + i));
@@ -338,7 +486,7 @@ function buildDeterministicSbqQuestions(section: Section, sources: GroundedSourc
       .replace(/\{S1\}/g, single)
       .replace(/\{S2\}/g, second)
       .replace(/\{ALL\}/g, allLabels)
-      .replace(/\{T\}/g, cleanTopic)
+      .replace(/\{T\}/g, topicNoun)
       .replace(/\{P\}/g, part);
 
     let answer: string;
@@ -355,14 +503,14 @@ function buildDeterministicSbqQuestions(section: Section, sources: GroundedSourc
     } else if (skillId === "surprise") {
       answer = `A strong answer explains BOTH what is surprising AND what is not surprising about Source ${single}, anchored in source evidence and contextual knowledge, then reaches a reasoned judgement.`;
     } else {
-      answer = `A strong answer makes TWO valid inferences about ${cleanTopic} and supports each with precise quoted evidence from Source ${single}.`;
+      answer = `A strong answer makes TWO valid inferences about ${topicNoun} and supports each with precise quoted evidence from Source ${single}.`;
     }
 
     const scheme = skill?.markScheme ?? SBQ_SKILLS.inference.markScheme;
 
     return {
       question_type: "source_based",
-      topic,
+      topic: topicTag,
       bloom_level: section.bloom ?? "Analyse",
       difficulty: "medium",
       marks,
@@ -706,7 +854,14 @@ Calibrate stem complexity, distractor closeness (for MCQ), required reasoning st
 
 OBJECTIVES TO COVER (each generated question MUST list the AO codes, KO categories, and LO statements it actually addresses — set ao_codes, knowledge_outcomes and learning_outcomes accordingly):
 ${sectionAOs.length > 0 ? `  - Assessment Objectives pool: ${sectionAOs.join(", ")}\n` : ""}${sectionKOs.length > 0 ? `  - Knowledge Outcome categories pool: ${sectionKOs.join(", ")}\n` : ""}${sectionLOs.length > 0 ? `  - Learning Outcomes pool (verbatim statements):\n${sectionLOs.slice(0, 20).map((lo) => `      • ${lo}`).join("\n")}\n` : ""}
-Across the ${section.num_questions} questions in this section, COLLECTIVELY cover every item in the pools above. Each individual question must tag the specific AOs / KOs / LOs it addresses (do not blanket-tag every objective on every question).` : "";
+Across the ${section.num_questions} questions in this section, COLLECTIVELY cover every item in the pools above. Each individual question must tag the specific AOs / KOs / LOs it addresses (do not blanket-tag every objective on every question).
+
+LO/KO USAGE RULE (CRITICAL — applies to every question stem):
+  - Learning Outcomes and Knowledge Outcomes describe what the student must DEMONSTRATE through their answer. They are NOT question stems and MUST NOT be copied into a stem verbatim, even with light paraphrasing.
+  - Each question stem must be a fresh ANALYTICAL inquiry that REQUIRES the student to use the source(s) and contextual knowledge to reason toward an answer that EVIDENCES one or more LOs.
+  - Question stems MUST start with an SEAB AO3 command word — e.g. "Study Source …", "Compare …", "How far …", "Why …", "To what extent …", "How useful …", "How reliable …", "What can you infer …", "What is the message of …", "Why was Source … produced …", "Are you surprised by …".
+  - Question stems MUST NOT start with directive verbs taken from the LO statements: NO "Examine …", "Evaluate …", "Analyse …", "Assess …", "Discuss …", "Explain …", "Describe …" as the opening of an SBQ sub-part. Those verbs belong in the rubric the STUDENT performs, not the question.
+  - The TOPIC field on a question is a short noun-phrase tag (e.g. "Nazi rise to power", "Berlin Blockade") — never a full sentence directive copied from the syllabus title.` : "";
 
   return `${grounding}You are drafting ${sectionLabel} of "${opts.title}" (${opts.level} ${opts.subject}, ${opts.assessmentType}, ${opts.durationMinutes} min, ${opts.totalMarks} total marks across ${opts.totalSections} sections).
 
@@ -1012,8 +1167,38 @@ Deno.serve(async (req) => {
           }
           sharedSourcePool.length = 0;
           sharedSourcePool.push(...trimmed);
+
+          // Backfill: if live fetches under-delivered (slow crawls, off-topic
+          // misses, allow-list misses), top up from curated primary-source
+          // bundles for this topic. Skip any URL already in usedUrls so we
+          // don't duplicate. Cap at the SBQ pool maximum.
+          if (sharedSourcePool.length < FETCH_TARGET) {
+            const curated = curatedHumanitiesSourcePool(
+              sectionTopic.topic,
+              sectionTopic.learning_outcomes ?? [],
+            );
+            for (const src of curated) {
+              if (sharedSourcePool.length >= poolSize) break;
+              if (usedUrls.has(src.source_url)) continue;
+              if (sharedSourcePool.some((s) => s.source_url === src.source_url)) continue;
+              sharedSourcePool.push(src);
+              usedUrls.add(src.source_url);
+              try { usedHosts.add(new URL(src.source_url).hostname.toLowerCase()); } catch { /* ignore */ }
+            }
+          }
         }
         console.log(`[generate] section ${section.letter} SBQ pool: ${sharedSourcePool.length} sources (target ${Math.min(poolSize, 5)} min, max ${poolSize})`);
+
+        // Hard floor: an SBQ section needs at least 2 distinct sources to be
+        // worth presenting (anything less and the labels collapse to "Source
+        // A" everywhere, which the user has flagged as a defect). If we still
+        // can't reach 2, skip this section cleanly rather than emit nonsense.
+        if (sharedSourcePool.length < 2) {
+          console.warn(`[generate] section ${section.letter}: SBQ pool only has ${sharedSourcePool.length} source(s); skipping section`);
+          sectionFailures++;
+          continue;
+        }
+
         // Every question slot references the SAME shared pool.
         for (let qi = 0; qi < section.num_questions; qi++) {
           sourcesForSection.push(sharedSourcePool.slice());

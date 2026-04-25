@@ -1,54 +1,68 @@
-## Goals
+# Fix History SBQ: missing sources + LO-pasted stems
 
-Two distinct improvements to assessment generation:
+Looking at the saved "History Mock Up" assessment, two distinct bugs are interacting:
 
-1. **History/Social Studies sources** — strongly prefer **primary sources**; allow scholar perspectives & historiography only **sparingly** (cap at ~1 of N sources in any SBQ pool).
-2. **Mark cap (all subjects)** — guarantee that the sum of `marks` across generated questions in a section never exceeds the section's declared mark allocation.
+**Bug A — Only "Source A" exists.** The Sources A–E pool was supposed to hold 5 sources, but only 1 made it through. Result: every sub-question references "Source A" and the comparison stem absurdly says "Sources A and A".
 
----
+**Bug B — Stems paste the Learning Outcome verbatim.** The deterministic SBQ builder substitutes `{T}` (topic) into stem templates, but the "topic" stored is the entire syllabus directive — `"3 · Examine the rise of authoritarian regimes (Nazi Germany) and evaluate the roles of key players in the establishment of authoritarian rule."` — so we end up with stems like *"How far did the developments in 3 · Examine the rise of authoritarian regimes…shape the issue being studied?"*. That violates the rule that KOs/LOs should be tested *through* analytical questions, not handed back as the question.
 
-## 1. Bias source pool toward primary sources
+## What to change
 
-**File:** `supabase/functions/generate-assessment/sources.ts`
+### 1. Guarantee a 5–6 source pool (`generate-assessment/index.ts`)
 
-Currently the humanities query chain alternates 1:1 between `primary source document` and `historian analysis / perspective` queries, and Tier 2 (JSTOR / HistoryToday / HistoryExtra / Oxford / Britannica) URLs are merely sorted after Tier 1 — they're still freely picked when Tier 1 yields nothing for that *single* fetch.
+The SBQ pool target is 5, but live web fetches frequently return `null` within the 14s per-fetch budget, and the curated WWII/appeasement fallback regex doesn't match the topics actually selected (Nazi rise, Cold War, decolonisation, etc.). Fix in three layers:
 
-Changes:
+- **Expand the curated humanities pool** (`curatedHumanitiesSourcePool`) with primary-source bundles for the topics we actually see in MOE Sec History:
+  - Rise of Nazism / Weimar Germany (Reichstag Fire decree, Enabling Act, Mein Kampf excerpts, Hindenburg's appointment notice)
+  - Stalinist USSR (Five-Year Plan speeches, purge testimony)
+  - Cold War origins (Long Telegram, Truman Doctrine, Marshall Plan speech, Zhdanov Doctrine)
+  - End of the Cold War (Gorbachev's perestroika address, Reagan's "Tear down this wall", fall-of-the-Wall reportage)
+  - Decolonisation in Southeast Asia / Singapore independence (Lee Kuan Yew speeches, Separation Agreement)
+  Each entry includes verbatim excerpt, archival URL (yale avalon, UK National Archives, NSA archive, NAS Singapore, USHMM), title, publisher.
+- **Topic-aware regex matching** instead of one giant alternation: derive a topic-keyword set from `topic + learning_outcomes` and match against multiple themed source-bundles, returning whichever matches.
+- **Backfill loop after parallel fetch**: after the `Promise.all` for live fetches, if `sharedSourcePool.length < 5`, top up from the curated pool by topic match (skipping any URL already in `usedUrls`) until length ≥ 5 or we exhaust the curated pool. This guarantees the pool *never* drops below 5 for supported topics, regardless of crawler luck.
+- **Pool-size assertion before deterministic build**: if pool length is still < 2 (e.g. exotic topic, no curated match, all crawls failed), drop the section with a clearer error so we don't emit a paper saying "Sources A and A". Today it silently builds 5 questions all pointing at the same source.
 
-- **Re-weight the query chain (`buildQueryChain`)**: emit ~4 primary-source queries for every 1 historian-perspective query. Replace the alternating pair with: `primary source document archive`, `archival document`, `contemporary newspaper account`, `speech treaty official record`, then a single `historian analysis` query as the last specific query (still ahead of broader fallbacks).
-- **Add a per-pool cap on Tier-2 (scholar/historiography) sources** in `fetchGroundedSource`. New optional param `tierBudget?: { tier2Used: number; maxTier2: number }`. When `tier2Used >= maxTier2`, candidate URLs whose `humanitiesTier(host) === 2` are filtered out before scrape.
-- **Demote Britannica** from Tier 2 to Tier 3 (it's a tertiary reference, not a historian's perspective). Keep JSTOR / HistoryToday / HistoryExtra / OxfordRE in Tier 2.
-- **Add more primary-source domains** to `ALLOW_DOMAINS_HUMANITIES` and `HUMANITIES_TIER_1_PRIMARY`: `parliament.uk`, `hansard.parliament.uk`, `digitalarchive.wilsoncenter.org`, `cvce.eu`, `marxists.org` (for primary political texts), `digital.library.cornell.edu`, `cia.gov/readingroom`, `state.gov/historicaldocuments`, `nara.gov`. Allow all .edu, .org and .gov sites. 
+### 2. Rewrite the SBQ stem renderer to use an *inquiry*, not the LO (`buildDeterministicSbqQuestions`)
 
-**File:** `supabase/functions/generate-assessment/index.ts`
+The current builder uses the raw topic string for `{T}`. Replace with a clean derivation:
 
-- Where the SBQ pool is built (the loop that calls `fetchGroundedSource` ~5–6 times), pass a shared `tierBudget` object with `maxTier2 = 1` (so at most 1 of the 5–6 sources can be a scholar/historiography piece). Increment `tier2Used` whenever the returned source's host is Tier 2.
+- **Build `cleanTopic`** by stripping leading numeric/alpha codes (`/^[\d\.\w]+\s*·\s*/`), trimming, and lower-casing the first word so it reads naturally inside a sentence ("Nazi Germany" stays capitalised; "examine the rise of…" gets reduced — see next point).
+- **Detect directive-style topic titles** (start with command words like Examine / Analyse / Evaluate / Assess / Discuss / Explain). When detected, the topic *is* the LO, so we can't use it as `{T}` directly. Instead derive a noun-phrase subject from it by:
+  1. dropping the leading command word and any "and evaluate / and explain" tail,
+  2. extracting the parenthetical scope if present ("(Nazi Germany)" → "Nazi Germany") OR the head noun phrase before the next verb.
+  This is a small string transformation, not an AI call. Result: `"the rise of authoritarian regimes in Nazi Germany"` or `"Nazi Germany"`.
+- **Build a real inquiry question** from the SBQ skill set + topic, *not* the templated `"How far did the developments in {T} shape the issue being studied?"` line we have now. Use the SEAB-style question stems already documented in the SBQ_SKILLS prompts:
+  - Cause: *"Why did {T} happen / develop / succeed / fail?"*
+  - Significance: *"How significant was {T} in shaping {era}?"*
+  - Hypothesis (paired with the assertion sub-part): *"How far was {T} caused / shaped mainly by {factor}?"*
+  Pick deterministically from the assigned skill mix so the inquiry fits the assertion sub-part below it.
+- **Tighten the per-skill templates** so `{T}` is always inserted as a concise noun phrase, never a directive. Add a guard inside `buildDeterministicSbqQuestions` that asserts `cleanTopic` doesn't start with a command word; if it does, fall back to the noun-phrase extractor above before substituting.
 
----
+### 3. Tighten the AI-generated SBQ path too
 
-## 2. Enforce mark cap per section (all subjects)
+For non-deterministic SBQ generation (when present), augment `buildSectionUserPrompt` with an explicit anti-pattern instruction near the LO objectives block:
 
-Today the model is *told* the section's mark budget (`marksGuide` at line ~525) and `marks: q.marks ?? 1` is trusted from the model output. Nothing prevents the model from emitting questions whose marks sum beyond `section.marks`.
+> The Learning Outcomes listed are what the student must DEMONSTRATE through their answer. They are NOT question stems. Do NOT copy any LO into a question stem verbatim. Each sub-part must be an *analytical inquiry* that requires the student to use the source(s) to reason toward an answer that *evidences* one or more LOs.
 
-**File:** `supabase/functions/generate-assessment/index.ts`
+Also add: *"Question stems MUST start with a command word from the SEAB AO3 list (Study, Compare, How far, Why, To what extent, How useful, How reliable). They MUST NOT start with directive verbs from the LO statements (Examine, Evaluate, Analyse, Assess, Discuss)."*
 
-- After the model returns questions for a section (and after the SBQ deterministic builder, which is already exact), add a `normalizeSectionMarks(questions, section.marks)` helper that:
-  1. If `sum(marks) === section.marks`: no-op.
-  2. If `sum(marks) > section.marks`: scale each question's marks proportionally (`floor`), then distribute leftover (or negative leftover) by removing 1 mark at a time from the highest-mark questions until the total matches. Never let any question drop below 1 mark — if the section's mark budget is smaller than `num_questions`, log a warning and clamp at 1 each (this is a malformed blueprint case).
-  3. If `sum(marks) < section.marks`: distribute the shortfall by adding 1 mark at a time to the lowest-mark questions (preserving the model's relative weighting).
-  4. **Respect locked SBQ skills** (`assertion` is locked at 8): pass a `lockedIndices` set so those marks are never altered; balance the rest around them. If locked marks alone exceed `section.marks`, log a warning and skip normalization for this section (blueprint mismatch).
-- Call `normalizeSectionMarks` immediately after parsing the AI tool-call response, before pushing into `allRows`. Apply to every question_type, not just SBQ.
-- Tighten the prompt: add a hard line in `buildSectionPrompt` after `marksGuide`: `HARD CONSTRAINT: the sum of marks across the ${num_questions} questions MUST equal exactly ${section.marks}. Do not exceed it under any circumstances.`
+### 4. Reset the broken assessment so the user can regenerate
 
----
+Delete the 7 questions from `84114f3a-1cca-4917-a8e9-23c7cd3c2a16` and reset its status to `draft` so the user can re-run generation against the fixed function.
 
-## Technical summary
+## Verification
 
+- Curl the regenerated assessment via `supabase--curl_edge_functions` and inspect that:
+  - the SBQ section's questions list `Source A:` through at least `Source E:` in a single concatenated `source_excerpt`,
+  - sub-part stems reference distinct sources (`A`, `B`, `C`, `A & B`, `A–E`),
+  - no stem contains the substring "Examine the rise" or any other directive copied from the LO,
+  - mark sum still equals the section budget.
+- Spot-check edge-function logs for `[generate] section … SBQ pool: N sources` showing N ≥ 5.
 
-| File                                                | Change                                                                                                                                                                                   |
-| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `supabase/functions/generate-assessment/sources.ts` | Reweight `buildQueryChain` (4:1 primary:historian), add Tier-2 budget to `fetchGroundedSource`, demote Britannica to Tier 3, expand Tier-1 allow-list with parliament/state/CIA archives |
-| `supabase/functions/generate-assessment/index.ts`   | Pass shared `tierBudget = { tier2Used: 0, maxTier2: 1 }` to SBQ pool fetches; add `normalizeSectionMarks()` post-processor; add HARD CONSTRAINT line to section prompt                   |
+## Files
 
+- `supabase/functions/generate-assessment/index.ts` — expand `curatedHumanitiesSourcePool`, add backfill loop, harden `buildDeterministicSbqQuestions` with topic cleaning + inquiry derivation, add anti-LO-paste instructions in `buildSectionUserPrompt`, abort cleanly if pool < 2.
+- DB cleanup migration (or transient query through migration tool) to reset the failed assessment.
 
-No DB migrations, no new edge functions, no UI changes. Single edge-function deploy of `generate-assessment`.
+No frontend changes required.
