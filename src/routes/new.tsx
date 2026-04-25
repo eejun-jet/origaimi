@@ -816,36 +816,7 @@ function NewAssessment() {
                 )}
               </div>
 
-              {/* Knowledge Outcomes */}
-              <div className="rounded-lg border border-border bg-muted/20 p-4">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm font-medium">Knowledge Outcomes (KOs)</Label>
-                  <span className="text-xs text-muted-foreground">{selectedKos.length} / {KNOWLEDGE_OUTCOMES.length} selected</span>
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Pick the cognitive outcome categories the paper should exercise.
-                </p>
-                <div className="mt-3 grid gap-1.5 sm:grid-cols-2">
-                  {KNOWLEDGE_OUTCOMES.map((ko) => {
-                    const checked = selectedKos.includes(ko);
-                    const supported = availableKos.includes(ko);
-                    return (
-                      <label
-                        key={ko}
-                        title={!supported ? "Not derived from chosen topics — still selectable" : undefined}
-                        className={`flex cursor-pointer items-center gap-2 rounded-md border p-2 text-sm transition-colors ${checked ? "border-primary bg-primary-soft/40" : "border-border hover:bg-muted/40"}`}
-                      >
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={() => setSelectedKos((prev) => toggle(prev, ko))}
-                        />
-                        <span>{ko}</span>
-                        {!supported && <span className="ml-auto text-[10px] text-muted-foreground">custom</span>}
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
+              {/* Knowledge Outcomes card now appears AFTER Learning Outcomes (below). */}
 
               {/* Learning Outcomes */}
               <div className="rounded-lg border border-border bg-muted/20 p-4">
