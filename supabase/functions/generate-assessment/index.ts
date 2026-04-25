@@ -854,7 +854,14 @@ Calibrate stem complexity, distractor closeness (for MCQ), required reasoning st
 
 OBJECTIVES TO COVER (each generated question MUST list the AO codes, KO categories, and LO statements it actually addresses — set ao_codes, knowledge_outcomes and learning_outcomes accordingly):
 ${sectionAOs.length > 0 ? `  - Assessment Objectives pool: ${sectionAOs.join(", ")}\n` : ""}${sectionKOs.length > 0 ? `  - Knowledge Outcome categories pool: ${sectionKOs.join(", ")}\n` : ""}${sectionLOs.length > 0 ? `  - Learning Outcomes pool (verbatim statements):\n${sectionLOs.slice(0, 20).map((lo) => `      • ${lo}`).join("\n")}\n` : ""}
-Across the ${section.num_questions} questions in this section, COLLECTIVELY cover every item in the pools above. Each individual question must tag the specific AOs / KOs / LOs it addresses (do not blanket-tag every objective on every question).` : "";
+Across the ${section.num_questions} questions in this section, COLLECTIVELY cover every item in the pools above. Each individual question must tag the specific AOs / KOs / LOs it addresses (do not blanket-tag every objective on every question).
+
+LO/KO USAGE RULE (CRITICAL — applies to every question stem):
+  - Learning Outcomes and Knowledge Outcomes describe what the student must DEMONSTRATE through their answer. They are NOT question stems and MUST NOT be copied into a stem verbatim, even with light paraphrasing.
+  - Each question stem must be a fresh ANALYTICAL inquiry that REQUIRES the student to use the source(s) and contextual knowledge to reason toward an answer that EVIDENCES one or more LOs.
+  - Question stems MUST start with an SEAB AO3 command word — e.g. "Study Source …", "Compare …", "How far …", "Why …", "To what extent …", "How useful …", "How reliable …", "What can you infer …", "What is the message of …", "Why was Source … produced …", "Are you surprised by …".
+  - Question stems MUST NOT start with directive verbs taken from the LO statements: NO "Examine …", "Evaluate …", "Analyse …", "Assess …", "Discuss …", "Explain …", "Describe …" as the opening of an SBQ sub-part. Those verbs belong in the rubric the STUDENT performs, not the question.
+  - The TOPIC field on a question is a short noun-phrase tag (e.g. "Nazi rise to power", "Berlin Blockade") — never a full sentence directive copied from the syllabus title.` : "";
 
   return `${grounding}You are drafting ${sectionLabel} of "${opts.title}" (${opts.level} ${opts.subject}, ${opts.assessmentType}, ${opts.durationMinutes} min, ${opts.totalMarks} total marks across ${opts.totalSections} sections).
 
