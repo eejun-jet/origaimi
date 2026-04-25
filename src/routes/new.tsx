@@ -1410,7 +1410,7 @@ type SectionCardProps = {
   visibleQuestionTypes: { id: string; label: string }[];
   subject: string;
   allAOs: AssessmentObjective[];
-  allKOs: readonly string[];
+  
   globalAoCodes: string[];
   globalKos: string[];
   globalLos: string[];
