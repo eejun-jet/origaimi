@@ -885,7 +885,6 @@ Deno.serve(async (req) => {
           }
           // Belt-and-suspenders: even with the shared tierBudget, parallel
           // fetches can race past the cap. Drop excess Tier-2 sources here.
-          const { humanitiesTier } = await import("./sources.ts");
           let tier2Kept = 0;
           const trimmed: typeof sharedSourcePool = [];
           for (const src of sharedSourcePool) {
