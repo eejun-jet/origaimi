@@ -20,7 +20,7 @@ import {
 import {
   type Section, type SectionTopic, type SectionedBlueprint, type DifficultyMix,
   defaultSection, nextSectionLetter, blueprintTotalMarks, isScienceSubject,
-  difficultyMixTotal, DEFAULT_DIFFICULTY_MIX, KNOWLEDGE_OUTCOMES,
+  difficultyMixTotal, DEFAULT_DIFFICULTY_MIX,
   SBQ_SKILLS, MAX_SBQ_SKILLS, getSectionSkills, isHumanitiesSubject, type SbqSkill,
 } from "@/lib/sections";
 import { ChevronLeft, ChevronRight, Sparkles, Loader2, BookOpen, Upload, Plus, Trash2, ChevronUp, ChevronDown } from "lucide-react";
@@ -259,28 +259,30 @@ function NewAssessment() {
     return [];
   }, [useSyllabus, selectableSyllabusTopics, selectedTopicIds]);
 
-  // KO categories actually present in the chosen topics — used to highlight
-  // which of the fixed 4 categories are syllabus-supported.
+  // KO categories derived from the topics the teacher actually picked in Step 2.
+  // Each syllabus defines its own KO vocabulary (e.g. History uses
+  // knowledge/skills/values/attitudes), so we surface whatever the topics carry
+  // rather than forcing a fixed bucket list.
   const availableKos = useMemo(() => {
-    if (!useSyllabus) return KNOWLEDGE_OUTCOMES.slice();
-    const set = new Set<string>();
+    if (!useSyllabus) return [] as string[];
+    const seen = new Map<string, string>(); // lower -> original casing
     for (const t of selectableSyllabusTopics) {
       if (!selectedTopicIds.includes(t.id)) continue;
       for (const c of t.outcomeCategories ?? []) {
-        const lower = c.toLowerCase();
-        const match = KNOWLEDGE_OUTCOMES.find((k) => k.toLowerCase() === lower);
-        if (match) set.add(match);
+        const trimmed = c.trim();
+        if (!trimmed) continue;
+        const key = trimmed.toLowerCase();
+        if (!seen.has(key)) seen.set(key, trimmed);
       }
     }
-    // Always allow the 4 standard categories — but mark which are syllabus-derived.
-    return KNOWLEDGE_OUTCOMES.filter((k) => set.size === 0 || set.has(k));
+    return Array.from(seen.values());
   }, [useSyllabus, selectableSyllabusTopics, selectedTopicIds]);
 
   // Reset objective picks whenever topics change, keeping any custom LOs the
   // teacher typed (anything not in derivedLos is preserved as custom).
   useEffect(() => {
     setSelectedAoCodes((prev) => prev.filter((c) => docAOs.some((a) => a.code === c)));
-    setSelectedKos((prev) => prev.filter((k) => availableKos.includes(k as typeof KNOWLEDGE_OUTCOMES[number])));
+    setSelectedKos((prev) => prev.filter((k) => availableKos.includes(k)));
     setSelectedLos((prev) => {
       // keep selections that are still derivable OR were custom (not in derivedLos)
       const derivedSet = new Set(derivedLos);
@@ -814,36 +816,7 @@ function NewAssessment() {
                 )}
               </div>
 
-              {/* Knowledge Outcomes */}
-              <div className="rounded-lg border border-border bg-muted/20 p-4">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm font-medium">Knowledge Outcomes (KOs)</Label>
-                  <span className="text-xs text-muted-foreground">{selectedKos.length} / {KNOWLEDGE_OUTCOMES.length} selected</span>
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Pick the cognitive outcome categories the paper should exercise.
-                </p>
-                <div className="mt-3 grid gap-1.5 sm:grid-cols-2">
-                  {KNOWLEDGE_OUTCOMES.map((ko) => {
-                    const checked = selectedKos.includes(ko);
-                    const supported = availableKos.includes(ko);
-                    return (
-                      <label
-                        key={ko}
-                        title={!supported ? "Not derived from chosen topics — still selectable" : undefined}
-                        className={`flex cursor-pointer items-center gap-2 rounded-md border p-2 text-sm transition-colors ${checked ? "border-primary bg-primary-soft/40" : "border-border hover:bg-muted/40"}`}
-                      >
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={() => setSelectedKos((prev) => toggle(prev, ko))}
-                        />
-                        <span>{ko}</span>
-                        {!supported && <span className="ml-auto text-[10px] text-muted-foreground">custom</span>}
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
+              {/* Knowledge Outcomes card now appears AFTER Learning Outcomes (below). */}
 
               {/* Learning Outcomes */}
               <div className="rounded-lg border border-border bg-muted/20 p-4">
@@ -945,6 +918,63 @@ function NewAssessment() {
                 })()}
               </div>
 
+              {/* Knowledge Outcomes (filtered from selected topics) */}
+              <div className="rounded-lg border border-border bg-muted/20 p-4">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">Knowledge Outcomes (KOs)</Label>
+                  {availableKos.length > 0 && (
+                    <span className="text-xs text-muted-foreground">{selectedKos.length} / {availableKos.length} selected</span>
+                  )}
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Derived from the topics you picked in the previous step. Tick the ones the paper must exercise.
+                </p>
+                {availableKos.length === 0 ? (
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    No KOs derived from the chosen topics — they'll be inferred from the topic metadata at generation time.
+                  </p>
+                ) : (
+                  <>
+                    {(() => {
+                      const allChecked = availableKos.length > 0 && availableKos.every((k) => selectedKos.includes(k));
+                      const someChecked = availableKos.some((k) => selectedKos.includes(k));
+                      return (
+                        <label className="mt-3 flex cursor-pointer items-center gap-2 rounded border-b border-dashed border-border p-1.5 text-xs font-medium hover:bg-muted/40">
+                          <Checkbox
+                            checked={allChecked ? true : someChecked ? "indeterminate" : false}
+                            onCheckedChange={() => {
+                              setSelectedKos((prev) => {
+                                if (allChecked) return prev.filter((k) => !availableKos.includes(k));
+                                const merged = new Set([...prev, ...availableKos]);
+                                return Array.from(merged);
+                              });
+                            }}
+                          />
+                          <span>{allChecked ? "Deselect all" : "Select all"}</span>
+                        </label>
+                      );
+                    })()}
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {availableKos.map((ko) => {
+                        const checked = selectedKos.includes(ko);
+                        return (
+                          <label
+                            key={ko}
+                            className={`flex cursor-pointer items-center gap-2 rounded-full border px-2.5 py-1 text-xs transition-colors ${checked ? "border-primary bg-primary-soft/40" : "border-border hover:bg-muted/40"}`}
+                          >
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={() => setSelectedKos((prev) => toggle(prev, ko))}
+                            />
+                            <span className="capitalize">{ko}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+
               <p className="text-xs text-muted-foreground">
                 You can narrow these targets per section in the next step. Sections inherit your picks here.
               </p>
@@ -975,7 +1005,7 @@ function NewAssessment() {
                   visibleQuestionTypes={visibleQuestionTypes}
                   subject={subject}
                   allAOs={docAOs}
-                  allKOs={availableKos}
+                  
                   globalAoCodes={selectedAoCodes}
                   globalKos={selectedKos}
                   globalLos={selectedLos}
@@ -1380,7 +1410,7 @@ type SectionCardProps = {
   visibleQuestionTypes: { id: string; label: string }[];
   subject: string;
   allAOs: AssessmentObjective[];
-  allKOs: readonly string[];
+  
   globalAoCodes: string[];
   globalKos: string[];
   globalLos: string[];
@@ -1391,7 +1421,7 @@ type SectionCardProps = {
 
 function SectionCard({
   section, isFirst, isLast, masterPool, visibleQuestionTypes, subject,
-  allAOs, allKOs, globalAoCodes, globalKos, globalLos,
+  allAOs, globalAoCodes, globalKos, globalLos,
   onUpdate, onRemove, onMove,
 }: SectionCardProps) {
   const [customLo, setCustomLo] = useState("");
@@ -1410,8 +1440,25 @@ function SectionCard({
     return Array.from(map.values());
   }, [allAOs, globalAoCodes, sectionAos]);
 
-  // KO candidates: always show all 4, mark which are syllabus-supported.
-  const koCandidates = KNOWLEDGE_OUTCOMES;
+  // KO candidates: union of outcome_categories across this section's topic pool,
+  // plus the global KO picks and anything already on the section. Each syllabus
+  // defines its own KO vocabulary (e.g. History uses knowledge/skills/values/
+  // attitudes), so we surface whatever the topics actually carry.
+  const koCandidates = useMemo(() => {
+    const seen = new Map<string, string>();
+    const add = (raw: string) => {
+      const trimmed = raw.trim();
+      if (!trimmed) return;
+      const key = trimmed.toLowerCase();
+      if (!seen.has(key)) seen.set(key, trimmed);
+    };
+    for (const t of section.topic_pool) {
+      for (const c of t.outcome_categories ?? []) add(c);
+    }
+    for (const c of globalKos) add(c);
+    for (const c of sectionKos) add(c);
+    return Array.from(seen.values());
+  }, [section.topic_pool, globalKos, sectionKos]);
 
   // LO candidates: union of (a) LOs from this section's topic_pool, (b) global LOs, (c) anything already on the section.
   const loCandidates = useMemo(() => {
@@ -1453,7 +1500,7 @@ function SectionCard({
   };
 
   const allAoSelected = aoCandidates.length > 0 && aoCandidates.every((a) => sectionAos.includes(a.code));
-  const allKoSelected = koCandidates.every((k) => sectionKos.includes(k));
+  const allKoSelected = koCandidates.length > 0 && koCandidates.every((k) => sectionKos.includes(k));
   const allLoSelected = loCandidates.length > 0 && loCandidates.every((l) => sectionLos.includes(l));
   const pickedKeys = new Set(section.topic_pool.map((t) => `${t.topic_code ?? ""}::${t.topic}`));
   const toggleTopic = (t: SectionTopic) => {
@@ -1739,33 +1786,34 @@ function SectionCard({
         </div>
 
         {/* KOs */}
-        <div className="mt-3 border-t border-border/50 pt-3">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-medium text-muted-foreground">
-              KOs ({sectionKos.length} / {koCandidates.length})
-            </span>
-            <button
-              type="button"
-              className="text-[11px] text-primary hover:underline"
-              onClick={() => onUpdate({ knowledge_outcomes: allKoSelected ? [] : koCandidates.slice() })}
-            >
-              {allKoSelected ? "Clear all" : "Select all"}
-            </button>
+        {koCandidates.length > 0 && (
+          <div className="mt-3 border-t border-border/50 pt-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-medium text-muted-foreground">
+                KOs ({sectionKos.length} / {koCandidates.length})
+              </span>
+              <button
+                type="button"
+                className="text-[11px] text-primary hover:underline"
+                onClick={() => onUpdate({ knowledge_outcomes: allKoSelected ? [] : koCandidates.slice() })}
+              >
+                {allKoSelected ? "Clear all" : "Select all"}
+              </button>
+            </div>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {koCandidates.map((ko) => {
+                const checked = sectionKos.includes(ko);
+                const isGlobal = globalKos.includes(ko);
+                return (
+                  <label key={ko} className={`flex cursor-pointer items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] transition-colors ${checked ? "border-primary bg-primary-soft/40" : "border-border hover:bg-muted/40"}`}>
+                    <Checkbox checked={checked} onCheckedChange={() => toggleKo(ko)} />
+                    <span className="capitalize">{ko}{isGlobal && <span className="ml-1 text-[10px] text-muted-foreground normal-case">(global)</span>}</span>
+                  </label>
+                );
+              })}
+            </div>
           </div>
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {koCandidates.map((ko) => {
-              const checked = sectionKos.includes(ko);
-              const supported = allKOs.includes(ko);
-              const isGlobal = globalKos.includes(ko);
-              return (
-                <label key={ko} className={`flex cursor-pointer items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] transition-colors ${checked ? "border-primary bg-primary-soft/40" : "border-border hover:bg-muted/40"} ${!supported ? "opacity-60" : ""}`}>
-                  <Checkbox checked={checked} onCheckedChange={() => toggleKo(ko)} />
-                  <span>{ko}{isGlobal && <span className="ml-1 text-[10px] text-muted-foreground">(global)</span>}</span>
-                </label>
-              );
-            })}
-          </div>
-        </div>
+        )}
 
         {/* LOs */}
         <div className="mt-3 border-t border-border/50 pt-3">
