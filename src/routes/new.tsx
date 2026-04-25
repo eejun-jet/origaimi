@@ -1421,7 +1421,7 @@ type SectionCardProps = {
 
 function SectionCard({
   section, isFirst, isLast, masterPool, visibleQuestionTypes, subject,
-  allAOs, allKOs, globalAoCodes, globalKos, globalLos,
+  allAOs, globalAoCodes, globalKos, globalLos,
   onUpdate, onRemove, onMove,
 }: SectionCardProps) {
   const [customLo, setCustomLo] = useState("");
