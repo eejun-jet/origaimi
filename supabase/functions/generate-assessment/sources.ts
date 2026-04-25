@@ -254,11 +254,21 @@ function hostnameOf(url: string): string {
   try { return new URL(url).hostname.toLowerCase(); } catch { return ""; }
 }
 
-function isAllowed(url: string, allowList: string[]): boolean {
+function isAllowed(url: string, allowList: string[], allowGenericTlds = false): boolean {
   const h = hostnameOf(url);
   if (!h) return false;
   if (DENY_DOMAINS.some((d) => h.endsWith(d) || h.includes(d))) return false;
-  return allowList.some((d) => h === d || h.endsWith("." + d) || h.endsWith(d));
+  if (allowList.some((d) => h === d || h.endsWith("." + d) || h.endsWith(d))) return true;
+  // For humanities, also allow any .gov, .edu, .ac.uk, .mil, or .org host
+  // (the latter as a last-resort tertiary-tier fallback). Generic TLD rule is
+  // off for English (which targets a curated literary/journalistic allow-list).
+  if (allowGenericTlds) {
+    const generic = [...HUMANITIES_TLD_TIER_1, ...HUMANITIES_TLD_TIER_3];
+    if (generic.some((tld) => h.endsWith(tld) || h.endsWith(tld + ".sg") || h.endsWith(tld + ".au") || h.endsWith(tld + ".uk") || h.endsWith(tld + ".nz") || h.endsWith(tld + ".ca"))) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function publisherOf(url: string): string {
