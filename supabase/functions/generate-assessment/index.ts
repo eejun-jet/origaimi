@@ -1160,8 +1160,38 @@ Deno.serve(async (req) => {
           }
           sharedSourcePool.length = 0;
           sharedSourcePool.push(...trimmed);
+
+          // Backfill: if live fetches under-delivered (slow crawls, off-topic
+          // misses, allow-list misses), top up from curated primary-source
+          // bundles for this topic. Skip any URL already in usedUrls so we
+          // don't duplicate. Cap at the SBQ pool maximum.
+          if (sharedSourcePool.length < FETCH_TARGET) {
+            const curated = curatedHumanitiesSourcePool(
+              sectionTopic.topic,
+              sectionTopic.learning_outcomes ?? [],
+            );
+            for (const src of curated) {
+              if (sharedSourcePool.length >= poolSize) break;
+              if (usedUrls.has(src.source_url)) continue;
+              if (sharedSourcePool.some((s) => s.source_url === src.source_url)) continue;
+              sharedSourcePool.push(src);
+              usedUrls.add(src.source_url);
+              try { usedHosts.add(new URL(src.source_url).hostname.toLowerCase()); } catch { /* ignore */ }
+            }
+          }
         }
         console.log(`[generate] section ${section.letter} SBQ pool: ${sharedSourcePool.length} sources (target ${Math.min(poolSize, 5)} min, max ${poolSize})`);
+
+        // Hard floor: an SBQ section needs at least 2 distinct sources to be
+        // worth presenting (anything less and the labels collapse to "Source
+        // A" everywhere, which the user has flagged as a defect). If we still
+        // can't reach 2, skip this section cleanly rather than emit nonsense.
+        if (sharedSourcePool.length < 2) {
+          console.warn(`[generate] section ${section.letter}: SBQ pool only has ${sharedSourcePool.length} source(s); skipping section`);
+          sectionFailures++;
+          continue;
+        }
+
         // Every question slot references the SAME shared pool.
         for (let qi = 0; qi < section.num_questions; qi++) {
           sourcesForSection.push(sharedSourcePool.slice());
