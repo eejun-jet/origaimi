@@ -851,6 +851,10 @@ Deno.serve(async (req) => {
           "political cartoon poster propaganda",
         ];
         if (sectionTopic) {
+          // Per-pool budget: allow at most ONE Tier-2 (historian/historiography)
+          // source so the SBQ pool stays primary-source heavy. This is shared
+          // across all parallel fetches in the pool.
+          const tierBudget: TierBudget = { tier2Used: 0, maxTier2: 1 };
           // Fetch sources in parallel with a hard per-fetch timeout. Sequential
           // fetching with multiple firecrawl scrape attempts each can blow past
           // the edge-function wallclock and kill the whole generation.
@@ -867,6 +871,7 @@ Deno.serve(async (req) => {
                 fetchGroundedSource(
                   subjectKind, sectionTopic.topic, sectionTopic.learning_outcomes ?? [],
                   usedHosts, usedUrls, POOL_QUERY_HINTS[i % POOL_QUERY_HINTS.length],
+                  tierBudget,
                 ),
                 PER_FETCH_TIMEOUT_MS,
               ).catch((e) => {
