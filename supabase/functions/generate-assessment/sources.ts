@@ -514,6 +514,22 @@ async function firecrawlScrape(url: string): Promise<{ markdown: string; title: 
   }
 }
 
+async function tavilyScrape(url: string): Promise<{ markdown: string; title: string } | null> {
+  try {
+    const extracted = await tavilyExtract([url]);
+    const raw = extracted[0]?.raw_content ?? "";
+    if (!raw) return null;
+    return { markdown: raw, title: publisherOf(url) };
+  } catch (e) {
+    console.warn("[sources] tavily extract error", url, (e as Error).message);
+    return null;
+  }
+}
+
+async function scrapeUrl(url: string): Promise<{ markdown: string; title: string } | null> {
+  return (await tavilyScrape(url)) ?? (await firecrawlScrape(url));
+}
+
 /** Search + scrape + extract a usable, syllabus-relevant 100–200 word excerpt.
  *  Returns null on total failure.
  *  - `usedHosts` / `usedUrls` prevent the same site/article being reused.
