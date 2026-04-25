@@ -26,7 +26,8 @@ const MAX_QUESTIONS_PER_PAPER = 8;
 const MAX_STEM_CHARS = 600;
 
 export async function fetchExemplars(
-  supabase: ReturnType<typeof import("https://esm.sh/@supabase/supabase-js@2.49.0").createClient>,
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
   subject: string,
   level: string,
 ): Promise<{ block: string; paperCount: number; questionCount: number }> {
