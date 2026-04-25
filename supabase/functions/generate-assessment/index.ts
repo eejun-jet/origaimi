@@ -1025,6 +1025,28 @@ Deno.serve(async (req) => {
           sectionFailures++;
           continue;
         }
+      }
+
+      // HARD CAP enforcement (all subjects): the sum of marks across the
+      // section's questions must equal section.marks. The model is told this in
+      // the prompt but we never trust it. SBQ sections built deterministically
+      // already match exactly; this catches AI-generated sections.
+      if (questions.length > 0) {
+        const lockedIndices = new Set<number>();
+        if (isHumanitiesSBQ) {
+          // Lock SBQ skills marked `locked: true` (currently: assertion at 8 marks).
+          for (let qi = 0; qi < perQSkillsForFetch.length && qi < questions.length; qi++) {
+            const sk = perQSkillsForFetch[qi];
+            if (sk?.locked) lockedIndices.add(qi);
+          }
+        }
+        const before = questions.reduce((a, q: any) => a + (q.marks ?? 0), 0);
+        normalizeSectionMarks(questions as any, section.marks, lockedIndices);
+        const after = questions.reduce((a, q: any) => a + (q.marks ?? 0), 0);
+        if (before !== after) {
+          console.log(`[generate] section ${section.letter} marks normalized: ${before} → ${after} (target ${section.marks})`);
+        }
+      }
       // Per-question post-processing: enforce source attachment, drop unsupported.
       for (let qi = 0; qi < questions.length; qi++) {
         const q = questions[qi];
