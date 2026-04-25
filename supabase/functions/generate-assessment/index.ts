@@ -797,21 +797,24 @@ Deno.serve(async (req) => {
       const sourcesForSection: (GroundedSource | null)[][] = [];
 
       if (isHumanitiesSBQ) {
-        // Pool size = max minSources across selected skills, capped at 5, min 4
-        // (so single-source skills like Inference still have room to choose A or B).
+        // Pool size = max minSources across selected skills, clamped to [5, 6].
+        // SEAB History SBQs typically present 5 sources; we allow up to 6 so an
+        // Assertion sub-part can draw on the full set without crowding out
+        // single-source skills like Inference.
         const maxMinSources = effectiveSkillDefs.reduce((m, s) => Math.max(m, s.minSources), 0);
-        const poolSize = Math.min(5, Math.max(4, maxMinSources));
+        const poolSize = Math.min(6, Math.max(5, maxMinSources));
         const sectionTopic = section.topic_pool[0] ?? null;
-        // Vary the query angle for each of the 5 fetches so we get DIFFERENT
-        // perspectives on the SAME inquiry question (rather than 5 near-duplicate
-        // articles). Hints rotate through complementary angles a historian would
-        // assemble for an SBQ pool.
+        // Vary the query angle for each fetch so we get DIFFERENT perspectives
+        // on the SAME inquiry question (rather than near-duplicate articles).
+        // Hints rotate through complementary angles a historian would assemble
+        // for an SBQ pool.
         const POOL_QUERY_HINTS = [
           "official government statement",
           "newspaper report contemporary",
           "speech address transcript",
           "memoir eyewitness account",
           "historian scholarly analysis",
+          "political cartoon poster propaganda",
         ];
         if (sectionTopic) {
           // Fetch sources in parallel with a hard per-fetch timeout. Sequential
