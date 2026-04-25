@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.generate-diagram]
 verify_jwt = false
+
+[functions.coach-review]
+verify_jwt = false
