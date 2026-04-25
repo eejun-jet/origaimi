@@ -1,49 +1,64 @@
-# Fix Objectives step: drop duplicate KO buckets, reorder AO → LO → KO
+# Assessment Coach — full v1 with all 7 checks
 
-## What's wrong today
+Replaces the "Coming soon" placeholder in the Coverage tab of `/assessment/$id` with a working Coach: a manual "Run Coach" button that fires a Lovable AI–powered review and renders structured findings inline.
 
-In Step 3 ("Objectives") of `/new`, after the user has already picked **Knowledge Outcomes (KO statements)** from each topic in Step 2, the wizard shows a second, hardcoded **"Knowledge Outcomes (KOs)"** card with a fixed list of 4 buckets — *Knowledge / Understanding / Application / Skills*. This is:
+## What ships
 
-- **Duplicate** — the per-topic KOs are already captured (each topic carries its `outcome_categories`), so this second selector adds noise.
-- **Wrong for History** — the History syllabus uses *knowledge / skills / values / attitudes*, not the 4 generic Bloom-style buckets.
-- **In the wrong order** — KOs appear *between* AOs and LOs, but the user wants AOs → LOs → KOs (filtered from the topic-derived KOs).
+- A new edge function `coach-review` that runs all 7 checks in a single Lovable AI call (Gemini 2.5 Pro for accuracy on AO/command-word judgements) and returns structured findings via tool calling.
+- Coach run history persisted in the existing `assessment_versions` table (label = `coach:<isoTimestamp>`, snapshot = findings + metadata). **No DB migration required** — the migration tool isn't available in this loop, and `assessment_versions` already has the right shape (`snapshot jsonb`, `label text`).
+- A new `CoachPanel` component in `src/routes/assessment.$id.tsx` that replaces the placeholder card. Lists previous runs, lets the teacher run a new review, renders the 7 sections with severity badges, links findings to questions, and surfaces "Apply suggestion" buttons that write a rewrite back into `assessment_questions`.
 
-The same fixed-bucket KO chip-row is repeated inside every per-section card in Step 4.
+## The 7 checks (model contract)
 
-## What we'll change
+1. **AO drift** — for each declared AO, compare syllabus weighting % against actual mark share of questions tagged with it. `warn` if delta > 8 pp, `fail` if > 15 pp.
+2. **Command-word audit** — extract leading verb of each stem; judge whether it matches the declared AO. History/Humanities uses MOE AO3 verbs (infer/compare/how-similar/how-far/evaluate); Sciences uses AO1=recall, AO2=apply, AO3=analyse.
+3. **KO/LO realisation** — list every KO and LO ticked at paper or section level that no question actually exercises.
+4. **Bloom & difficulty curve** — per section, flag clustering or anti-progression (hard before easy).
+5. **Source-question fit** — humanities only. Judges whether each SBQ's source actually supports the demanded skill (purpose ↔ authorship; compare ↔ two contrasting sources; infer ↔ implicit content).
+6. **Mark-scheme realism** — flag when declared marks differ from suggested marks by ≥ 1 given cognitive demand and command word.
+7. **Suggestions** — for every fail/warn, ONE one-line "Try: …" rewrite, same question type, ±1 mark of original.
 
-### 1. Step 3 — Objectives panel reordering and rebuild
+Returned strictly via a tool with a typed schema so we render deterministically.
 
-- **Remove** the hardcoded "Knowledge Outcomes (KOs)" card with the 4 fixed buckets (Knowledge / Understanding / Application / Skills).
-- **Reorder** the panel to:
-  1. **Assessment Objectives (AOs)** — unchanged
-  2. **Learning Outcomes (LOs)** — unchanged (already derived from selected topics + custom-add)
-  3. **Knowledge Outcomes (KOs)** — *new* card, populated from the **outcome_categories** of the topics actually selected in Step 2. Empty state: a one-line message saying "No KOs derived from the chosen topics — they'll be inferred from the topic metadata at generation time."
+## UX in the Coverage tab
 
-### 2. Step 4 — per-section card
+```text
+┌─ Assessment Coach ─────────────────┐
+│ Run Coach   ▼ Last run: 2 min ago  │
+│ 12 findings (3 fail · 5 warn · 4 info)
+├────────────────────────────────────┤
+│ Summary: ……                        │
+│ ▸ AO drift             2 findings  │
+│ ▸ Command words        3 findings  │
+│ ▸ Unrealised KO/LO     ……          │
+│ ▸ Bloom curve          1 finding   │
+│ ▸ Source fit           2 findings  │
+│ ▸ Mark scheme          ……          │
+│ ▸ Suggestions          5 rewrites  │
+└────────────────────────────────────┘
+```
 
-- Replace the "always show 4 fixed KO chips" row with the **same filtered list** the global panel produces, intersected with KOs that appear on that section's `topic_pool`. If a section's pool has no KOs, hide the KO chip-row for that section.
+Each finding is collapsible and links to its question (smooth-scroll to the question card on the left). "Apply suggestion" updates `assessment_questions.stem` for that question and re-records the run. "Dismiss" hides the finding for the current view (no DB write — re-running Coach starts fresh).
 
-### 3. Keep data flow & generator behaviour
+## Decisions baked in (per the questions I would have asked)
 
-- Continue saving `selectedKos` to `assessments.blueprint[].knowledge_outcomes` and section-level `knowledge_outcomes`, so the edge function (`generate-assessment`) doesn't change.
-- Validation in Step 3 stays the same (at least one of AO/KO/LO selected, or skippable).
+- **Scope**: all 7 checks (user requested "run all 7").
+- **Trigger**: manual "Run Coach" button — auto-running on every open would burn AI credits and confuse iteration.
+- **Persistence**: yes, every run stored in `assessment_versions` so teachers can compare runs after edits. A history dropdown in the panel lets them switch between runs.
 
 ## Technical notes
 
-Files touched:
+- **Files**:
+  - `supabase/functions/coach-review/index.ts` (new) — the edge function.
+  - `src/routes/assessment.$id.tsx` — replace the "Coming soon" card (lines 813–824) with `<CoachPanel/>`. Add the panel component, the run-coach call (`supabase.functions.invoke('coach-review', { body: { assessmentId } })`), and the apply-suggestion mutation. Load the latest stored run on mount via a `select * from assessment_versions where assessment_id=… and label like 'coach:%' order by created_at desc limit 10`.
+- **Model**: `google/gemini-2.5-pro` — Pro because the AO/command-word judgement is the hard part. Falls back gracefully on 429/402 with surfaced toasts.
+- **Token budget**: stems clipped to 1,200 chars and mark schemes to 600 chars before being sent to the model — keeps a 50-question paper well under the context limit.
+- **Storage shape**: `assessment_versions.snapshot = { kind: "coach_review", model, ran_at, total_actual_marks, total_marks, findings: { …7 sections… } }`. We use `label = "coach:<iso>"` to namespace these from teacher-saved versions.
+- **Errors**: 429 → "Rate limit reached. Try again in a minute." 402 → "AI credits exhausted." Other → "Coach is temporarily unavailable."
 
-- `src/routes/new.tsx`
-  - Remove the "Knowledge Outcomes (KOs)" `<div className="rounded-lg border ...">` block (lines ~817–846) and re-insert a similar block **after** the LO block, sourced from `availableKos` (already computed from selected topics' `outcomeCategories` — needs to be widened to surface *all* topic-derived categories, not just intersected with `KNOWLEDGE_OUTCOMES`).
-  - Update `availableKos` (lines ~262–277) to return the **deduped union of `outcomeCategories` across selected topics**, no longer filtered against the hardcoded `KNOWLEDGE_OUTCOMES` constant.
-  - Update the reset effect (line ~283) to filter `selectedKos` against the new dynamic `availableKos`.
-  - In `SectionCard` (line ~1414), replace `const koCandidates = KNOWLEDGE_OUTCOMES;` with the union of `outcome_categories` across the section's `topic_pool`. Hide the KO row when empty.
-  - Drop the now-unused `KNOWLEDGE_OUTCOMES` import (keep the type import if `assessment.$id.tsx` still needs it — that file is unaffected by this change).
+## Out of scope (for v1)
 
-No DB migration. No edge-function change. No new dependencies.
-
-## Out of scope
-
-- Changing how the History syllabus stores KOs (the `outcome_categories` data is already correct).
-- Touching the assessment review page (`/assessment/$id`).
-- Renaming "Knowledge Outcomes" to "Knowledge / Skills / Values / Attitudes" — the heading stays "Knowledge Outcomes (KOs)" and the chips show whatever the syllabus defines (so History naturally shows knowledge/skills/values/attitudes, Science shows its own set, etc.).
+- No auto-running on open.
+- No multi-run diff view (the runs are stored, but the diff UI is a v2 add).
+- No batching across multiple papers.
+- No teacher-overrideable severity thresholds — fixed in the prompt for now.

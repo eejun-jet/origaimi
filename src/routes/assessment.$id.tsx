@@ -19,7 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Loader2, RefreshCw, Trash2, BookmarkPlus, Sparkles, ChevronUp, ChevronDown, X, Download, Image as ImageIcon, Wand2, MessageCircle, UserPlus } from "lucide-react";
+import { ArrowLeft, Loader2, RefreshCw, Trash2, BookmarkPlus, Sparkles, ChevronUp, ChevronDown, X, Download, Image as ImageIcon, Wand2, MessageCircle, UserPlus, AlertTriangle, Info, CheckCircle2 } from "lucide-react";
 import { BLOOMS } from "@/lib/syllabus";
 import { toSectioned, sectionAtPosition, getSbqSkill, KNOWLEDGE_OUTCOMES, type Section } from "@/lib/sections";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -810,18 +810,11 @@ function EditorPage() {
                   totalActual={totalActual}
                 />
 
-                <div className="rounded-xl border border-border bg-card p-5">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-medium">Assessment Coach</h3>
-                    <span className="rounded-full bg-warm px-2 py-0.5 text-[10px] uppercase tracking-wide text-warm-foreground">
-                      Coming soon
-                    </span>
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Your embedded Assessment Literacy Coach will evaluate this paper against
-                    AO frameworks and surface actionable insights.
-                  </p>
-                </div>
+                <CoachPanel
+                  assessmentId={id}
+                  onScrollToQuestion={scrollToQuestion}
+                  onApplied={loadAll}
+                />
 
                 <div className="rounded-xl border border-border bg-card p-5">
                   <h3 className="font-medium">Total marks</h3>
@@ -1584,5 +1577,472 @@ function CoveragePanel({
         </div>
       )}
     </>
+  );
+}
+
+// ───────────────────────────── Assessment Coach panel ─────────────────────────
+
+type Severity = "info" | "warn" | "fail";
+
+type CoachFindings = {
+  summary: string;
+  ao_drift: { ao_code: string; declared_pct?: number; observed_pct: number; delta_pct?: number; severity: Severity; note: string }[];
+  command_word_issues: { question_id: string; position: number; detected_verb?: string; declared_ao?: string; expected_aos?: string[]; severity: Severity; note: string }[];
+  unrealised_outcomes: { kos: string[]; los: string[]; note: string };
+  bloom_curve: { section_letter: string; expected_progression?: string; observed_progression?: string; severity: Severity; note: string }[];
+  source_fit_issues: { question_id: string; position: number; required_skill?: string; source_type?: string; severity: Severity; note: string }[];
+  mark_scheme_flags: { question_id: string; position: number; marks_declared: number; marks_suggested?: number; severity: Severity; note: string }[];
+  suggestions: { question_id?: string; position?: number; rewrite: string; rationale: string; category: string }[];
+};
+
+type CoachRun = {
+  id: string;
+  ran_at: string;
+  model: string;
+  total_actual_marks: number;
+  total_marks: number;
+  findings: CoachFindings;
+};
+
+function CoachPanel({
+  assessmentId,
+  onScrollToQuestion,
+  onApplied,
+}: {
+  assessmentId: string;
+  onScrollToQuestion: (questionId: string) => void;
+  onApplied: () => void;
+}) {
+  const [runs, setRuns] = useState<CoachRun[]>([]);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [running, setRunning] = useState(false);
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [applyingId, setApplyingId] = useState<string | null>(null);
+
+  const loadRuns = async () => {
+    const { data } = await supabase
+      .from("assessment_versions")
+      .select("id, snapshot, created_at")
+      .eq("assessment_id", assessmentId)
+      .like("label", "coach:%")
+      .order("created_at", { ascending: false })
+      .limit(10);
+    const parsed: CoachRun[] = (data ?? [])
+      .map((r: any) => {
+        const s = r.snapshot ?? {};
+        if (s.kind !== "coach_review" || !s.findings) return null;
+        return {
+          id: r.id,
+          ran_at: s.ran_at ?? r.created_at,
+          model: s.model ?? "",
+          total_actual_marks: s.total_actual_marks ?? 0,
+          total_marks: s.total_marks ?? 0,
+          findings: s.findings as CoachFindings,
+        } as CoachRun;
+      })
+      .filter(Boolean) as CoachRun[];
+    setRuns(parsed);
+    if (parsed.length > 0 && !activeRunId) setActiveRunId(parsed[0].id);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    loadRuns();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assessmentId]);
+
+  const runCoach = async () => {
+    setRunning(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("coach-review", {
+        body: { assessmentId },
+      });
+      if (error) throw new Error(error.message || "Coach failed");
+      const payload = data as { error?: string; run_id?: string };
+      if (payload?.error) throw new Error(payload.error);
+      toast.success("Coach review ready");
+      setDismissed(new Set());
+      await loadRuns();
+      if (payload?.run_id) setActiveRunId(payload.run_id);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Coach failed");
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const applySuggestion = async (s: CoachFindings["suggestions"][number], key: string) => {
+    if (!s.question_id) {
+      toast.message("This is a paper-wide suggestion — apply it manually.");
+      return;
+    }
+    setApplyingId(key);
+    try {
+      const { error } = await supabase
+        .from("assessment_questions")
+        .update({ stem: s.rewrite })
+        .eq("id", s.question_id);
+      if (error) throw error;
+      setDismissed((prev) => new Set(prev).add(key));
+      toast.success("Suggestion applied");
+      onApplied();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not apply");
+    } finally {
+      setApplyingId(null);
+    }
+  };
+
+  const activeRun = runs.find((r) => r.id === activeRunId) ?? null;
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-primary" />
+          <h3 className="font-medium">Assessment Coach</h3>
+        </div>
+        <Button size="sm" onClick={runCoach} disabled={running} className="gap-1.5">
+          {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+          {running ? "Reviewing…" : runs.length > 0 ? "Re-run" : "Run Coach"}
+        </Button>
+      </div>
+
+      {loading ? (
+        <p className="mt-3 text-xs text-muted-foreground">Loading review history…</p>
+      ) : runs.length === 0 ? (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Run the Coach to evaluate this paper against the AO framework, command-word
+          conventions, and outcome coverage. Each run is saved so you can compare iterations.
+        </p>
+      ) : (
+        <>
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <Select
+              value={activeRunId ?? undefined}
+              onValueChange={(v) => { setActiveRunId(v); setDismissed(new Set()); }}
+            >
+              <SelectTrigger className="h-7 text-[11px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {runs.map((r, i) => (
+                  <SelectItem key={r.id} value={r.id} className="text-xs">
+                    {i === 0 ? "Latest · " : ""}{new Date(r.ran_at).toLocaleString()}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {activeRun && <FindingTotals findings={activeRun.findings} dismissed={dismissed} />}
+          </div>
+
+          {activeRun && (
+            <CoachReviewBody
+              findings={activeRun.findings}
+              dismissed={dismissed}
+              onDismiss={(key) => setDismissed((prev) => new Set(prev).add(key))}
+              onScrollToQuestion={onScrollToQuestion}
+              onApply={applySuggestion}
+              applyingId={applyingId}
+            />
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function FindingTotals({ findings, dismissed }: { findings: CoachFindings; dismissed: Set<string> }) {
+  const all = collectFindings(findings);
+  const visible = all.filter((f) => !dismissed.has(f.key));
+  const fail = visible.filter((f) => f.severity === "fail").length;
+  const warn = visible.filter((f) => f.severity === "warn").length;
+  const info = visible.filter((f) => f.severity === "info").length;
+  return (
+    <div className="flex shrink-0 items-center gap-1 text-[10px]">
+      {fail > 0 && <span className="rounded-full bg-destructive/15 px-1.5 py-0.5 font-medium text-destructive">{fail} fail</span>}
+      {warn > 0 && <span className="rounded-full bg-warm/40 px-1.5 py-0.5 font-medium text-warm-foreground">{warn} warn</span>}
+      {info > 0 && <span className="rounded-full bg-muted px-1.5 py-0.5 font-medium text-muted-foreground">{info} info</span>}
+      {fail + warn + info === 0 && <span className="rounded-full bg-success/15 px-1.5 py-0.5 font-medium text-success">All clear</span>}
+    </div>
+  );
+}
+
+type FlatFinding = { key: string; severity: Severity };
+function collectFindings(f: CoachFindings): FlatFinding[] {
+  const out: FlatFinding[] = [];
+  f.ao_drift?.forEach((x, i) => out.push({ key: `ao:${i}`, severity: x.severity }));
+  f.command_word_issues?.forEach((x, i) => out.push({ key: `cw:${i}`, severity: x.severity }));
+  f.bloom_curve?.forEach((x, i) => out.push({ key: `bc:${i}`, severity: x.severity }));
+  f.source_fit_issues?.forEach((x, i) => out.push({ key: `sf:${i}`, severity: x.severity }));
+  f.mark_scheme_flags?.forEach((x, i) => out.push({ key: `ms:${i}`, severity: x.severity }));
+  const u = f.unrealised_outcomes;
+  if (u && (u.kos?.length || u.los?.length)) out.push({ key: "uo:0", severity: "warn" });
+  return out;
+}
+
+function SeverityIcon({ severity }: { severity: Severity }) {
+  if (severity === "fail") return <AlertTriangle className="h-3.5 w-3.5 text-destructive" />;
+  if (severity === "warn") return <AlertTriangle className="h-3.5 w-3.5 text-warm-foreground" />;
+  return <Info className="h-3.5 w-3.5 text-muted-foreground" />;
+}
+
+function CoachReviewBody({
+  findings,
+  dismissed,
+  onDismiss,
+  onScrollToQuestion,
+  onApply,
+  applyingId,
+}: {
+  findings: CoachFindings;
+  dismissed: Set<string>;
+  onDismiss: (key: string) => void;
+  onScrollToQuestion: (id: string) => void;
+  onApply: (s: CoachFindings["suggestions"][number], key: string) => void;
+  applyingId: string | null;
+}) {
+  return (
+    <div className="mt-3 space-y-2 text-xs">
+      {findings.summary && (
+        <div className="rounded-md bg-muted/50 p-2 text-[11px] leading-relaxed text-foreground">
+          {findings.summary}
+        </div>
+      )}
+
+      <CoachSection
+        title="AO drift"
+        count={findings.ao_drift?.filter((_, i) => !dismissed.has(`ao:${i}`)).length ?? 0}
+      >
+        {findings.ao_drift?.map((d, i) => {
+          const key = `ao:${i}`;
+          if (dismissed.has(key)) return null;
+          return (
+            <FindingCard key={key} severity={d.severity} onDismiss={() => onDismiss(key)}>
+              <div className="font-medium">{d.ao_code}{typeof d.observed_pct === "number" && <> · {d.observed_pct}%{typeof d.declared_pct === "number" && <span className="text-muted-foreground"> (target {d.declared_pct}%)</span>}</>}</div>
+              <p className="mt-0.5 text-muted-foreground">{d.note}</p>
+            </FindingCard>
+          );
+        })}
+      </CoachSection>
+
+      <CoachSection
+        title="Command words"
+        count={findings.command_word_issues?.filter((_, i) => !dismissed.has(`cw:${i}`)).length ?? 0}
+      >
+        {findings.command_word_issues?.map((d, i) => {
+          const key = `cw:${i}`;
+          if (dismissed.has(key)) return null;
+          return (
+            <FindingCard key={key} severity={d.severity} onDismiss={() => onDismiss(key)}
+              onJump={d.question_id ? () => onScrollToQuestion(d.question_id) : undefined}>
+              <div className="font-medium">Q{d.position + 1}{d.detected_verb && <> · "{d.detected_verb}"</>}</div>
+              <p className="mt-0.5 text-muted-foreground">{d.note}</p>
+              {d.expected_aos && d.expected_aos.length > 0 && (
+                <p className="mt-0.5 text-[10px] text-muted-foreground">Expected: {d.expected_aos.join(", ")}{d.declared_ao && <> · declared {d.declared_ao}</>}</p>
+              )}
+            </FindingCard>
+          );
+        })}
+      </CoachSection>
+
+      <CoachSection
+        title="Unrealised KO/LO"
+        count={dismissed.has("uo:0") ? 0 : ((findings.unrealised_outcomes?.kos?.length ?? 0) + (findings.unrealised_outcomes?.los?.length ?? 0) > 0 ? 1 : 0)}
+      >
+        {!dismissed.has("uo:0") && findings.unrealised_outcomes && (findings.unrealised_outcomes.kos?.length || findings.unrealised_outcomes.los?.length) ? (
+          <FindingCard severity="warn" onDismiss={() => onDismiss("uo:0")}>
+            {findings.unrealised_outcomes.note && <p className="text-muted-foreground">{findings.unrealised_outcomes.note}</p>}
+            {findings.unrealised_outcomes.kos?.length > 0 && (
+              <div className="mt-1">
+                <span className="font-medium">KOs missed:</span>{" "}
+                <span className="text-muted-foreground">{findings.unrealised_outcomes.kos.join("; ")}</span>
+              </div>
+            )}
+            {findings.unrealised_outcomes.los?.length > 0 && (
+              <div className="mt-1">
+                <span className="font-medium">LOs missed:</span>{" "}
+                <span className="text-muted-foreground">{findings.unrealised_outcomes.los.join("; ")}</span>
+              </div>
+            )}
+          </FindingCard>
+        ) : null}
+      </CoachSection>
+
+      <CoachSection
+        title="Bloom & difficulty"
+        count={findings.bloom_curve?.filter((_, i) => !dismissed.has(`bc:${i}`)).length ?? 0}
+      >
+        {findings.bloom_curve?.map((d, i) => {
+          const key = `bc:${i}`;
+          if (dismissed.has(key)) return null;
+          return (
+            <FindingCard key={key} severity={d.severity} onDismiss={() => onDismiss(key)}>
+              <div className="font-medium">Section {d.section_letter}</div>
+              <p className="mt-0.5 text-muted-foreground">{d.note}</p>
+              {(d.expected_progression || d.observed_progression) && (
+                <p className="mt-0.5 text-[10px] text-muted-foreground">
+                  {d.expected_progression && <>Expected: {d.expected_progression}</>}
+                  {d.expected_progression && d.observed_progression && " · "}
+                  {d.observed_progression && <>Observed: {d.observed_progression}</>}
+                </p>
+              )}
+            </FindingCard>
+          );
+        })}
+      </CoachSection>
+
+      <CoachSection
+        title="Source fit"
+        count={findings.source_fit_issues?.filter((_, i) => !dismissed.has(`sf:${i}`)).length ?? 0}
+      >
+        {findings.source_fit_issues?.map((d, i) => {
+          const key = `sf:${i}`;
+          if (dismissed.has(key)) return null;
+          return (
+            <FindingCard key={key} severity={d.severity} onDismiss={() => onDismiss(key)}
+              onJump={d.question_id ? () => onScrollToQuestion(d.question_id) : undefined}>
+              <div className="font-medium">Q{d.position + 1}{d.required_skill && <> · {d.required_skill}</>}</div>
+              <p className="mt-0.5 text-muted-foreground">{d.note}</p>
+            </FindingCard>
+          );
+        })}
+      </CoachSection>
+
+      <CoachSection
+        title="Mark scheme"
+        count={findings.mark_scheme_flags?.filter((_, i) => !dismissed.has(`ms:${i}`)).length ?? 0}
+      >
+        {findings.mark_scheme_flags?.map((d, i) => {
+          const key = `ms:${i}`;
+          if (dismissed.has(key)) return null;
+          return (
+            <FindingCard key={key} severity={d.severity} onDismiss={() => onDismiss(key)}
+              onJump={d.question_id ? () => onScrollToQuestion(d.question_id) : undefined}>
+              <div className="font-medium">
+                Q{d.position + 1} · {d.marks_declared}m
+                {typeof d.marks_suggested === "number" && d.marks_suggested !== d.marks_declared && (
+                  <span className="text-muted-foreground"> → suggest {d.marks_suggested}m</span>
+                )}
+              </div>
+              <p className="mt-0.5 text-muted-foreground">{d.note}</p>
+            </FindingCard>
+          );
+        })}
+      </CoachSection>
+
+      <CoachSection
+        title="Suggestions"
+        count={findings.suggestions?.filter((_, i) => !dismissed.has(`sg:${i}`)).length ?? 0}
+      >
+        {findings.suggestions?.map((s, i) => {
+          const key = `sg:${i}`;
+          if (dismissed.has(key)) return null;
+          return (
+            <div key={key} className="rounded-md border border-border bg-background/50 p-2">
+              <div className="flex items-start gap-2">
+                <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                <div className="flex-1 space-y-1">
+                  {typeof s.position === "number" && (
+                    <button
+                      className="text-[10px] font-medium uppercase tracking-wide text-primary hover:underline"
+                      onClick={() => s.question_id && onScrollToQuestion(s.question_id)}
+                    >
+                      Q{s.position + 1} · {s.category}
+                    </button>
+                  )}
+                  <p className="text-[11px] leading-relaxed text-foreground">{s.rewrite}</p>
+                  <p className="text-[10px] text-muted-foreground">{s.rationale}</p>
+                </div>
+              </div>
+              <div className="mt-2 flex items-center justify-end gap-1">
+                <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => onDismiss(key)}>
+                  Dismiss
+                </Button>
+                {s.question_id && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 gap-1 px-2 text-[10px]"
+                    onClick={() => onApply(s, key)}
+                    disabled={applyingId === key}
+                  >
+                    {applyingId === key ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wand2 className="h-3 w-3" />}
+                    Apply
+                  </Button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </CoachSection>
+    </div>
+  );
+}
+
+function CoachSection({ title, count, children }: { title: string; count: number; children: React.ReactNode }) {
+  const [open, setOpen] = useState(count > 0);
+  useEffect(() => { if (count > 0) setOpen(true); }, [count]);
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md px-1.5 py-1 text-[11px] font-medium hover:bg-muted/40">
+        <span className="flex items-center gap-1.5">
+          {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+          {title}
+        </span>
+        <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${count > 0 ? "bg-muted text-foreground" : "text-muted-foreground"}`}>
+          {count}
+        </span>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-1 space-y-1.5">
+        {count === 0 ? (
+          <p className="px-1.5 text-[10px] text-muted-foreground">No findings.</p>
+        ) : (
+          children
+        )}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function FindingCard({
+  severity,
+  children,
+  onDismiss,
+  onJump,
+}: {
+  severity: Severity;
+  children: React.ReactNode;
+  onDismiss?: () => void;
+  onJump?: () => void;
+}) {
+  const tone =
+    severity === "fail"
+      ? "border-destructive/30 bg-destructive/5"
+      : severity === "warn"
+      ? "border-warm/40 bg-warm/10"
+      : "border-border bg-background/50";
+  return (
+    <div className={`rounded-md border p-2 ${tone}`}>
+      <div className="flex items-start gap-2">
+        <SeverityIcon severity={severity} />
+        <div className="flex-1 text-[11px] leading-relaxed">{children}</div>
+      </div>
+      {(onDismiss || onJump) && (
+        <div className="mt-1.5 flex items-center justify-end gap-1">
+          {onJump && (
+            <Button size="sm" variant="ghost" className="h-5 px-1.5 text-[10px]" onClick={onJump}>
+              Jump →
+            </Button>
+          )}
+          {onDismiss && (
+            <Button size="sm" variant="ghost" className="h-5 px-1.5 text-[10px]" onClick={onDismiss}>
+              Dismiss
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

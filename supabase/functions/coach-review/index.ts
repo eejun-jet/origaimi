@@ -1,0 +1,362 @@
+// Assessment Coach — runs 7 review checks against a generated paper and
+// returns structured findings. Persists each run as a row in
+// `assessment_versions` (label='coach:<isoTimestamp>', snapshot=findings)
+// so teachers can compare iterations after they edit the paper.
+
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.0";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
+
+const COACH_TOOL = {
+  type: "function",
+  function: {
+    name: "submit_coach_review",
+    description: "Submit the structured Assessment Coach review covering all 7 checks.",
+    parameters: {
+      type: "object",
+      properties: {
+        summary: { type: "string", description: "2-3 sentence headline verdict for the teacher." },
+        ao_drift: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              ao_code: { type: "string" },
+              declared_pct: { type: "number" },
+              observed_pct: { type: "number" },
+              delta_pct: { type: "number" },
+              severity: { type: "string", enum: ["info", "warn", "fail"] },
+              note: { type: "string" },
+            },
+            required: ["ao_code", "observed_pct", "severity", "note"],
+            additionalProperties: false,
+          },
+        },
+        command_word_issues: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              question_id: { type: "string" },
+              position: { type: "number" },
+              detected_verb: { type: "string" },
+              declared_ao: { type: "string" },
+              expected_aos: { type: "array", items: { type: "string" } },
+              severity: { type: "string", enum: ["info", "warn", "fail"] },
+              note: { type: "string" },
+            },
+            required: ["question_id", "position", "severity", "note"],
+            additionalProperties: false,
+          },
+        },
+        unrealised_outcomes: {
+          type: "object",
+          properties: {
+            kos: { type: "array", items: { type: "string" } },
+            los: { type: "array", items: { type: "string" } },
+            note: { type: "string" },
+          },
+          required: ["kos", "los", "note"],
+          additionalProperties: false,
+        },
+        bloom_curve: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              section_letter: { type: "string" },
+              expected_progression: { type: "string" },
+              observed_progression: { type: "string" },
+              severity: { type: "string", enum: ["info", "warn", "fail"] },
+              note: { type: "string" },
+            },
+            required: ["section_letter", "severity", "note"],
+            additionalProperties: false,
+          },
+        },
+        source_fit_issues: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              question_id: { type: "string" },
+              position: { type: "number" },
+              required_skill: { type: "string" },
+              source_type: { type: "string" },
+              severity: { type: "string", enum: ["info", "warn", "fail"] },
+              note: { type: "string" },
+            },
+            required: ["question_id", "position", "severity", "note"],
+            additionalProperties: false,
+          },
+        },
+        mark_scheme_flags: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              question_id: { type: "string" },
+              position: { type: "number" },
+              marks_declared: { type: "number" },
+              marks_suggested: { type: "number" },
+              severity: { type: "string", enum: ["info", "warn", "fail"] },
+              note: { type: "string" },
+            },
+            required: ["question_id", "position", "marks_declared", "severity", "note"],
+            additionalProperties: false,
+          },
+        },
+        suggestions: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              question_id: { type: "string", description: "May be empty for paper-wide suggestions." },
+              position: { type: "number" },
+              rewrite: { type: "string", description: "A one-line rewrite the teacher can accept." },
+              rationale: { type: "string" },
+              category: {
+                type: "string",
+                enum: ["ao", "command_word", "ko_lo", "bloom", "source_fit", "marks", "other"],
+              },
+            },
+            required: ["rewrite", "rationale", "category"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: [
+        "summary",
+        "ao_drift",
+        "command_word_issues",
+        "unrealised_outcomes",
+        "bloom_curve",
+        "source_fit_issues",
+        "mark_scheme_flags",
+        "suggestions",
+      ],
+      additionalProperties: false,
+    },
+  },
+};
+
+const HUMANITIES_KEYWORDS = ["history", "humanit", "social studies", "geograph"];
+const isHumanities = (subject: string | null | undefined) =>
+  !!subject && HUMANITIES_KEYWORDS.some((k) => subject.toLowerCase().includes(k));
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  try {
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    const body = await req.json().catch(() => ({}));
+    const assessmentId: string | undefined = body.assessmentId;
+    if (!assessmentId) {
+      return new Response(JSON.stringify({ error: "assessmentId required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const [{ data: assessment, error: aErr }, { data: questions, error: qErr }] = await Promise.all([
+      supabase.from("assessments").select("*").eq("id", assessmentId).single(),
+      supabase.from("assessment_questions").select("*").eq("assessment_id", assessmentId).order("position"),
+    ]);
+
+    if (aErr || !assessment) {
+      return new Response(JSON.stringify({ error: "Assessment not found" }), {
+        status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (qErr || !questions || questions.length === 0) {
+      return new Response(
+        JSON.stringify({ error: "This paper has no questions yet — generate it first." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    let aoDefs: { code: string; title: string | null; description: string | null; weighting_percent: number | null }[] = [];
+    if (assessment.syllabus_doc_id) {
+      const { data } = await supabase
+        .from("syllabus_assessment_objectives")
+        .select("code,title,description,weighting_percent")
+        .eq("source_doc_id", assessment.syllabus_doc_id)
+        .order("position");
+      aoDefs = (data ?? []) as typeof aoDefs;
+    }
+
+    const totalActual = (questions as any[]).reduce((s: number, q: any) => s + (q.marks ?? 0), 0);
+    const isHum = isHumanities(assessment.subject);
+
+    const sectionedBlueprint = Array.isArray(assessment.blueprint) ? assessment.blueprint : [];
+    const compactQuestions = (questions as any[]).map((q) => ({
+      id: q.id,
+      position: q.position,
+      type: q.question_type,
+      topic: q.topic,
+      bloom: q.bloom_level,
+      difficulty: q.difficulty,
+      marks: q.marks,
+      stem: typeof q.stem === "string" ? q.stem.slice(0, 1200) : "",
+      options: q.options ?? null,
+      mark_scheme: typeof q.mark_scheme === "string" ? q.mark_scheme.slice(0, 600) : null,
+      ao_codes: q.ao_codes ?? [],
+      knowledge_outcomes: q.knowledge_outcomes ?? [],
+      learning_outcomes: q.learning_outcomes ?? [],
+      source_excerpt: typeof q.source_excerpt === "string" ? q.source_excerpt.slice(0, 600) : null,
+      source_url: q.source_url ?? null,
+    }));
+
+    const sys = `You are an experienced Singapore MOE Head of Department reviewing a junior teacher's draft assessment for ${assessment.level} ${assessment.subject}.
+Your job is the Assessment Literacy Coach. Be candid but constructive — no empty praise. Use British spelling and Singapore phrasing.
+
+Run all 7 checks and submit your findings via the submit_coach_review tool:
+
+1. AO drift — for each declared AO, compare its syllabus weighting % against the actual mark share of questions tagged with it. Flag deltas > 8 pp as warn and > 15 pp as fail. Also flag questions whose AO tag is too generous (stem only requires AO1 recall but tagged AO2/AO3).
+
+2. Command-word audit — extract the leading verb of each stem and judge whether it matches the declared AO. ${
+      isHum
+        ? "For History/Humanities: infer/compare/how-similar/how-different/how-far → AO3; describe/identify → AO1; explain/account-for → AO2."
+        : "For Sciences: AO1=recall (state, define, list); AO2=apply (calculate, explain, predict); AO3=analyse/evaluate."
+    }
+
+3. KO/LO realisation — list every KO and LO ticked on the paper or its sections that no question actually exercises. Skip outcomes that are adequately covered.
+
+4. Bloom & difficulty curve — per section, check the question-by-question Bloom and difficulty ramp. Flag clustering (e.g. 4 recall items in a row) or anti-progression (hard before easy).
+
+5. Source-question fit (SBQs only — ${isHum ? "this paper is humanities, so check this carefully" : "this paper is not humanities, so return an empty array"}). For each source-based question, judge whether the cited source actually supports the demanded skill: a "purpose" question needs clear authorship/context; a "compare" question needs two sources with non-trivial similarity/difference; an "infer" question needs implicit content not on the surface.
+
+6. Mark-scheme realism — for each question, judge whether marks_declared matches the cognitive demand and command word. Suggest marks_suggested when it is off by ≥ 1.
+
+7. Suggestions — for every fail or warn, attach at most ONE one-line "Try: …" rewrite that the teacher can apply. Keep rewrites in the same question type and within ±1 mark of the original.
+
+Return STRICTLY through the tool. Do not include prose outside the tool call. If a check has no findings, return an empty array (not omitted).`;
+
+    const userPayload = {
+      assessment: {
+        id: assessment.id,
+        title: assessment.title,
+        subject: assessment.subject,
+        level: assessment.level,
+        total_marks: assessment.total_marks,
+        total_actual_marks: totalActual,
+        instructions: assessment.instructions ?? null,
+        sections: sectionedBlueprint,
+      },
+      ao_definitions: aoDefs,
+      questions: compactQuestions,
+    };
+
+    const user = `Review this paper and submit findings via the tool.\n\n${JSON.stringify(userPayload)}`;
+    // Flash is ~5× faster than Pro at this task and still strong on
+    // tool-call structured output. Switch to Pro if quality complaints come up.
+    const model = "google/gemini-2.5-flash";
+
+    const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: sys },
+          { role: "user", content: user },
+        ],
+        tools: [COACH_TOOL],
+        tool_choice: { type: "function", function: { name: "submit_coach_review" } },
+      }),
+    });
+
+    if (aiResp.status === 429) {
+      return new Response(JSON.stringify({ error: "Rate limit reached. Try again in a minute." }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (aiResp.status === 402) {
+      return new Response(JSON.stringify({ error: "AI credits exhausted. Top up to continue." }), {
+        status: 402,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (!aiResp.ok) {
+      const errTxt = await aiResp.text();
+      console.error("coach-review AI error:", aiResp.status, errTxt);
+      return new Response(
+        JSON.stringify({ error: "Coach is temporarily unavailable. Please retry." }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    const aiJson = await aiResp.json();
+    const toolCall = aiJson?.choices?.[0]?.message?.tool_calls?.[0];
+    if (!toolCall?.function?.arguments) {
+      console.error("coach-review: no tool call returned", JSON.stringify(aiJson).slice(0, 500));
+      return new Response(JSON.stringify({ error: "Coach returned no findings — try again." }), {
+        status: 502,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    let findings: any;
+    try {
+      findings = JSON.parse(toolCall.function.arguments);
+    } catch (e) {
+      console.error("coach-review: bad tool args", e);
+      return new Response(JSON.stringify({ error: "Coach output was malformed — try again." }), {
+        status: 502,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const ranAt = new Date().toISOString();
+    const { data: stored, error: storeErr } = await supabase
+      .from("assessment_versions")
+      .insert({
+        assessment_id: assessmentId,
+        user_id: assessment.user_id,
+        label: `coach:${ranAt}`,
+        snapshot: {
+          kind: "coach_review",
+          model,
+          ran_at: ranAt,
+          total_actual_marks: totalActual,
+          total_marks: assessment.total_marks,
+          findings,
+        },
+      })
+      .select("id, created_at")
+      .single();
+
+    if (storeErr) {
+      console.error("coach-review: persist failed", storeErr);
+    }
+
+    return new Response(
+      JSON.stringify({
+        run_id: stored?.id ?? null,
+        ran_at: ranAt,
+        model,
+        total_actual_marks: totalActual,
+        findings,
+      }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  } catch (e: any) {
+    console.error("coach-review fatal:", e);
+    return new Response(JSON.stringify({ error: e?.message ?? "Unknown error" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});
