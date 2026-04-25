@@ -498,8 +498,8 @@ export async function fetchGroundedSource(
   // Strict AND-gate: excerpt must hit BOTH a proportional threshold AND a
   // minimum number of distinct syllabus keywords. Previous OR-gate let pages
   // with a single repeated keyword pass even when off-topic.
-  const MIN_RELEVANCE = 0.30;
-  const MIN_RELEVANCE_HITS = 3;
+  const MIN_RELEVANCE = 0.25;
+  const MIN_RELEVANCE_HITS = 2;
 
   // Walk the query chain (most specific → most general) until we get hits.
   for (const query of queries) {
