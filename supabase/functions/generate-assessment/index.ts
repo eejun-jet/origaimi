@@ -524,6 +524,7 @@ ${blocks}
   const marksGuide = remainder > 0
     ? `Distribute ${section.marks} marks across ${section.num_questions} questions. Most questions get ${perQMarks} marks; ${remainder} question(s) get 1 extra mark.`
     : `Each of the ${section.num_questions} question(s) is worth ${perQMarks} marks (total ${section.marks}).`;
+  const marksHardCap = `HARD CONSTRAINT: the SUM of "marks" across the ${section.num_questions} question(s) MUST equal EXACTLY ${section.marks}. Do NOT exceed ${section.marks} under any circumstances. If the natural mark for a part would push the section past ${section.marks}, lower it.`;
 
   const sectionLabel = section.name ? `Section ${section.letter} — ${section.name}` : `Section ${section.letter}`;
 
