@@ -975,7 +975,7 @@ function NewAssessment() {
                 )}
               </div>
 
-
+              <p className="text-xs text-muted-foreground">
                 You can narrow these targets per section in the next step. Sections inherit your picks here.
               </p>
             </div>
