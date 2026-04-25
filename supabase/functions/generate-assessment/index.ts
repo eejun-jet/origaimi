@@ -883,6 +883,24 @@ Deno.serve(async (req) => {
           for (const src of settled) {
             if (src) sharedSourcePool.push(src);
           }
+          // Belt-and-suspenders: even with the shared tierBudget, parallel
+          // fetches can race past the cap. Drop excess Tier-2 sources here.
+          const { humanitiesTier } = await import("./sources.ts");
+          let tier2Kept = 0;
+          const trimmed: typeof sharedSourcePool = [];
+          for (const src of sharedSourcePool) {
+            const host = (() => { try { return new URL(src.source_url).hostname.toLowerCase(); } catch { return ""; } })();
+            if (humanitiesTier(host) === 2) {
+              if (tier2Kept >= 1) {
+                console.warn(`[generate] dropping excess Tier-2 source ${host} from SBQ pool`);
+                continue;
+              }
+              tier2Kept++;
+            }
+            trimmed.push(src);
+          }
+          sharedSourcePool.length = 0;
+          sharedSourcePool.push(...trimmed);
         }
         console.log(`[generate] section ${section.letter} SBQ pool: ${sharedSourcePool.length} sources (target ${poolSize})`);
         // Every question slot references the SAME shared pool.
