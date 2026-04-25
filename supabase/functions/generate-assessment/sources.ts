@@ -85,17 +85,22 @@ const DENY_DOMAINS = [
 const HUMANITIES_TIER_1_PRIMARY = new Set([
   "nas.gov.sg", "eresources.nlb.gov.sg", "nlb.gov.sg", "roots.gov.sg",
   "mindef.gov.sg", "gov.sg",
-  "nationalarchives.gov.uk", "bl.uk", "archives.gov", "loc.gov",
+  "nationalarchives.gov.uk", "bl.uk",
+  "parliament.uk", "hansard.parliament.uk",
+  "archives.gov", "loc.gov", "nara.gov",
+  "state.gov", "cia.gov",
   "iwm.org.uk", "awm.gov.au", "ushmm.org", "un.org",
   "avalon.law.yale.edu", "founders.archives.gov", "fordham.edu",
-  "wilsoncenter.org",
+  "wilsoncenter.org", "digitalarchive.wilsoncenter.org",
+  "cvce.eu", "marxists.org", "digital.library.cornell.edu",
 ]);
+// Tier 2 = historian / scholarly secondary perspective. Britannica deliberately
+// excluded — it is a tertiary reference (Tier 3), not a historian's voice.
 const HUMANITIES_TIER_2_HISTORIAN = new Set([
-  "jstor.org", "historytoday.com", "historyextra.com",
-  "oxfordre.com", "britannica.com",
+  "jstor.org", "historytoday.com", "historyextra.com", "oxfordre.com",
 ]);
 
-function humanitiesTier(host: string): 1 | 2 | 3 {
+export function humanitiesTier(host: string): 1 | 2 | 3 {
   // Walk parent domains for subdomain matches (e.g. www.nas.gov.sg → nas.gov.sg).
   const parts = host.split(".");
   for (let i = 0; i < parts.length; i++) {
@@ -103,8 +108,13 @@ function humanitiesTier(host: string): 1 | 2 | 3 {
     if (HUMANITIES_TIER_1_PRIMARY.has(d)) return 1;
     if (HUMANITIES_TIER_2_HISTORIAN.has(d)) return 2;
   }
+  // Generic TLD heuristic: official government / academic / military hosts are
+  // treated as primary by default.
+  if (HUMANITIES_TLD_TIER_1.some((tld) => host.endsWith(tld) || host.includes(tld + "."))) return 1;
   return 3;
 }
+
+export type TierBudget = { tier2Used: number; maxTier2: number };
 
 const MIN_WORDS = 150;
 const MAX_WORDS = 240;
