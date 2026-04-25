@@ -954,19 +954,20 @@ function NewAssessment() {
                         </label>
                       );
                     })()}
-                    <div className="mt-2 flex flex-wrap gap-1.5">
+                    <div className="mt-2 max-h-72 space-y-1 overflow-auto rounded-md border border-border bg-background p-2">
                       {availableKos.map((ko) => {
                         const checked = selectedKos.includes(ko);
+                        const isShort = ko.length <= 40;
                         return (
                           <label
                             key={ko}
-                            className={`flex cursor-pointer items-center gap-2 rounded-full border px-2.5 py-1 text-xs transition-colors ${checked ? "border-primary bg-primary-soft/40" : "border-border hover:bg-muted/40"}`}
+                            className={`flex cursor-pointer items-start gap-2 rounded p-1.5 text-xs ${checked ? "bg-primary-soft/40" : "hover:bg-muted/40"}`}
                           >
                             <Checkbox
                               checked={checked}
                               onCheckedChange={() => setSelectedKos((prev) => toggle(prev, ko))}
                             />
-                            <span className="capitalize">{ko}</span>
+                            <span className={`flex-1 whitespace-pre-line ${isShort ? "capitalize" : ""}`}>{ko}</span>
                           </label>
                         );
                       })}
