@@ -282,7 +282,7 @@ function NewAssessment() {
   // teacher typed (anything not in derivedLos is preserved as custom).
   useEffect(() => {
     setSelectedAoCodes((prev) => prev.filter((c) => docAOs.some((a) => a.code === c)));
-    setSelectedKos((prev) => prev.filter((k) => availableKos.includes(k as typeof KNOWLEDGE_OUTCOMES[number])));
+    setSelectedKos((prev) => prev.filter((k) => availableKos.includes(k)));
     setSelectedLos((prev) => {
       // keep selections that are still derivable OR were custom (not in derivedLos)
       const derivedSet = new Set(derivedLos);
