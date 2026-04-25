@@ -5,7 +5,7 @@
 //
 // Returns null if no usable 100–180 word excerpt can be extracted.
 
-import { tavilySearch, hasTavily } from "../_shared/tavily.ts";
+import { tavilyExtract, tavilySearch, hasTavily } from "../_shared/tavily.ts";
 
 const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY") ?? "";
 
@@ -441,7 +441,7 @@ async function firecrawlSearch(query: string, allowList: string[], allowGenericT
       Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ query, limit: 15 }),
+    body: JSON.stringify({ query, limit: 8 }),
   });
   if (!resp.ok) {
     console.warn("[sources] firecrawl search failed", resp.status, await resp.text());
@@ -454,7 +454,7 @@ async function firecrawlSearch(query: string, allowList: string[], allowGenericT
     const url = r?.url ?? r?.link;
     if (typeof url === "string") urls.push(url);
   }
-  return urls.filter((u) => isAllowed(u, allowList, allowGenericTlds)).slice(0, 10);
+  return urls.filter((u) => isAllowed(u, allowList, allowGenericTlds)).slice(0, 6);
 }
 
 /** Try Tavily first (native domain filtering), fall back to Firecrawl. */
@@ -465,10 +465,10 @@ async function searchUrls(query: string, allowList: string[], allowGenericTlds: 
     const { results } = await tavilySearch(query, {
       includeDomains: allowGenericTlds ? undefined : allowList,
       excludeDomains: DENY_DOMAINS,
-      maxResults: 15,
+      maxResults: 8,
     });
     const urls = results.map((r) => r.url).filter((u) => isAllowed(u, allowList, allowGenericTlds));
-    if (urls.length > 0) return urls.slice(0, 10);
+    if (urls.length > 0) return urls.slice(0, 6);
     console.warn("[sources] tavily returned 0 allow-listed results, falling back to firecrawl");
   }
   return firecrawlSearch(query, allowList, allowGenericTlds);
