@@ -455,9 +455,16 @@ function buildInquiryQuestion(topicNoun: string, skills: (SbqSkillDef | null)[])
 }
 
 function buildDeterministicSbqQuestions(section: Section, sources: GroundedSource[], skills: (SbqSkillDef | null)[]): any[] {
-  const topic = section.topic_pool[0]?.topic ?? "the issue";
-  const cleanTopic = topic.replace(/\*$/, "");
-  const inquiry = `How far did the developments in ${cleanTopic} shape the issue being studied?`;
+  const rawTopic = section.topic_pool[0]?.topic ?? "";
+  const sectionLOs = section.topic_pool[0]?.learning_outcomes
+    ?? section.learning_outcomes
+    ?? [];
+  // Concise noun phrase for {T} — never paste the LO directive into the stem.
+  const topicNoun = deriveTopicNoun(rawTopic, sectionLOs);
+  // Topic field stored on the row (used for tagging only, not the stem).
+  const topicTag = stripCodePrefix(rawTopic).replace(/\*+$/, "").trim() || topicNoun;
+  const inquiry = buildInquiryQuestion(topicNoun, skills);
+
   const perQMarks = Math.floor(section.marks / Math.max(1, section.num_questions));
   const remainder = section.marks - perQMarks * section.num_questions;
   const labels = sources.map((_, i) => String.fromCharCode(65 + i));
@@ -479,7 +486,7 @@ function buildDeterministicSbqQuestions(section: Section, sources: GroundedSourc
       .replace(/\{S1\}/g, single)
       .replace(/\{S2\}/g, second)
       .replace(/\{ALL\}/g, allLabels)
-      .replace(/\{T\}/g, cleanTopic)
+      .replace(/\{T\}/g, topicNoun)
       .replace(/\{P\}/g, part);
 
     let answer: string;
@@ -496,14 +503,14 @@ function buildDeterministicSbqQuestions(section: Section, sources: GroundedSourc
     } else if (skillId === "surprise") {
       answer = `A strong answer explains BOTH what is surprising AND what is not surprising about Source ${single}, anchored in source evidence and contextual knowledge, then reaches a reasoned judgement.`;
     } else {
-      answer = `A strong answer makes TWO valid inferences about ${cleanTopic} and supports each with precise quoted evidence from Source ${single}.`;
+      answer = `A strong answer makes TWO valid inferences about ${topicNoun} and supports each with precise quoted evidence from Source ${single}.`;
     }
 
     const scheme = skill?.markScheme ?? SBQ_SKILLS.inference.markScheme;
 
     return {
       question_type: "source_based",
-      topic,
+      topic: topicTag,
       bloom_level: section.bloom ?? "Analyse",
       difficulty: "medium",
       marks,
