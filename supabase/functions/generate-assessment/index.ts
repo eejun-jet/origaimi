@@ -608,6 +608,7 @@ THIS SECTION:
   - Number of questions: exactly ${section.num_questions}
   - Total marks for the section: ${section.marks}
   - ${marksGuide}
+  - ${marksHardCap}
   - Bloom's level focus: ${section.bloom ?? "Apply"} (use other levels only if the topic clearly demands it)
   ${section.instructions ? `- Section instructions for the rubric: ${section.instructions}` : ""}
 ${skillBlock}${difficultyBlock}${objectivesBlock}
