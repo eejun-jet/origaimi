@@ -528,8 +528,10 @@ export async function fetchGroundedSource(
   usedHosts?: Set<string>,
   usedUrls?: Set<string>,
   queryHint?: string,
+  tierBudget?: TierBudget,
 ): Promise<GroundedSource | null> {
   const allowList = subjectKind === "english" ? ALLOW_DOMAINS_ENGLISH : ALLOW_DOMAINS_HUMANITIES;
+  const allowGenericTlds = subjectKind === "humanities";
   const queries = buildQueryChain(subjectKind, topic, learningOutcomes, queryHint);
   if (queries.length === 0) {
     console.warn("[sources] could not build any search query for topic:", topic);
@@ -538,15 +540,14 @@ export async function fetchGroundedSource(
 
   // Vocabulary used for relevance gating: the topic plus ALL learning outcomes.
   const topicVocab = syllabusKeywordsFor(topic, learningOutcomes);
-  // Strict AND-gate: excerpt must hit BOTH a proportional threshold AND a
-  // minimum number of distinct syllabus keywords. Previous OR-gate let pages
-  // with a single repeated keyword pass even when off-topic.
   const MIN_RELEVANCE = 0.25;
   const MIN_RELEVANCE_HITS = 2;
+  const tier2Exhausted = (): boolean =>
+    !!tierBudget && tierBudget.tier2Used >= tierBudget.maxTier2;
 
   // Walk the query chain (most specific → most general) until we get hits.
   for (const query of queries) {
-    const urls = await searchUrls(query, allowList);
+    const urls = await searchUrls(query, allowList, allowGenericTlds);
     if (urls.length === 0) {
       console.warn("[sources] no allow-listed results for query:", query);
       continue;
@@ -554,6 +555,11 @@ export async function fetchGroundedSource(
     const candidates = rankUrlsForSubject(subjectKind, urls).filter((u) => {
       if (usedUrls && usedUrls.has(u)) return false;
       if (usedHosts && usedHosts.has(hostnameOf(u))) return false;
+      // Per-pool budget: once Tier-2 (historian/historiography) quota is spent,
+      // drop further Tier-2 candidates so the pool stays primary-source heavy.
+      if (subjectKind === "humanities" && tier2Exhausted() && humanitiesTier(hostnameOf(u)) === 2) {
+        return false;
+      }
       return true;
     });
     if (candidates.length === 0) {
@@ -567,14 +573,12 @@ export async function fetchGroundedSource(
         const excerpt = extractExcerpt(scraped.markdown);
         if (!excerpt) continue;
 
-        // Relevance gate (AND): must overlap syllabus vocabulary on BOTH metrics.
         const { score, hits, matched } = relevanceMetrics(excerpt, topicVocab);
         if (score < MIN_RELEVANCE || hits < MIN_RELEVANCE_HITS) {
           console.warn(`[sources] dropped off-topic excerpt (score=${score.toFixed(2)}, hits=${hits}, matched=[${matched.join(",")}]) from ${url}`);
           continue;
         }
 
-        // Richness gate: must read like analytical prose, not a list/catalogue.
         const poor = richnessReason(excerpt);
         if (poor) {
           console.warn(`[sources] dropped thin excerpt (${poor}) from ${url}`);
@@ -584,6 +588,9 @@ export async function fetchGroundedSource(
         const host = hostnameOf(url);
         if (usedHosts) usedHosts.add(host);
         if (usedUrls) usedUrls.add(url);
+        if (tierBudget && subjectKind === "humanities" && humanitiesTier(host) === 2) {
+          tierBudget.tier2Used += 1;
+        }
         return {
           excerpt,
           source_url: url,
