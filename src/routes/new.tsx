@@ -1500,7 +1500,7 @@ function SectionCard({
   };
 
   const allAoSelected = aoCandidates.length > 0 && aoCandidates.every((a) => sectionAos.includes(a.code));
-  const allKoSelected = koCandidates.every((k) => sectionKos.includes(k));
+  const allKoSelected = koCandidates.length > 0 && koCandidates.every((k) => sectionKos.includes(k));
   const allLoSelected = loCandidates.length > 0 && loCandidates.every((l) => sectionLos.includes(l));
   const pickedKeys = new Set(section.topic_pool.map((t) => `${t.topic_code ?? ""}::${t.topic}`));
   const toggleTopic = (t: SectionTopic) => {
