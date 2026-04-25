@@ -433,7 +433,7 @@ function extractExcerpt(markdown: string): string | null {
   return null;
 }
 
-async function firecrawlSearch(query: string, allowList: string[]): Promise<string[]> {
+async function firecrawlSearch(query: string, allowList: string[], allowGenericTlds: boolean): Promise<string[]> {
   if (!FIRECRAWL_API_KEY) return [];
   const resp = await fetch("https://api.firecrawl.dev/v2/search", {
     method: "POST",
@@ -454,22 +454,24 @@ async function firecrawlSearch(query: string, allowList: string[]): Promise<stri
     const url = r?.url ?? r?.link;
     if (typeof url === "string") urls.push(url);
   }
-  return urls.filter((u) => isAllowed(u, allowList)).slice(0, 10);
+  return urls.filter((u) => isAllowed(u, allowList, allowGenericTlds)).slice(0, 10);
 }
 
 /** Try Tavily first (native domain filtering), fall back to Firecrawl. */
-async function searchUrls(query: string, allowList: string[]): Promise<string[]> {
+async function searchUrls(query: string, allowList: string[], allowGenericTlds: boolean): Promise<string[]> {
   if (hasTavily()) {
+    // For humanities, don't constrain Tavily by includeDomains (the curated list
+    // is too narrow once we accept .gov/.edu broadly); rely on isAllowed to gate.
     const { results } = await tavilySearch(query, {
-      includeDomains: allowList,
+      includeDomains: allowGenericTlds ? undefined : allowList,
       excludeDomains: DENY_DOMAINS,
       maxResults: 15,
     });
-    const urls = results.map((r) => r.url).filter((u) => isAllowed(u, allowList));
+    const urls = results.map((r) => r.url).filter((u) => isAllowed(u, allowList, allowGenericTlds));
     if (urls.length > 0) return urls.slice(0, 10);
     console.warn("[sources] tavily returned 0 allow-listed results, falling back to firecrawl");
   }
-  return firecrawlSearch(query, allowList);
+  return firecrawlSearch(query, allowList, allowGenericTlds);
 }
 
 /** Sort humanities URLs so Tier 1 (primary) comes first, then Tier 2 (historian),
