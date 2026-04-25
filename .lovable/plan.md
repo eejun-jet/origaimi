@@ -1,67 +1,54 @@
-# History SBQ: 5–6 sources, command-word stems, LORMS mark schemes
+## Goals
 
-Right now History source-based questions:
-- Pull a shared pool of **4–5 sources** (min 4, max 5)
-- Use generic question stems like "What can you infer from Source A about X?"
-- Have mark schemes that are roughly LORMS-shaped but not anchored to your AO3 command-word taxonomy
+Two distinct improvements to assessment generation:
 
-Three small, surgical changes — all in the generator. No UI changes; no DB changes.
+1. **History/Social Studies sources** — strongly prefer **primary sources**; allow scholar perspectives & historiography only **sparingly** (cap at ~1 of N sources in any SBQ pool).
+2. **Mark cap (all subjects)** — guarantee that the sum of `marks` across generated questions in a section never exceeds the section's declared mark allocation.
 
-## What will change
+---
 
-### 1. Source pool size: 5–6 (was 4–5)
+## 1. Bias source pool toward primary sources
 
-The shared SBQ source pool will fetch a **minimum of 5** and a **maximum of 6** sources per History SBQ section. The pool size still scales up if the selected skills demand it (e.g. Assertion needs ≥3), but the floor moves from 4 → 5 and the ceiling from 5 → 6.
+**File:** `supabase/functions/generate-assessment/sources.ts`
 
-The number of fetched sources is independent of the number of sub-parts — `num_questions` is unaffected.
+Currently the humanities query chain alternates 1:1 between `primary source document` and `historian analysis / perspective` queries, and Tier 2 (JSTOR / HistoryToday / HistoryExtra / Oxford / Britannica) URLs are merely sorted after Tier 1 — they're still freely picked when Tier 1 yields nothing for that *single* fetch.
 
-### 2. Question stems use your AO3 command words verbatim
+Changes:
 
-Each SBQ skill will be re-mapped onto the exact phrasing from the "Command Words / Notes" column of your uploaded xlsx:
+- **Re-weight the query chain (`buildQueryChain`)**: emit ~4 primary-source queries for every 1 historian-perspective query. Replace the alternating pair with: `primary source document archive`, `archival document`, `contemporary newspaper account`, `speech treaty official record`, then a single `historian analysis` query as the last specific query (still ahead of broader fallbacks).
+- **Add a per-pool cap on Tier-2 (scholar/historiography) sources** in `fetchGroundedSource`. New optional param `tierBudget?: { tier2Used: number; maxTier2: number }`. When `tier2Used >= maxTier2`, candidate URLs whose `humanitiesTier(host) === 2` are filtered out before scrape.
+- **Demote Britannica** from Tier 2 to Tier 3 (it's a tertiary reference, not a historian's perspective). Keep JSTOR / HistoryToday / HistoryExtra / OxfordRE in Tier 2.
+- **Add more primary-source domains** to `ALLOW_DOMAINS_HUMANITIES` and `HUMANITIES_TIER_1_PRIMARY`: `parliament.uk`, `hansard.parliament.uk`, `digitalarchive.wilsoncenter.org`, `cvce.eu`, `marxists.org` (for primary political texts), `digital.library.cornell.edu`, `cia.gov/readingroom`, `state.gov/historicaldocuments`, `nara.gov`. Allow all .edu, .org and .gov sites. 
 
-| Skill | Stem template |
-|---|---|
-| Inference | "What can you **infer** from Source A about [topic]?" / "What is the **message** of Source A?" / "What does Source A **tell you** about [topic]?" |
-| Comparison | "**How similar** are Sources A and B?" / "**How different** are Sources A and B?" / "**How far** are Sources A and B similar in their views about [topic]?" |
-| Reliability | "**How reliable** is Source A?" / "**How far can we trust** Source A?" / "**How accurate** is Source A?" / "**How far does** Source B **prove** Source A **wrong**?" |
-| Surprise | "**Are you surprised** by Source A?" (anchored to either bias-detection or reliability framing per AO3.4 / AO3.5) |
-| Purpose | "What is the **purpose** of Source A?" / "**Why was** Source A **created**?" / "Do you think [X] **would have agreed** with Source A?" |
-| Utility | "**How useful** is Source A as evidence about [topic]?" / "**How far does** Source B **prove** Source A **wrong**?" |
-| Assertion | "[Hypothesis quote]. **How far do** Sources A–F **support** this assertion?" |
+**File:** `supabase/functions/generate-assessment/index.ts`
 
-These exact templates will be enforced both in:
-- The **deterministic** SBQ builder (used as a hard fallback / when generation skips LLM)
-- The **LLM prompt** (so model output is forced into these forms, randomised across the templates listed above to avoid every paper looking identical)
+- Where the SBQ pool is built (the loop that calls `fetchGroundedSource` ~5–6 times), pass a shared `tierBudget` object with `maxTier2 = 1` (so at most 1 of the 5–6 sources can be a scholar/historiography piece). Increment `tier2Used` whenever the returned source's host is Tier 2.
 
-### 3. Mark schemes follow LORMS — explicitly rewards reasoning attempts
+---
 
-Mark schemes for every History SBQ will be rewritten as an explicit Level of Response Marking Scheme that rewards **attempts at analysis and reasoned conclusion**, not just final correctness. Generic shape applied per skill:
+## 2. Enforce mark cap per section (all subjects)
 
-```text
-L1 — Surface response (e.g. lifts/copies, asserts without reasoning).
-L2 — Begins to engage with the source/skill but reasoning is one-sided
-     or unsupported.
-L3 — Develops reasoned analysis using the source AND contextual
-     knowledge; reaches a partial judgement.
-L4 — Sustained, balanced reasoning across both sides; weighs evidence
-     and source provenance; reaches a substantiated overall judgement.
-```
+Today the model is *told* the section's mark budget (`marksGuide` at line ~525) and `marks: q.marks ?? 1` is trusted from the model output. Nothing prevents the model from emitting questions whose marks sum beyond `section.marks`.
 
-Each skill keeps its own L1–L4 wording (Inference rewards attempts at inferring even when evidence is thin; Reliability rewards attempts to weigh content vs provenance; Assertion rewards attempts to use ALL sources to reach a reasoned conclusion, etc.). The intent is identical to the SEAB SBQ LORMS — candidates are **awarded for attempts at different ways of analysing and reaching a reasoned conclusion**, not penalised for not landing the perfect answer.
+**File:** `supabase/functions/generate-assessment/index.ts`
 
-## Technical details
+- After the model returns questions for a section (and after the SBQ deterministic builder, which is already exact), add a `normalizeSectionMarks(questions, section.marks)` helper that:
+  1. If `sum(marks) === section.marks`: no-op.
+  2. If `sum(marks) > section.marks`: scale each question's marks proportionally (`floor`), then distribute leftover (or negative leftover) by removing 1 mark at a time from the highest-mark questions until the total matches. Never let any question drop below 1 mark — if the section's mark budget is smaller than `num_questions`, log a warning and clamp at 1 each (this is a malformed blueprint case).
+  3. If `sum(marks) < section.marks`: distribute the shortfall by adding 1 mark at a time to the lowest-mark questions (preserving the model's relative weighting).
+  4. **Respect locked SBQ skills** (`assertion` is locked at 8): pass a `lockedIndices` set so those marks are never altered; balance the rest around them. If locked marks alone exceed `section.marks`, log a warning and skip normalization for this section (blueprint mismatch).
+- Call `normalizeSectionMarks` immediately after parsing the AI tool-call response, before pushing into `allRows`. Apply to every question_type, not just SBQ.
+- Tighten the prompt: add a hard line in `buildSectionPrompt` after `marksGuide`: `HARD CONSTRAINT: the sum of marks across the ${num_questions} questions MUST equal exactly ${section.marks}. Do not exceed it under any circumstances.`
 
-All changes are confined to one file:
+---
 
-- `supabase/functions/generate-assessment/index.ts`
-  - In the `isHumanitiesSBQ` block (~line 740): change `Math.min(5, Math.max(4, maxMinSources))` → `Math.min(6, Math.max(5, maxMinSources))`
-  - In the `SBQ_SKILLS` map (~line 104): rewrite each skill's `promptHeader` to use the AO3 command-word templates above (with 2–3 phrasings per skill so output varies), and rewrite each `markScheme` as an explicit L1–L4 LORMS that awards attempts at reasoning
-  - In `buildDeterministicSbqQuestions` (~line 184): rotate through the new templates (instead of a single canned phrasing per skill) so the deterministic fallback also reads like a real MOE paper
+## Technical summary
 
-No edge-function config changes, no DB migration, no client changes.
 
-## Out of scope
+| File                                                | Change                                                                                                                                                                                   |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `supabase/functions/generate-assessment/sources.ts` | Reweight `buildQueryChain` (4:1 primary:historian), add Tier-2 budget to `fetchGroundedSource`, demote Britannica to Tier 3, expand Tier-1 allow-list with parliament/state/CIA archives |
+| `supabase/functions/generate-assessment/index.ts`   | Pass shared `tierBudget = { tier2Used: 0, maxTier2: 1 }` to SBQ pool fetches; add `normalizeSectionMarks()` post-processor; add HARD CONSTRAINT line to section prompt                   |
 
-- Adding a "command words" picker in the UI (keep teachers focused on the AO/skill choice)
-- Letting teachers override individual stem templates (we randomise from the syllabus list automatically)
-- Touching non-History humanities (Social Studies SBQs already use the same pipeline and will inherit the same improvements; if you want to scope this strictly to History only, say the word and I'll gate by subject)
+
+No DB migrations, no new edge functions, no UI changes. Single edge-function deploy of `generate-assessment`.
