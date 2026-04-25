@@ -440,24 +440,35 @@ function rankUrlsForSubject(subjectKind: SubjectKind, urls: string[]): string[] 
 
 async function firecrawlScrape(url: string): Promise<{ markdown: string; title: string } | null> {
   if (!FIRECRAWL_API_KEY) return null;
-  const resp = await fetch("https://api.firecrawl.dev/v2/scrape", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ url, formats: ["markdown"], onlyMainContent: true }),
-  });
-  if (!resp.ok) {
-    console.warn("[sources] firecrawl scrape failed", resp.status, url);
+  // Per-scrape timeout: a single slow site must not block the whole pool.
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const resp = await fetch("https://api.firecrawl.dev/v2/scrape", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ url, formats: ["markdown"], onlyMainContent: true }),
+      signal: ctrl.signal,
+    });
+    if (!resp.ok) {
+      console.warn("[sources] firecrawl scrape failed", resp.status, url);
+      return null;
+    }
+    const json = await resp.json();
+    const data = json?.data ?? json;
+    const markdown: string = data?.markdown ?? "";
+    const title: string = data?.metadata?.title ?? data?.title ?? "";
+    if (!markdown) return null;
+    return { markdown, title };
+  } catch (e) {
+    console.warn("[sources] firecrawl scrape error/timeout", url, (e as Error).message);
     return null;
+  } finally {
+    clearTimeout(timer);
   }
-  const json = await resp.json();
-  const data = json?.data ?? json;
-  const markdown: string = data?.markdown ?? "";
-  const title: string = data?.metadata?.title ?? data?.title ?? "";
-  if (!markdown) return null;
-  return { markdown, title };
 }
 
 /** Search + scrape + extract a usable, syllabus-relevant 100–200 word excerpt.
