@@ -558,7 +558,8 @@ async function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise
 }
 
 export async function fetchDiagram(opts: {
-  supabase: ReturnType<typeof createClient>;
+  // deno-lint-ignore no-explicit-any
+  supabase: any;
   kind: Exclude<ScienceMathKind, null>;
   subject: string;
   level: string;

@@ -239,7 +239,8 @@ Deno.serve(async (req) => {
 });
 
 async function renderAndUploadFigure(opts: {
-  supabase: ReturnType<typeof createClient>;
+  // deno-lint-ignore no-explicit-any
+  supabase: any;
   paperId: string;
   figure: { page_number: number; caption: string; topic_tags: string[]; figure_description?: string };
   subject: string;
