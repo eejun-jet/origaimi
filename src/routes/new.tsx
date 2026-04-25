@@ -1440,8 +1440,25 @@ function SectionCard({
     return Array.from(map.values());
   }, [allAOs, globalAoCodes, sectionAos]);
 
-  // KO candidates: always show all 4, mark which are syllabus-supported.
-  const koCandidates = KNOWLEDGE_OUTCOMES;
+  // KO candidates: union of outcome_categories across this section's topic pool,
+  // plus the global KO picks and anything already on the section. Each syllabus
+  // defines its own KO vocabulary (e.g. History uses knowledge/skills/values/
+  // attitudes), so we surface whatever the topics actually carry.
+  const koCandidates = useMemo(() => {
+    const seen = new Map<string, string>();
+    const add = (raw: string) => {
+      const trimmed = raw.trim();
+      if (!trimmed) return;
+      const key = trimmed.toLowerCase();
+      if (!seen.has(key)) seen.set(key, trimmed);
+    };
+    for (const t of section.topic_pool) {
+      for (const c of t.outcome_categories ?? []) add(c);
+    }
+    for (const c of globalKos) add(c);
+    for (const c of sectionKos) add(c);
+    return Array.from(seen.values());
+  }, [section.topic_pool, globalKos, sectionKos]);
 
   // LO candidates: union of (a) LOs from this section's topic_pool, (b) global LOs, (c) anything already on the section.
   const loCandidates = useMemo(() => {
