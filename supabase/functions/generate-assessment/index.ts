@@ -926,10 +926,11 @@ Deno.serve(async (req) => {
           // source so the SBQ pool stays primary-source heavy. This is shared
           // across all parallel fetches in the pool.
           const tierBudget: TierBudget = { tier2Used: 0, maxTier2: 1 };
-          // Fetch sources in parallel with a hard per-fetch timeout. Sequential
-          // fetching with multiple firecrawl scrape attempts each can blow past
-          // the edge-function wallclock and kill the whole generation.
-          const PER_FETCH_TIMEOUT_MS = 25000;
+          // Fetch the minimum reliable SBQ pool within the backend CPU budget.
+          // We keep 5 sources (the required minimum) and leave the 6th as an
+          // optional future expansion rather than spending a whole extra crawl.
+          const FETCH_TARGET = 5;
+          const PER_FETCH_TIMEOUT_MS = 14000;
           const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T | null> =>
             new Promise((resolve) => {
               const t = setTimeout(() => resolve(null), ms);
@@ -937,7 +938,7 @@ Deno.serve(async (req) => {
                .catch(() => { clearTimeout(t); resolve(null); });
             });
           const settled = await Promise.all(
-            Array.from({ length: poolSize }, (_, i) =>
+            Array.from({ length: Math.min(poolSize, FETCH_TARGET) }, (_, i) =>
               withTimeout(
                 fetchGroundedSource(
                   subjectKind, sectionTopic.topic, sectionTopic.learning_outcomes ?? [],
@@ -972,7 +973,7 @@ Deno.serve(async (req) => {
           sharedSourcePool.length = 0;
           sharedSourcePool.push(...trimmed);
         }
-        console.log(`[generate] section ${section.letter} SBQ pool: ${sharedSourcePool.length} sources (target ${poolSize})`);
+        console.log(`[generate] section ${section.letter} SBQ pool: ${sharedSourcePool.length} sources (target ${Math.min(poolSize, 5)} min, max ${poolSize})`);
         // Every question slot references the SAME shared pool.
         for (let qi = 0; qi < section.num_questions; qi++) {
           sourcesForSection.push(sharedSourcePool.slice());
