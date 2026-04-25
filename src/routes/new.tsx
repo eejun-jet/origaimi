@@ -1786,33 +1786,34 @@ function SectionCard({
         </div>
 
         {/* KOs */}
-        <div className="mt-3 border-t border-border/50 pt-3">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-medium text-muted-foreground">
-              KOs ({sectionKos.length} / {koCandidates.length})
-            </span>
-            <button
-              type="button"
-              className="text-[11px] text-primary hover:underline"
-              onClick={() => onUpdate({ knowledge_outcomes: allKoSelected ? [] : koCandidates.slice() })}
-            >
-              {allKoSelected ? "Clear all" : "Select all"}
-            </button>
+        {koCandidates.length > 0 && (
+          <div className="mt-3 border-t border-border/50 pt-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-medium text-muted-foreground">
+                KOs ({sectionKos.length} / {koCandidates.length})
+              </span>
+              <button
+                type="button"
+                className="text-[11px] text-primary hover:underline"
+                onClick={() => onUpdate({ knowledge_outcomes: allKoSelected ? [] : koCandidates.slice() })}
+              >
+                {allKoSelected ? "Clear all" : "Select all"}
+              </button>
+            </div>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {koCandidates.map((ko) => {
+                const checked = sectionKos.includes(ko);
+                const isGlobal = globalKos.includes(ko);
+                return (
+                  <label key={ko} className={`flex cursor-pointer items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] transition-colors ${checked ? "border-primary bg-primary-soft/40" : "border-border hover:bg-muted/40"}`}>
+                    <Checkbox checked={checked} onCheckedChange={() => toggleKo(ko)} />
+                    <span className="capitalize">{ko}{isGlobal && <span className="ml-1 text-[10px] text-muted-foreground normal-case">(global)</span>}</span>
+                  </label>
+                );
+              })}
+            </div>
           </div>
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {koCandidates.map((ko) => {
-              const checked = sectionKos.includes(ko);
-              const supported = allKOs.includes(ko);
-              const isGlobal = globalKos.includes(ko);
-              return (
-                <label key={ko} className={`flex cursor-pointer items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] transition-colors ${checked ? "border-primary bg-primary-soft/40" : "border-border hover:bg-muted/40"} ${!supported ? "opacity-60" : ""}`}>
-                  <Checkbox checked={checked} onCheckedChange={() => toggleKo(ko)} />
-                  <span>{ko}{isGlobal && <span className="ml-1 text-[10px] text-muted-foreground">(global)</span>}</span>
-                </label>
-              );
-            })}
-          </div>
-        </div>
+        )}
 
         {/* LOs */}
         <div className="mt-3 border-t border-border/50 pt-3">
