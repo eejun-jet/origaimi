@@ -336,6 +336,75 @@ function buildDeterministicSbqQuestions(section: Section, sources: GroundedSourc
   });
 }
 
+/** Enforce a HARD CAP: the sum of `marks` across the questions in a section
+ *  must equal `targetMarks`. Honours `lockedIndices` for SBQ skills locked at a
+ *  fixed mark value (e.g. assertion at 8). All questions floored at 1 mark. */
+function normalizeSectionMarks(
+  questions: Array<{ marks?: number | null }>,
+  targetMarks: number,
+  lockedIndices: Set<number> = new Set(),
+): void {
+  const n = questions.length;
+  if (n === 0 || targetMarks <= 0) return;
+
+  let lockedSum = 0;
+  for (const i of lockedIndices) {
+    if (i >= 0 && i < n) {
+      const m = Math.max(1, Math.floor(questions[i].marks ?? 1));
+      questions[i].marks = m;
+      lockedSum += m;
+    }
+  }
+
+  if (lockedSum > targetMarks) {
+    console.warn(`[generate] locked marks (${lockedSum}) exceed section budget (${targetMarks}); skipping mark normalization`);
+    return;
+  }
+
+  const flexibleIdx: number[] = [];
+  for (let i = 0; i < n; i++) if (!lockedIndices.has(i)) flexibleIdx.push(i);
+  const flexCount = flexibleIdx.length;
+  const flexBudget = targetMarks - lockedSum;
+  if (flexCount === 0) return;
+
+  if (flexBudget < flexCount) {
+    console.warn(`[generate] section budget too small for ${n} questions (locked=${lockedSum}, target=${targetMarks}); clamping each non-locked question to 1 mark`);
+    for (const i of flexibleIdx) questions[i].marks = 1;
+    return;
+  }
+
+  const rawFlex = flexibleIdx.map((i) => Math.max(1, Math.floor(questions[i].marks ?? 1)));
+  const rawSum = rawFlex.reduce((a, b) => a + b, 0);
+  const scaled = rawFlex.map((m) => Math.max(1, Math.floor((m * flexBudget) / Math.max(1, rawSum))));
+  let scaledSum = scaled.reduce((a, b) => a + b, 0);
+
+  if (scaledSum < flexBudget) {
+    const order = [...scaled.keys()].sort((a, b) => scaled[a] - scaled[b]);
+    let k = 0;
+    while (scaledSum < flexBudget) {
+      scaled[order[k % order.length]] += 1;
+      scaledSum += 1;
+      k++;
+    }
+  } else if (scaledSum > flexBudget) {
+    const order = [...scaled.keys()].sort((a, b) => scaled[b] - scaled[a]);
+    let k = 0;
+    const safety = flexCount * (flexBudget + 5);
+    while (scaledSum > flexBudget && k < safety) {
+      const idx = order[k % order.length];
+      if (scaled[idx] > 1) {
+        scaled[idx] -= 1;
+        scaledSum -= 1;
+      }
+      k++;
+    }
+  }
+
+  for (let j = 0; j < flexibleIdx.length; j++) {
+    questions[flexibleIdx[j]].marks = scaled[j];
+  }
+}
+
 type LegacyBlueprintRow = {
   topic: string;
   bloom?: string;
