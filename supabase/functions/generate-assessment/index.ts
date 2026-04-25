@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.0";
-import { fetchGroundedSource, classifySubject, type GroundedSource } from "./sources.ts";
+import { fetchGroundedSource, classifySubject, type GroundedSource, type TierBudget } from "./sources.ts";
 import { fetchDiagram, classifyScienceMath, questionWantsDiagram } from "./diagrams.ts";
 import { fetchExemplars } from "./exemplars.ts";
 
