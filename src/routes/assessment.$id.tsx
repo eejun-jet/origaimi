@@ -810,18 +810,11 @@ function EditorPage() {
                   totalActual={totalActual}
                 />
 
-                <div className="rounded-xl border border-border bg-card p-5">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-medium">Assessment Coach</h3>
-                    <span className="rounded-full bg-warm px-2 py-0.5 text-[10px] uppercase tracking-wide text-warm-foreground">
-                      Coming soon
-                    </span>
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Your embedded Assessment Literacy Coach will evaluate this paper against
-                    AO frameworks and surface actionable insights.
-                  </p>
-                </div>
+                <CoachPanel
+                  assessmentId={id}
+                  onScrollToQuestion={scrollToQuestion}
+                  onApplied={loadAll}
+                />
 
                 <div className="rounded-xl border border-border bg-card p-5">
                   <h3 className="font-medium">Total marks</h3>
