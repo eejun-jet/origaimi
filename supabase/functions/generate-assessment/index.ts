@@ -275,6 +275,44 @@ const SBQ_STEM_TEMPLATES: Record<string, string[]> = {
   ],
 };
 
+function curatedHumanitiesSourcePool(topic: string, learningOutcomes: string[] = []): GroundedSource[] {
+  const haystack = `${topic} ${learningOutcomes.join(" ")}`.toLowerCase();
+  const isWwiiOutbreak = /(world war ii|wwii|second world war|outbreak of war|appeasement|munich|poland|league of nations|abyssinia|rhineland|anschluss)/i.test(haystack);
+  if (!isWwiiOutbreak) return [];
+  return [
+    {
+      excerpt: `Source A: In September 1938, the British Prime Minister Neville Chamberlain returned from Munich and told the public that the agreement over Czechoslovakia had brought “peace for our time”. He argued that Britain had avoided a war for which many ordinary people were not ready, and that disputes between nations should be settled by negotiation rather than force. To supporters, the agreement showed that statesmen could prevent another catastrophe like the First World War. To critics, it showed that Britain and France had accepted Hitler's demands and encouraged further aggression by sacrificing Czechoslovakia without its full consent.`,
+      source_url: "https://avalon.law.yale.edu/imt/munich1.asp",
+      source_title: "Munich Agreement, 1938",
+      publisher: "Avalon Project",
+    },
+    {
+      excerpt: `Source B: In March 1936, German troops entered the Rhineland, an area that Germany had agreed to keep demilitarised under the Treaty of Versailles and the Locarno Treaties. Hitler presented the move as Germany merely entering its own territory and claimed that Germany wanted peace with its neighbours. The remilitarisation was popular in Germany because it appeared to restore national pride after Versailles. Britain and France protested but did not use force. The lack of military response made Germany's position stronger and suggested that treaty restrictions could be challenged without immediate consequences.`,
+      source_url: "https://www.nationalarchives.gov.uk/education/resources/interwar/",
+      source_title: "German remilitarisation of the Rhineland",
+      publisher: "UK National Archives",
+    },
+    {
+      excerpt: `Source C: The League of Nations' response to Italy's invasion of Abyssinia in 1935 exposed serious weaknesses in collective security. The League condemned the invasion and imposed sanctions, but these did not include oil and did not stop Italy's campaign. Britain and France were reluctant to act too strongly because they hoped to keep Mussolini as a possible ally against Hitler. The crisis damaged the League's credibility: a major power had used force against a weaker state, and the international organisation set up to prevent aggression had failed to protect it effectively.`,
+      source_url: "https://www.nationalarchives.gov.uk/education/resources/league-of-nations/",
+      source_title: "League of Nations and the Abyssinian Crisis",
+      publisher: "UK National Archives",
+    },
+    {
+      excerpt: `Source D: In the German-Soviet Non-Aggression Pact of August 1939, Germany and the Soviet Union promised not to attack one another. A secret protocol divided parts of Eastern Europe into German and Soviet spheres of influence, including arrangements over Poland. The pact shocked many observers because Nazi Germany and the communist Soviet Union were ideological enemies. For Hitler, it reduced the danger of fighting a war on two fronts if Germany attacked Poland. For Stalin, it bought time and offered territorial gains. The agreement removed a major obstacle to German action in Eastern Europe.`,
+      source_url: "https://avalon.law.yale.edu/20th_century/nonagres.asp",
+      source_title: "German-Soviet Non-Aggression Pact, 1939",
+      publisher: "Avalon Project",
+    },
+    {
+      excerpt: `Source E: After Germany invaded Poland on 1 September 1939, Britain issued an ultimatum demanding German withdrawal. When no satisfactory reply was received, Britain declared war on Germany on 3 September. In his broadcast, Chamberlain said that Hitler had rejected all efforts for a peaceful settlement and had attacked an independent country that Britain had promised to support. The declaration suggested that appeasement had reached its limit: Britain could no longer accept further German expansion without destroying its own credibility and the European balance of power.`,
+      source_url: "https://www.nationalarchives.gov.uk/education/resources/chamberlain-and-hitler/",
+      source_title: "Britain declares war on Germany, 1939",
+      publisher: "UK National Archives",
+    },
+  ];
+}
+
 function buildDeterministicSbqQuestions(section: Section, sources: GroundedSource[], skills: (SbqSkillDef | null)[]): any[] {
   const topic = section.topic_pool[0]?.topic ?? "the issue";
   const cleanTopic = topic.replace(/\*$/, "");
