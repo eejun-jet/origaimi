@@ -546,6 +546,7 @@ export async function fetchGroundedSource(
   queryHint?: string,
   tierBudget?: TierBudget,
 ): Promise<GroundedSource | null> {
+  const deadline = Date.now() + (subjectKind === "humanities" ? 14_000 : 10_000);
   const allowList = subjectKind === "english" ? ALLOW_DOMAINS_ENGLISH : ALLOW_DOMAINS_HUMANITIES;
   const allowGenericTlds = subjectKind === "humanities";
   const queries = buildQueryChain(subjectKind, topic, learningOutcomes, queryHint);
@@ -562,7 +563,8 @@ export async function fetchGroundedSource(
     !!tierBudget && tierBudget.tier2Used >= tierBudget.maxTier2;
 
   // Walk the query chain (most specific → most general) until we get hits.
-  for (const query of queries) {
+  for (const query of queries.slice(0, subjectKind === "humanities" ? 3 : 2)) {
+    if (Date.now() > deadline) return null;
     const urls = await searchUrls(query, allowList, allowGenericTlds);
     if (urls.length === 0) {
       console.warn("[sources] no allow-listed results for query:", query);
@@ -582,9 +584,10 @@ export async function fetchGroundedSource(
       console.warn("[sources] all candidates already used for query:", query);
       continue;
     }
-    for (const url of candidates.slice(0, 8)) {
+    for (const url of candidates.slice(0, subjectKind === "humanities" ? 3 : 2)) {
+      if (Date.now() > deadline) return null;
       try {
-        const scraped = await firecrawlScrape(url);
+        const scraped = await scrapeUrl(url);
         if (!scraped) continue;
         const excerpt = extractExcerpt(scraped.markdown);
         if (!excerpt) continue;
