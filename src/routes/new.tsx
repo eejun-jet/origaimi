@@ -1801,14 +1801,15 @@ function SectionCard({
                 {allKoSelected ? "Clear all" : "Select all"}
               </button>
             </div>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
+            <div className="mt-1.5 max-h-48 space-y-1 overflow-y-auto rounded-md border border-border/60 bg-background p-1.5">
               {koCandidates.map((ko) => {
                 const checked = sectionKos.includes(ko);
                 const isGlobal = globalKos.includes(ko);
+                const isShort = ko.length <= 40;
                 return (
-                  <label key={ko} className={`flex cursor-pointer items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] transition-colors ${checked ? "border-primary bg-primary-soft/40" : "border-border hover:bg-muted/40"}`}>
+                  <label key={ko} className={`flex cursor-pointer items-start gap-1.5 rounded p-1 text-[11px] ${checked ? "bg-primary-soft/40" : "hover:bg-muted/40"}`}>
                     <Checkbox checked={checked} onCheckedChange={() => toggleKo(ko)} />
-                    <span className="capitalize">{ko}{isGlobal && <span className="ml-1 text-[10px] text-muted-foreground normal-case">(global)</span>}</span>
+                    <span className={`flex-1 whitespace-pre-line ${isShort ? "capitalize" : ""}`}>{ko}{isGlobal && <span className="ml-1 text-[10px] text-muted-foreground normal-case">(global)</span>}</span>
                   </label>
                 );
               })}
