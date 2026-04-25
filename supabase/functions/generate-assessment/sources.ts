@@ -24,23 +24,37 @@ const ALLOW_DOMAINS_HUMANITIES = [
   "mindef.gov.sg", "gov.sg",    // Singapore government statements / records
   // --- PRIMARY SOURCES: International archives, museums, official records ---
   "nationalarchives.gov.uk", "bl.uk",         // UK National Archives, British Library
-  "archives.gov", "loc.gov",                  // US National Archives, Library of Congress
+  "parliament.uk", "hansard.parliament.uk",   // UK Parliament debates / records (primary)
+  "archives.gov", "loc.gov", "nara.gov",      // US National Archives, Library of Congress
+  "state.gov",                                 // US State Dept (Office of the Historian — primary docs)
+  "cia.gov",                                   // CIA Reading Room (declassified records)
   "iwm.org.uk", "awm.gov.au", "ushmm.org",    // Imperial War Museum, AWM, USHMM
   "un.org",                                    // UN treaties, resolutions, speeches
   "avalon.law.yale.edu",                       // Avalon Project — primary documents
   "founders.archives.gov",                     // Founding-era US documents
   "fordham.edu",                               // Internet History Sourcebooks (primary docs)
-  "wilsoncenter.org",                          // Cold War International History Project (declassified docs)
+  "wilsoncenter.org", "digitalarchive.wilsoncenter.org", // Cold War declassified docs
+  "cvce.eu",                                   // European integration primary documents
+  "marxists.org",                              // Primary political texts (speeches, manifestos)
+  "digital.library.cornell.edu",               // Cornell digital primary collections
   // --- SECONDARY SOURCES: historians' perspectives, scholarly analysis ---
+  // Used SPARINGLY — capped per source pool (see tierBudget in fetchGroundedSource).
   "jstor.org",                  // peer-reviewed historical scholarship
   "historytoday.com",           // historian-authored essays
   "historyextra.com",           // BBC History Magazine, historian commentary
   "oxfordre.com",               // Oxford Research Encyclopedias
-  "britannica.com",             // edited reference, often historian-authored
   // --- Contemporary news reportage (treated as primary for recent events) ---
   "straitstimes.com", "channelnewsasia.com", "todayonline.com",
   "bbc.co.uk", "reuters.com", "apnews.com",
+  // --- Tertiary reference (last-resort fallback only) ---
+  "britannica.com",             // edited reference (Tier 3)
 ];
+
+// Generic TLD allow rule for humanities: any .gov, .edu, .ac.uk, .gov.* (e.g.
+// .gov.au, .gov.sg) host is treated as primary/official by default. .org is
+// also broadly allowed but only as Tier 3 unless explicitly listed above.
+const HUMANITIES_TLD_TIER_1 = [".gov", ".edu", ".ac.uk", ".mil"];
+const HUMANITIES_TLD_TIER_3 = [".org"];
 
 // Allow-list for English (literary / journalistic / public-domain prose & non-fiction).
 // Bias toward sources whose passages teachers can legitimately use as comprehension
@@ -71,17 +85,22 @@ const DENY_DOMAINS = [
 const HUMANITIES_TIER_1_PRIMARY = new Set([
   "nas.gov.sg", "eresources.nlb.gov.sg", "nlb.gov.sg", "roots.gov.sg",
   "mindef.gov.sg", "gov.sg",
-  "nationalarchives.gov.uk", "bl.uk", "archives.gov", "loc.gov",
+  "nationalarchives.gov.uk", "bl.uk",
+  "parliament.uk", "hansard.parliament.uk",
+  "archives.gov", "loc.gov", "nara.gov",
+  "state.gov", "cia.gov",
   "iwm.org.uk", "awm.gov.au", "ushmm.org", "un.org",
   "avalon.law.yale.edu", "founders.archives.gov", "fordham.edu",
-  "wilsoncenter.org",
+  "wilsoncenter.org", "digitalarchive.wilsoncenter.org",
+  "cvce.eu", "marxists.org", "digital.library.cornell.edu",
 ]);
+// Tier 2 = historian / scholarly secondary perspective. Britannica deliberately
+// excluded — it is a tertiary reference (Tier 3), not a historian's voice.
 const HUMANITIES_TIER_2_HISTORIAN = new Set([
-  "jstor.org", "historytoday.com", "historyextra.com",
-  "oxfordre.com", "britannica.com",
+  "jstor.org", "historytoday.com", "historyextra.com", "oxfordre.com",
 ]);
 
-function humanitiesTier(host: string): 1 | 2 | 3 {
+export function humanitiesTier(host: string): 1 | 2 | 3 {
   // Walk parent domains for subdomain matches (e.g. www.nas.gov.sg → nas.gov.sg).
   const parts = host.split(".");
   for (let i = 0; i < parts.length; i++) {
@@ -89,8 +108,13 @@ function humanitiesTier(host: string): 1 | 2 | 3 {
     if (HUMANITIES_TIER_1_PRIMARY.has(d)) return 1;
     if (HUMANITIES_TIER_2_HISTORIAN.has(d)) return 2;
   }
+  // Generic TLD heuristic: official government / academic / military hosts are
+  // treated as primary by default.
+  if (HUMANITIES_TLD_TIER_1.some((tld) => host.endsWith(tld) || host.includes(tld + "."))) return 1;
   return 3;
 }
+
+export type TierBudget = { tier2Used: number; maxTier2: number };
 
 const MIN_WORDS = 150;
 const MAX_WORDS = 240;
@@ -186,17 +210,24 @@ export function buildQueryChain(
     if (topicKw.length > 0) chain.push(`${topicKw.join(" ")} ${suffix}${hintSuffix}`);
     if (topicKw.length >= 2) chain.push(`${topicKw.slice(0, 2).join(" ")} ${suffix}`);
   } else {
-    // Humanities: alternate primary-source and historian-perspective queries.
+    // Humanities: HEAVILY bias toward primary sources. We emit ~4 primary-source
+    // queries for every 1 historian-perspective query so the search engine
+    // surfaces archives, contemporary reportage, speeches and treaties first.
+    // Historiography / scholar perspectives are allowed but capped per pool by
+    // the caller's tierBudget (see fetchGroundedSource).
     const base = topicKw.join(" ");
     const baseWithLo = [...topicKw, ...loKw].join(" ");
     if (topicKw.length > 0 && loKw.length > 0) {
       chain.push(`${baseWithLo} primary source document archive${hintSuffix}`);
-      chain.push(`${baseWithLo} historian analysis${hintSuffix}`);
+      chain.push(`${baseWithLo} archival document${hintSuffix}`);
     }
     if (topicKw.length > 0) {
+      chain.push(`${base} contemporary newspaper account${hintSuffix}`);
+      chain.push(`${base} speech treaty official record${hintSuffix}`);
       chain.push(`${base} primary source document${hintSuffix}`);
-      chain.push(`${base} historian perspective scholarly${hintSuffix}`);
-      chain.push(`${base} contemporary account${hintSuffix}`);
+      chain.push(`${base} eyewitness account memoir${hintSuffix}`);
+      // Single historiography query, deliberately last among the specific ones.
+      chain.push(`${base} historian analysis scholarly${hintSuffix}`);
     }
     if (topicKw.length >= 2) {
       chain.push(`${topicKw.slice(0, 2).join(" ")} primary source`);
@@ -223,11 +254,21 @@ function hostnameOf(url: string): string {
   try { return new URL(url).hostname.toLowerCase(); } catch { return ""; }
 }
 
-function isAllowed(url: string, allowList: string[]): boolean {
+function isAllowed(url: string, allowList: string[], allowGenericTlds = false): boolean {
   const h = hostnameOf(url);
   if (!h) return false;
   if (DENY_DOMAINS.some((d) => h.endsWith(d) || h.includes(d))) return false;
-  return allowList.some((d) => h === d || h.endsWith("." + d) || h.endsWith(d));
+  if (allowList.some((d) => h === d || h.endsWith("." + d) || h.endsWith(d))) return true;
+  // For humanities, also allow any .gov, .edu, .ac.uk, .mil, or .org host
+  // (the latter as a last-resort tertiary-tier fallback). Generic TLD rule is
+  // off for English (which targets a curated literary/journalistic allow-list).
+  if (allowGenericTlds) {
+    const generic = [...HUMANITIES_TLD_TIER_1, ...HUMANITIES_TLD_TIER_3];
+    if (generic.some((tld) => h.endsWith(tld) || h.endsWith(tld + ".sg") || h.endsWith(tld + ".au") || h.endsWith(tld + ".uk") || h.endsWith(tld + ".nz") || h.endsWith(tld + ".ca"))) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function publisherOf(url: string): string {
@@ -392,7 +433,7 @@ function extractExcerpt(markdown: string): string | null {
   return null;
 }
 
-async function firecrawlSearch(query: string, allowList: string[]): Promise<string[]> {
+async function firecrawlSearch(query: string, allowList: string[], allowGenericTlds: boolean): Promise<string[]> {
   if (!FIRECRAWL_API_KEY) return [];
   const resp = await fetch("https://api.firecrawl.dev/v2/search", {
     method: "POST",
@@ -413,22 +454,24 @@ async function firecrawlSearch(query: string, allowList: string[]): Promise<stri
     const url = r?.url ?? r?.link;
     if (typeof url === "string") urls.push(url);
   }
-  return urls.filter((u) => isAllowed(u, allowList)).slice(0, 10);
+  return urls.filter((u) => isAllowed(u, allowList, allowGenericTlds)).slice(0, 10);
 }
 
 /** Try Tavily first (native domain filtering), fall back to Firecrawl. */
-async function searchUrls(query: string, allowList: string[]): Promise<string[]> {
+async function searchUrls(query: string, allowList: string[], allowGenericTlds: boolean): Promise<string[]> {
   if (hasTavily()) {
+    // For humanities, don't constrain Tavily by includeDomains (the curated list
+    // is too narrow once we accept .gov/.edu broadly); rely on isAllowed to gate.
     const { results } = await tavilySearch(query, {
-      includeDomains: allowList,
+      includeDomains: allowGenericTlds ? undefined : allowList,
       excludeDomains: DENY_DOMAINS,
       maxResults: 15,
     });
-    const urls = results.map((r) => r.url).filter((u) => isAllowed(u, allowList));
+    const urls = results.map((r) => r.url).filter((u) => isAllowed(u, allowList, allowGenericTlds));
     if (urls.length > 0) return urls.slice(0, 10);
     console.warn("[sources] tavily returned 0 allow-listed results, falling back to firecrawl");
   }
-  return firecrawlSearch(query, allowList);
+  return firecrawlSearch(query, allowList, allowGenericTlds);
 }
 
 /** Sort humanities URLs so Tier 1 (primary) comes first, then Tier 2 (historian),
@@ -485,8 +528,10 @@ export async function fetchGroundedSource(
   usedHosts?: Set<string>,
   usedUrls?: Set<string>,
   queryHint?: string,
+  tierBudget?: TierBudget,
 ): Promise<GroundedSource | null> {
   const allowList = subjectKind === "english" ? ALLOW_DOMAINS_ENGLISH : ALLOW_DOMAINS_HUMANITIES;
+  const allowGenericTlds = subjectKind === "humanities";
   const queries = buildQueryChain(subjectKind, topic, learningOutcomes, queryHint);
   if (queries.length === 0) {
     console.warn("[sources] could not build any search query for topic:", topic);
@@ -495,15 +540,14 @@ export async function fetchGroundedSource(
 
   // Vocabulary used for relevance gating: the topic plus ALL learning outcomes.
   const topicVocab = syllabusKeywordsFor(topic, learningOutcomes);
-  // Strict AND-gate: excerpt must hit BOTH a proportional threshold AND a
-  // minimum number of distinct syllabus keywords. Previous OR-gate let pages
-  // with a single repeated keyword pass even when off-topic.
   const MIN_RELEVANCE = 0.25;
   const MIN_RELEVANCE_HITS = 2;
+  const tier2Exhausted = (): boolean =>
+    !!tierBudget && tierBudget.tier2Used >= tierBudget.maxTier2;
 
   // Walk the query chain (most specific → most general) until we get hits.
   for (const query of queries) {
-    const urls = await searchUrls(query, allowList);
+    const urls = await searchUrls(query, allowList, allowGenericTlds);
     if (urls.length === 0) {
       console.warn("[sources] no allow-listed results for query:", query);
       continue;
@@ -511,6 +555,11 @@ export async function fetchGroundedSource(
     const candidates = rankUrlsForSubject(subjectKind, urls).filter((u) => {
       if (usedUrls && usedUrls.has(u)) return false;
       if (usedHosts && usedHosts.has(hostnameOf(u))) return false;
+      // Per-pool budget: once Tier-2 (historian/historiography) quota is spent,
+      // drop further Tier-2 candidates so the pool stays primary-source heavy.
+      if (subjectKind === "humanities" && tier2Exhausted() && humanitiesTier(hostnameOf(u)) === 2) {
+        return false;
+      }
       return true;
     });
     if (candidates.length === 0) {
@@ -524,14 +573,12 @@ export async function fetchGroundedSource(
         const excerpt = extractExcerpt(scraped.markdown);
         if (!excerpt) continue;
 
-        // Relevance gate (AND): must overlap syllabus vocabulary on BOTH metrics.
         const { score, hits, matched } = relevanceMetrics(excerpt, topicVocab);
         if (score < MIN_RELEVANCE || hits < MIN_RELEVANCE_HITS) {
           console.warn(`[sources] dropped off-topic excerpt (score=${score.toFixed(2)}, hits=${hits}, matched=[${matched.join(",")}]) from ${url}`);
           continue;
         }
 
-        // Richness gate: must read like analytical prose, not a list/catalogue.
         const poor = richnessReason(excerpt);
         if (poor) {
           console.warn(`[sources] dropped thin excerpt (${poor}) from ${url}`);
@@ -541,6 +588,9 @@ export async function fetchGroundedSource(
         const host = hostnameOf(url);
         if (usedHosts) usedHosts.add(host);
         if (usedUrls) usedUrls.add(url);
+        if (tierBudget && subjectKind === "humanities" && humanitiesTier(host) === 2) {
+          tierBudget.tier2Used += 1;
+        }
         return {
           excerpt,
           source_url: url,

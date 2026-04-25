@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.0";
-import { fetchGroundedSource, classifySubject, type GroundedSource } from "./sources.ts";
+import { fetchGroundedSource, classifySubject, humanitiesTier, type GroundedSource, type TierBudget } from "./sources.ts";
 import { fetchDiagram, classifyScienceMath, questionWantsDiagram } from "./diagrams.ts";
 import { fetchExemplars } from "./exemplars.ts";
 
@@ -336,6 +336,75 @@ function buildDeterministicSbqQuestions(section: Section, sources: GroundedSourc
   });
 }
 
+/** Enforce a HARD CAP: the sum of `marks` across the questions in a section
+ *  must equal `targetMarks`. Honours `lockedIndices` for SBQ skills locked at a
+ *  fixed mark value (e.g. assertion at 8). All questions floored at 1 mark. */
+function normalizeSectionMarks(
+  questions: Array<{ marks?: number | null }>,
+  targetMarks: number,
+  lockedIndices: Set<number> = new Set(),
+): void {
+  const n = questions.length;
+  if (n === 0 || targetMarks <= 0) return;
+
+  let lockedSum = 0;
+  for (const i of lockedIndices) {
+    if (i >= 0 && i < n) {
+      const m = Math.max(1, Math.floor(questions[i].marks ?? 1));
+      questions[i].marks = m;
+      lockedSum += m;
+    }
+  }
+
+  if (lockedSum > targetMarks) {
+    console.warn(`[generate] locked marks (${lockedSum}) exceed section budget (${targetMarks}); skipping mark normalization`);
+    return;
+  }
+
+  const flexibleIdx: number[] = [];
+  for (let i = 0; i < n; i++) if (!lockedIndices.has(i)) flexibleIdx.push(i);
+  const flexCount = flexibleIdx.length;
+  const flexBudget = targetMarks - lockedSum;
+  if (flexCount === 0) return;
+
+  if (flexBudget < flexCount) {
+    console.warn(`[generate] section budget too small for ${n} questions (locked=${lockedSum}, target=${targetMarks}); clamping each non-locked question to 1 mark`);
+    for (const i of flexibleIdx) questions[i].marks = 1;
+    return;
+  }
+
+  const rawFlex = flexibleIdx.map((i) => Math.max(1, Math.floor(questions[i].marks ?? 1)));
+  const rawSum = rawFlex.reduce((a, b) => a + b, 0);
+  const scaled = rawFlex.map((m) => Math.max(1, Math.floor((m * flexBudget) / Math.max(1, rawSum))));
+  let scaledSum = scaled.reduce((a, b) => a + b, 0);
+
+  if (scaledSum < flexBudget) {
+    const order = [...scaled.keys()].sort((a, b) => scaled[a] - scaled[b]);
+    let k = 0;
+    while (scaledSum < flexBudget) {
+      scaled[order[k % order.length]] += 1;
+      scaledSum += 1;
+      k++;
+    }
+  } else if (scaledSum > flexBudget) {
+    const order = [...scaled.keys()].sort((a, b) => scaled[b] - scaled[a]);
+    let k = 0;
+    const safety = flexCount * (flexBudget + 5);
+    while (scaledSum > flexBudget && k < safety) {
+      const idx = order[k % order.length];
+      if (scaled[idx] > 1) {
+        scaled[idx] -= 1;
+        scaledSum -= 1;
+      }
+      k++;
+    }
+  }
+
+  for (let j = 0; j < flexibleIdx.length; j++) {
+    questions[flexibleIdx[j]].marks = scaled[j];
+  }
+}
+
 type LegacyBlueprintRow = {
   topic: string;
   bloom?: string;
@@ -524,6 +593,7 @@ ${blocks}
   const marksGuide = remainder > 0
     ? `Distribute ${section.marks} marks across ${section.num_questions} questions. Most questions get ${perQMarks} marks; ${remainder} question(s) get 1 extra mark.`
     : `Each of the ${section.num_questions} question(s) is worth ${perQMarks} marks (total ${section.marks}).`;
+  const marksHardCap = `HARD CONSTRAINT: the SUM of "marks" across the ${section.num_questions} question(s) MUST equal EXACTLY ${section.marks}. Do NOT exceed ${section.marks} under any circumstances. If the natural mark for a part would push the section past ${section.marks}, lower it.`;
 
   const sectionLabel = section.name ? `Section ${section.letter} — ${section.name}` : `Section ${section.letter}`;
 
@@ -607,6 +677,7 @@ THIS SECTION:
   - Number of questions: exactly ${section.num_questions}
   - Total marks for the section: ${section.marks}
   - ${marksGuide}
+  - ${marksHardCap}
   - Bloom's level focus: ${section.bloom ?? "Apply"} (use other levels only if the topic clearly demands it)
   ${section.instructions ? `- Section instructions for the rubric: ${section.instructions}` : ""}
 ${skillBlock}${difficultyBlock}${objectivesBlock}
@@ -851,6 +922,10 @@ Deno.serve(async (req) => {
           "political cartoon poster propaganda",
         ];
         if (sectionTopic) {
+          // Per-pool budget: allow at most ONE Tier-2 (historian/historiography)
+          // source so the SBQ pool stays primary-source heavy. This is shared
+          // across all parallel fetches in the pool.
+          const tierBudget: TierBudget = { tier2Used: 0, maxTier2: 1 };
           // Fetch sources in parallel with a hard per-fetch timeout. Sequential
           // fetching with multiple firecrawl scrape attempts each can blow past
           // the edge-function wallclock and kill the whole generation.
@@ -867,6 +942,7 @@ Deno.serve(async (req) => {
                 fetchGroundedSource(
                   subjectKind, sectionTopic.topic, sectionTopic.learning_outcomes ?? [],
                   usedHosts, usedUrls, POOL_QUERY_HINTS[i % POOL_QUERY_HINTS.length],
+                  tierBudget,
                 ),
                 PER_FETCH_TIMEOUT_MS,
               ).catch((e) => {
@@ -878,6 +954,23 @@ Deno.serve(async (req) => {
           for (const src of settled) {
             if (src) sharedSourcePool.push(src);
           }
+          // Belt-and-suspenders: even with the shared tierBudget, parallel
+          // fetches can race past the cap. Drop excess Tier-2 sources here.
+          let tier2Kept = 0;
+          const trimmed: typeof sharedSourcePool = [];
+          for (const src of sharedSourcePool) {
+            const host = (() => { try { return new URL(src.source_url).hostname.toLowerCase(); } catch { return ""; } })();
+            if (humanitiesTier(host) === 2) {
+              if (tier2Kept >= 1) {
+                console.warn(`[generate] dropping excess Tier-2 source ${host} from SBQ pool`);
+                continue;
+              }
+              tier2Kept++;
+            }
+            trimmed.push(src);
+          }
+          sharedSourcePool.length = 0;
+          sharedSourcePool.push(...trimmed);
         }
         console.log(`[generate] section ${section.letter} SBQ pool: ${sharedSourcePool.length} sources (target ${poolSize})`);
         // Every question slot references the SAME shared pool.
@@ -1003,7 +1096,26 @@ Deno.serve(async (req) => {
         }
       }
 
-
+      // HARD CAP enforcement (all subjects): the sum of marks across the
+      // section's questions must equal section.marks. The model is told this in
+      // the prompt but we never trust it. SBQ sections built deterministically
+      // already match exactly; this catches AI-generated sections.
+      if (questions.length > 0) {
+        const lockedIndices = new Set<number>();
+        if (isHumanitiesSBQ) {
+          // Lock SBQ skills marked `locked: true` (currently: assertion at 8 marks).
+          for (let qi = 0; qi < perQSkillsForFetch.length && qi < questions.length; qi++) {
+            const sk = perQSkillsForFetch[qi];
+            if (sk?.locked) lockedIndices.add(qi);
+          }
+        }
+        const before = questions.reduce((a, q: any) => a + (q.marks ?? 0), 0);
+        normalizeSectionMarks(questions as any, section.marks, lockedIndices);
+        const after = questions.reduce((a, q: any) => a + (q.marks ?? 0), 0);
+        if (before !== after) {
+          console.log(`[generate] section ${section.letter} marks normalized: ${before} → ${after} (target ${section.marks})`);
+        }
+      }
       // Per-question post-processing: enforce source attachment, drop unsupported.
       for (let qi = 0; qi < questions.length; qi++) {
         const q = questions[qi];
