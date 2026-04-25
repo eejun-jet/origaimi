@@ -210,17 +210,24 @@ export function buildQueryChain(
     if (topicKw.length > 0) chain.push(`${topicKw.join(" ")} ${suffix}${hintSuffix}`);
     if (topicKw.length >= 2) chain.push(`${topicKw.slice(0, 2).join(" ")} ${suffix}`);
   } else {
-    // Humanities: alternate primary-source and historian-perspective queries.
+    // Humanities: HEAVILY bias toward primary sources. We emit ~4 primary-source
+    // queries for every 1 historian-perspective query so the search engine
+    // surfaces archives, contemporary reportage, speeches and treaties first.
+    // Historiography / scholar perspectives are allowed but capped per pool by
+    // the caller's tierBudget (see fetchGroundedSource).
     const base = topicKw.join(" ");
     const baseWithLo = [...topicKw, ...loKw].join(" ");
     if (topicKw.length > 0 && loKw.length > 0) {
       chain.push(`${baseWithLo} primary source document archive${hintSuffix}`);
-      chain.push(`${baseWithLo} historian analysis${hintSuffix}`);
+      chain.push(`${baseWithLo} archival document${hintSuffix}`);
     }
     if (topicKw.length > 0) {
+      chain.push(`${base} contemporary newspaper account${hintSuffix}`);
+      chain.push(`${base} speech treaty official record${hintSuffix}`);
       chain.push(`${base} primary source document${hintSuffix}`);
-      chain.push(`${base} historian perspective scholarly${hintSuffix}`);
-      chain.push(`${base} contemporary account${hintSuffix}`);
+      chain.push(`${base} eyewitness account memoir${hintSuffix}`);
+      // Single historiography query, deliberately last among the specific ones.
+      chain.push(`${base} historian analysis scholarly${hintSuffix}`);
     }
     if (topicKw.length >= 2) {
       chain.push(`${topicKw.slice(0, 2).join(" ")} primary source`);
