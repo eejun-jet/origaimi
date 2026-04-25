@@ -960,6 +960,7 @@ Deno.serve(async (req) => {
           "political cartoon poster propaganda",
         ];
         if (sectionTopic) {
+          sharedSourcePool.push(...curatedHumanitiesSourcePool(sectionTopic.topic, sectionTopic.learning_outcomes ?? []));
           // Per-pool budget: allow at most ONE Tier-2 (historian/historiography)
           // source so the SBQ pool stays primary-source heavy. This is shared
           // across all parallel fetches in the pool.
@@ -975,8 +976,9 @@ Deno.serve(async (req) => {
               p.then((v) => { clearTimeout(t); resolve(v); })
                .catch(() => { clearTimeout(t); resolve(null); });
             });
+          const remaining = Math.max(0, Math.min(poolSize, FETCH_TARGET) - sharedSourcePool.length);
           const settled = await Promise.all(
-            Array.from({ length: Math.min(poolSize, FETCH_TARGET) }, (_, i) =>
+            Array.from({ length: remaining }, (_, i) =>
               withTimeout(
                 fetchGroundedSource(
                   subjectKind, sectionTopic.topic, sectionTopic.learning_outcomes ?? [],
