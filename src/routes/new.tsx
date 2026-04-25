@@ -259,21 +259,23 @@ function NewAssessment() {
     return [];
   }, [useSyllabus, selectableSyllabusTopics, selectedTopicIds]);
 
-  // KO categories actually present in the chosen topics — used to highlight
-  // which of the fixed 4 categories are syllabus-supported.
+  // KO categories derived from the topics the teacher actually picked in Step 2.
+  // Each syllabus defines its own KO vocabulary (e.g. History uses
+  // knowledge/skills/values/attitudes), so we surface whatever the topics carry
+  // rather than forcing a fixed bucket list.
   const availableKos = useMemo(() => {
-    if (!useSyllabus) return KNOWLEDGE_OUTCOMES.slice();
-    const set = new Set<string>();
+    if (!useSyllabus) return [] as string[];
+    const seen = new Map<string, string>(); // lower -> original casing
     for (const t of selectableSyllabusTopics) {
       if (!selectedTopicIds.includes(t.id)) continue;
       for (const c of t.outcomeCategories ?? []) {
-        const lower = c.toLowerCase();
-        const match = KNOWLEDGE_OUTCOMES.find((k) => k.toLowerCase() === lower);
-        if (match) set.add(match);
+        const trimmed = c.trim();
+        if (!trimmed) continue;
+        const key = trimmed.toLowerCase();
+        if (!seen.has(key)) seen.set(key, trimmed);
       }
     }
-    // Always allow the 4 standard categories — but mark which are syllabus-derived.
-    return KNOWLEDGE_OUTCOMES.filter((k) => set.size === 0 || set.has(k));
+    return Array.from(seen.values());
   }, [useSyllabus, selectableSyllabusTopics, selectedTopicIds]);
 
   // Reset objective picks whenever topics change, keeping any custom LOs the
