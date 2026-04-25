@@ -634,7 +634,8 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   let statusAssessmentId: string | null = null;
-  let statusClient: ReturnType<typeof createClient> | null = null;
+  // deno-lint-ignore no-explicit-any
+  let statusClient: any = null;
   const markAssessmentStatus = async (status: string) => {
     if (!statusClient || !statusAssessmentId) return;
     await statusClient.from("assessments").update({ status }).eq("id", statusAssessmentId);
