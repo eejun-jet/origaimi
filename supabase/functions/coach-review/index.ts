@@ -259,7 +259,9 @@ Return STRICTLY through the tool. Do not include prose outside the tool call. If
     };
 
     const user = `Review this paper and submit findings via the tool.\n\n${JSON.stringify(userPayload)}`;
-    const model = "google/gemini-2.5-pro";
+    // Flash is ~5× faster than Pro at this task and still strong on
+    // tool-call structured output. Switch to Pro if quality complaints come up.
+    const model = "google/gemini-2.5-flash";
 
     const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
