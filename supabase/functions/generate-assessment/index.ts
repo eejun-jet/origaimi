@@ -101,41 +101,99 @@ type SbqSkillDef = {
   markScheme: string;
 };
 
+// History SBQ skills, mapped to the SEAB AO3 command-word taxonomy.
+// Each `promptHeader` lists 2–3 phrasings drawn DIRECTLY from the syllabus
+// "Command Words / Notes" column so generated stems read like the real paper.
+// Each `markScheme` is a Level of Response Marking Scheme (LORMS): candidates
+// are AWARDED for attempts at different ways of analysing and reaching a
+// reasoned conclusion, not penalised for not landing the perfect answer.
 const SBQ_SKILLS: Record<string, SbqSkillDef> = {
   inference: {
     id: "inference", label: "Inference", marks: [5, 6, 7, 8], default: 6, locked: false, minSources: 1,
-    promptHeader: `Write an INFERENCE question. Format: "What can you infer from Source A about [topic]? Explain your answer using details from the source." The student must make an inference (not literal recall) and support it with a quoted detail from Source A.`,
-    markScheme: `L1 (1m): Lifts a detail from the source without inferring. L2 (2-3m): Makes a valid inference but lacks supporting evidence from the source. L3 (4-5m): Makes a valid inference with supporting evidence quoted from Source A. L4 (6+m): Makes two well-supported inferences, each with quoted evidence from Source A.`,
+    promptHeader: `Write an INFERENCE question (AO3.2 — drawing inferences from given information). Use ONE of these SEAB command-word stems verbatim, choosing the one that best fits the source:
+  • "What can you infer from Source A about [topic]? Explain your answer using details from the source."
+  • "What is the message of Source A? Explain your answer using details of the source."
+  • "What does Source A tell you about [topic]? Explain your answer using details of the source."
+The student must make an INFERENCE (not literal recall) and support it with a quoted detail from Source A.`,
+    markScheme: `LORMS — award the highest level the candidate's response REACHES; reward attempts at inferring even when evidence is thin.
+L1 (1m): Lifts/copies surface details from the source without inferring. Award if any attempt is made to engage with the source.
+L2 (2–3m): Attempts a valid inference but supporting evidence from the source is missing, vague, or one-sided.
+L3 (4–5m): Makes a valid inference and supports it with specific evidence quoted or paraphrased from Source A. Reward attempts at a reasoned reading of the source.
+L4 (6+m): Makes TWO well-supported inferences, each with precise quoted evidence from Source A, and reaches a reasoned overall conclusion about what the source reveals.`,
   },
   purpose: {
     id: "purpose", label: "Purpose", marks: [5, 6, 7, 8], default: 6, locked: false, minSources: 1,
-    promptHeader: `Write a PURPOSE question. Format: "Why do you think [author/source] [produced / published / wrote] Source A? Explain your answer using details of the source and your contextual knowledge." The student must identify the author's intended purpose (persuade, warn, glorify, justify, etc.).`,
-    markScheme: `L1 (1m): Describes content only, no purpose. L2 (2-3m): States a purpose but does not justify with provenance OR content. L3 (4-5m): States a purpose and supports it with EITHER provenance (who, when, audience) OR specific content evidence. L4 (6+m): States a purpose and supports it with BOTH provenance AND content evidence, plus contextual knowledge.`,
+    promptHeader: `Write a PURPOSE question (AO3.5 — recognising values and detecting bias). Use ONE of these SEAB command-word stems verbatim:
+  • "What is the purpose of Source A? Explain your answer using details of the source and your contextual knowledge."
+  • "Why was Source A produced? Explain your answer using details of the source and your contextual knowledge."
+  • "Do you think [named individual or group] would have agreed with Source A? Explain your answer using details of the source and your contextual knowledge."
+The student must identify the author's intended purpose (persuade, warn, glorify, justify, reassure, etc.) and ground it in BOTH the source content AND its provenance.`,
+    markScheme: `LORMS — reward attempts to move from describing content to analysing intent.
+L1 (1m): Describes the source's content with no attempt at purpose. Award for any attempt to engage.
+L2 (2–3m): Asserts a purpose but justifies it with EITHER provenance OR content alone, without linking the two.
+L3 (4–5m): States a plausible purpose supported by EITHER detailed provenance (author, audience, date, context) OR specific content evidence, with the beginnings of a reasoned argument.
+L4 (6+m): States a plausible purpose supported by BOTH provenance AND content evidence, drawing on contextual knowledge to reach a reasoned conclusion about why Source A was created.`,
   },
   comparison: {
     id: "comparison", label: "Comparison", marks: [5, 6, 7, 8], default: 6, locked: false, minSources: 2,
-    promptHeader: `Write a COMPARISON question that requires TWO sources (Source A and Source B). Format: "How similar are Sources A and B? Explain your answer." The student must compare both message AND tone/provenance.`,
-    markScheme: `L1 (1-2m): Identifies surface similarities/differences only (e.g. both are about X). L2 (3-4m): Identifies similarities OR differences in message with evidence from both sources. L3 (5-6m): Identifies BOTH similarities AND differences in message, with evidence from both. L4 (7-8m): Compares message AND tone/provenance, with quoted evidence from both sources, and reaches a judgement on overall similarity.`,
+    promptHeader: `Write a COMPARISON question (AO3.3 — comparing and contrasting different views). Use ONE of these SEAB command-word stems verbatim, choosing the one that best fits the two sources:
+  • "How similar are Sources A and B? Explain your answer."
+  • "How different are Sources A and B? Explain your answer."
+  • "How far are Sources A and B similar in their views about [topic]? Explain your answer."
+The student must compare BOTH message AND tone/provenance across the two sources.`,
+    markScheme: `LORMS — reward attempts at comparison even when the candidate only manages similarities OR differences.
+L1 (1–2m): Identifies only surface similarities or differences (e.g. "both are about X"). Award for any attempt to engage with both sources.
+L2 (3–4m): Identifies similarities OR differences in message with evidence drawn from both sources.
+L3 (5–6m): Identifies BOTH similarities AND differences in message, with specific evidence from both sources, and begins to reason about why the views differ.
+L4 (7–8m): Compares BOTH message AND tone/provenance, with quoted evidence from both sources, and reaches a reasoned judgement on overall similarity that weighs the strength of each comparison.`,
   },
   utility: {
     id: "utility", label: "Utility", marks: [6, 7, 8], default: 7, locked: false, minSources: 1,
-    promptHeader: `Write a UTILITY question. Format: "How useful is Source A as evidence about [topic]? Explain your answer." The student must evaluate utility from BOTH the content AND the provenance, and acknowledge limitations.`,
-    markScheme: `L1 (1-2m): States useful/not useful without justification. L2 (3-4m): Evaluates utility based on content OR provenance only. L3 (5-6m): Evaluates utility based on content AND provenance with evidence. L4 (7-8m): Evaluates utility based on content AND provenance, acknowledges limitations, and reaches an overall judgement.`,
+    promptHeader: `Write a UTILITY question (AO3.6 — establishing utility of given information). Use ONE of these SEAB command-word stems verbatim:
+  • "How useful is Source A as evidence about [topic]? Explain your answer."
+  • "How far does Source B prove Source A wrong about [topic]? Explain your answer."
+The student must evaluate utility from BOTH the content AND the provenance, and acknowledge limitations.`,
+    markScheme: `LORMS — reward attempts to weigh usefulness rather than asserting it.
+L1 (1–2m): States useful/not useful with little or no justification. Award for any attempt to engage with the source's evidential value.
+L2 (3–4m): Evaluates utility from content OR provenance alone, without acknowledging limitations.
+L3 (5–6m): Evaluates utility from BOTH content AND provenance with specific evidence; begins to acknowledge what the source cannot show.
+L4 (7–8m): Evaluates utility from content AND provenance, acknowledges clear limitations, and reaches a reasoned overall judgement about how far Source A is useful as evidence about the topic.`,
   },
   reliability: {
     id: "reliability", label: "Reliability", marks: [6, 7, 8], default: 7, locked: false, minSources: 1,
-    promptHeader: `Write a RELIABILITY question. Format: "How reliable is Source A as evidence about [topic]? Explain your answer." The student must cross-reference content against contextual knowledge AND analyse provenance for bias.`,
-    markScheme: `L1 (1-2m): States reliable/unreliable without justification. L2 (3-4m): Evaluates reliability via content cross-reference OR provenance only. L3 (5-6m): Evaluates reliability via content cross-reference AND provenance/bias. L4 (7-8m): Evaluates reliability via content cross-reference, provenance, and bias, with a balanced overall judgement.`,
+    promptHeader: `Write a RELIABILITY question (AO3.4 — distinguishing between facts, opinion and judgement). Use ONE of these SEAB command-word stems verbatim:
+  • "How reliable is Source A as evidence about [topic]? Explain your answer."
+  • "How far can we trust Source A about [topic]? Explain your answer."
+  • "How accurate is Source A about [topic]? Explain your answer."
+  • "How far does Source B prove Source A wrong? Explain your answer."
+The student must cross-reference the source's content against contextual knowledge AND analyse its provenance for bias.`,
+    markScheme: `LORMS — reward attempts to weigh content against provenance, even when one side is stronger than the other.
+L1 (1–2m): States reliable/unreliable with little or no justification. Award for any attempt to engage with reliability.
+L2 (3–4m): Evaluates reliability via content cross-reference OR provenance/bias alone.
+L3 (5–6m): Evaluates reliability via content cross-reference AND provenance/bias, with specific evidence and the beginnings of a reasoned weighting.
+L4 (7–8m): Evaluates reliability via content cross-reference, provenance AND bias, with a reasoned, balanced overall judgement on how far Source A can be trusted.`,
   },
   surprise: {
     id: "surprise", label: "Surprise", marks: [5, 6, 7, 8], default: 6, locked: false, minSources: 1,
-    promptHeader: `Write a SURPRISE question. Format: "Are you surprised by Source A? Explain your answer." The student must explain what IS surprising AND what is NOT surprising, both grounded in contextual knowledge.`,
-    markScheme: `L1 (1m): States surprised/not surprised without justification. L2 (2-3m): Explains surprise OR non-surprise using either source content or contextual knowledge. L3 (4-5m): Explains surprise AND non-surprise using contextual knowledge. L4 (6+m): Explains BOTH surprise and non-surprise with detailed contextual knowledge and source evidence, reaching a balanced judgement.`,
+    promptHeader: `Write a SURPRISE question (AO3.4 / AO3.5 — facts vs opinion, values and bias). Use the SEAB command-word stem verbatim:
+  • "Are you surprised by Source A? Explain your answer."
+The student must explain what IS surprising AND what is NOT surprising, both grounded in contextual knowledge AND in the source's content/provenance.`,
+    markScheme: `LORMS — reward attempts to consider both sides of surprise.
+L1 (1m): States surprised/not surprised with little or no justification. Award for any attempt to engage.
+L2 (2–3m): Explains EITHER surprise OR non-surprise using either source content or contextual knowledge alone.
+L3 (4–5m): Explains BOTH surprise AND non-surprise using contextual knowledge, with at least one side anchored in the source.
+L4 (6+m): Explains BOTH surprise AND non-surprise with detailed contextual knowledge AND source evidence (content + provenance), reaching a reasoned, balanced judgement.`,
   },
   assertion: {
     id: "assertion", label: "Assertion (Hypothesis)", marks: [8], default: 8, locked: true, minSources: 3,
-    promptHeader: `Write an ASSERTION (HYPOTHESIS) question worth EXACTLY 8 marks. Format: "'[State a clear historical hypothesis about the topic]'. How far do Sources A, B, C [and D, etc.] support this assertion? Use ALL the sources to explain your answer." The hypothesis must be a debatable claim. The student must use EVERY source provided, evaluating which support and which challenge the hypothesis.`,
-    markScheme: `L1 (1-2m): Uses one or two sources only, asserts agree/disagree without evaluation. L2 (3-4m): Uses most sources, identifies which support/challenge but no judgement on weight. L3 (5-6m): Uses ALL sources, identifies support and challenge with evidence, but limited evaluation of source quality. L4 (7-8m): Uses ALL sources, evaluates both support and challenge with evidence, weighs source quality (provenance/bias), and reaches a substantiated overall judgement on how far the assertion is supported.`,
+    promptHeader: `Write an ASSERTION (HYPOTHESIS) question worth EXACTLY 8 marks (AO3.7 — drawing conclusions based on a reasoned consideration of evidence and arguments). Use the SEAB command-word stem verbatim:
+  • "'[State a clear, debatable historical hypothesis about the topic]'. How far do Sources A, B, C, D, E [and F if six sources] support this assertion? Use ALL the sources to explain your answer."
+The hypothesis MUST be a debatable claim. The student must use EVERY source provided, evaluating which support and which challenge the hypothesis, and reach a reasoned overall conclusion.`,
+    markScheme: `LORMS — reward attempts to use the FULL source set to reach a reasoned conclusion, even when evaluation of source quality is uneven.
+L1 (1–2m): Uses only one or two sources; asserts agree/disagree without evaluation. Award for any attempt to engage with the assertion using the sources.
+L2 (3–4m): Uses MOST sources; identifies which support and which challenge the assertion but does not judge their relative weight.
+L3 (5–6m): Uses ALL sources; identifies support and challenge with specific evidence, and begins to evaluate source quality (provenance / bias), reaching a partial reasoned conclusion.
+L4 (7–8m): Uses ALL sources; evaluates BOTH support AND challenge with evidence, weighs source quality (provenance + bias) across the set, and reaches a substantiated, reasoned overall judgement on how far the assertion is supported.`,
   },
 };
 
