@@ -24,23 +24,37 @@ const ALLOW_DOMAINS_HUMANITIES = [
   "mindef.gov.sg", "gov.sg",    // Singapore government statements / records
   // --- PRIMARY SOURCES: International archives, museums, official records ---
   "nationalarchives.gov.uk", "bl.uk",         // UK National Archives, British Library
-  "archives.gov", "loc.gov",                  // US National Archives, Library of Congress
+  "parliament.uk", "hansard.parliament.uk",   // UK Parliament debates / records (primary)
+  "archives.gov", "loc.gov", "nara.gov",      // US National Archives, Library of Congress
+  "state.gov",                                 // US State Dept (Office of the Historian — primary docs)
+  "cia.gov",                                   // CIA Reading Room (declassified records)
   "iwm.org.uk", "awm.gov.au", "ushmm.org",    // Imperial War Museum, AWM, USHMM
   "un.org",                                    // UN treaties, resolutions, speeches
   "avalon.law.yale.edu",                       // Avalon Project — primary documents
   "founders.archives.gov",                     // Founding-era US documents
   "fordham.edu",                               // Internet History Sourcebooks (primary docs)
-  "wilsoncenter.org",                          // Cold War International History Project (declassified docs)
+  "wilsoncenter.org", "digitalarchive.wilsoncenter.org", // Cold War declassified docs
+  "cvce.eu",                                   // European integration primary documents
+  "marxists.org",                              // Primary political texts (speeches, manifestos)
+  "digital.library.cornell.edu",               // Cornell digital primary collections
   // --- SECONDARY SOURCES: historians' perspectives, scholarly analysis ---
+  // Used SPARINGLY — capped per source pool (see tierBudget in fetchGroundedSource).
   "jstor.org",                  // peer-reviewed historical scholarship
   "historytoday.com",           // historian-authored essays
   "historyextra.com",           // BBC History Magazine, historian commentary
   "oxfordre.com",               // Oxford Research Encyclopedias
-  "britannica.com",             // edited reference, often historian-authored
   // --- Contemporary news reportage (treated as primary for recent events) ---
   "straitstimes.com", "channelnewsasia.com", "todayonline.com",
   "bbc.co.uk", "reuters.com", "apnews.com",
+  // --- Tertiary reference (last-resort fallback only) ---
+  "britannica.com",             // edited reference (Tier 3)
 ];
+
+// Generic TLD allow rule for humanities: any .gov, .edu, .ac.uk, .gov.* (e.g.
+// .gov.au, .gov.sg) host is treated as primary/official by default. .org is
+// also broadly allowed but only as Tier 3 unless explicitly listed above.
+const HUMANITIES_TLD_TIER_1 = [".gov", ".edu", ".ac.uk", ".mil"];
+const HUMANITIES_TLD_TIER_3 = [".org"];
 
 // Allow-list for English (literary / journalistic / public-domain prose & non-fiction).
 // Bias toward sources whose passages teachers can legitimately use as comprehension
