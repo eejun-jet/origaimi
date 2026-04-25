@@ -755,16 +755,32 @@ Deno.serve(async (req) => {
           "historian scholarly analysis",
         ];
         if (sectionTopic) {
-          for (let i = 0; i < poolSize; i++) {
-            try {
-              const src = await fetchGroundedSource(
-                subjectKind, sectionTopic.topic, sectionTopic.learning_outcomes ?? [],
-                usedHosts, usedUrls, POOL_QUERY_HINTS[i % POOL_QUERY_HINTS.length],
-              );
-              if (src) sharedSourcePool.push(src);
-            } catch (e) {
-              console.warn("[generate] shared source fetch failed for", sectionTopic.topic, e);
-            }
+          // Fetch sources in parallel with a hard per-fetch timeout. Sequential
+          // fetching with multiple firecrawl scrape attempts each can blow past
+          // the edge-function wallclock and kill the whole generation.
+          const PER_FETCH_TIMEOUT_MS = 25000;
+          const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T | null> =>
+            new Promise((resolve) => {
+              const t = setTimeout(() => resolve(null), ms);
+              p.then((v) => { clearTimeout(t); resolve(v); })
+               .catch(() => { clearTimeout(t); resolve(null); });
+            });
+          const settled = await Promise.all(
+            Array.from({ length: poolSize }, (_, i) =>
+              withTimeout(
+                fetchGroundedSource(
+                  subjectKind, sectionTopic.topic, sectionTopic.learning_outcomes ?? [],
+                  usedHosts, usedUrls, POOL_QUERY_HINTS[i % POOL_QUERY_HINTS.length],
+                ),
+                PER_FETCH_TIMEOUT_MS,
+              ).catch((e) => {
+                console.warn("[generate] shared source fetch failed for", sectionTopic.topic, e);
+                return null;
+              }),
+            ),
+          );
+          for (const src of settled) {
+            if (src) sharedSourcePool.push(src);
           }
         }
         console.log(`[generate] section ${section.letter} SBQ pool: ${sharedSourcePool.length} sources (target ${poolSize})`);
