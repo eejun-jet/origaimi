@@ -5,7 +5,7 @@
 //
 // Returns null if no usable 100–180 word excerpt can be extracted.
 
-import { tavilySearch, hasTavily } from "../_shared/tavily.ts";
+import { tavilyExtract, tavilySearch, hasTavily } from "../_shared/tavily.ts";
 
 const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY") ?? "";
 
@@ -441,7 +441,7 @@ async function firecrawlSearch(query: string, allowList: string[], allowGenericT
       Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ query, limit: 15 }),
+    body: JSON.stringify({ query, limit: 8 }),
   });
   if (!resp.ok) {
     console.warn("[sources] firecrawl search failed", resp.status, await resp.text());
@@ -454,7 +454,7 @@ async function firecrawlSearch(query: string, allowList: string[], allowGenericT
     const url = r?.url ?? r?.link;
     if (typeof url === "string") urls.push(url);
   }
-  return urls.filter((u) => isAllowed(u, allowList, allowGenericTlds)).slice(0, 10);
+  return urls.filter((u) => isAllowed(u, allowList, allowGenericTlds)).slice(0, 6);
 }
 
 /** Try Tavily first (native domain filtering), fall back to Firecrawl. */
@@ -465,10 +465,10 @@ async function searchUrls(query: string, allowList: string[], allowGenericTlds: 
     const { results } = await tavilySearch(query, {
       includeDomains: allowGenericTlds ? undefined : allowList,
       excludeDomains: DENY_DOMAINS,
-      maxResults: 15,
+      maxResults: 8,
     });
     const urls = results.map((r) => r.url).filter((u) => isAllowed(u, allowList, allowGenericTlds));
-    if (urls.length > 0) return urls.slice(0, 10);
+    if (urls.length > 0) return urls.slice(0, 6);
     console.warn("[sources] tavily returned 0 allow-listed results, falling back to firecrawl");
   }
   return firecrawlSearch(query, allowList, allowGenericTlds);
@@ -514,6 +514,22 @@ async function firecrawlScrape(url: string): Promise<{ markdown: string; title: 
   }
 }
 
+async function tavilyScrape(url: string): Promise<{ markdown: string; title: string } | null> {
+  try {
+    const extracted = await tavilyExtract([url]);
+    const raw = extracted[0]?.raw_content ?? "";
+    if (!raw) return null;
+    return { markdown: raw, title: publisherOf(url) };
+  } catch (e) {
+    console.warn("[sources] tavily extract error", url, (e as Error).message);
+    return null;
+  }
+}
+
+async function scrapeUrl(url: string): Promise<{ markdown: string; title: string } | null> {
+  return (await tavilyScrape(url)) ?? (await firecrawlScrape(url));
+}
+
 /** Search + scrape + extract a usable, syllabus-relevant 100–200 word excerpt.
  *  Returns null on total failure.
  *  - `usedHosts` / `usedUrls` prevent the same site/article being reused.
@@ -530,6 +546,7 @@ export async function fetchGroundedSource(
   queryHint?: string,
   tierBudget?: TierBudget,
 ): Promise<GroundedSource | null> {
+  const deadline = Date.now() + (subjectKind === "humanities" ? 14_000 : 10_000);
   const allowList = subjectKind === "english" ? ALLOW_DOMAINS_ENGLISH : ALLOW_DOMAINS_HUMANITIES;
   const allowGenericTlds = subjectKind === "humanities";
   const queries = buildQueryChain(subjectKind, topic, learningOutcomes, queryHint);
@@ -546,7 +563,8 @@ export async function fetchGroundedSource(
     !!tierBudget && tierBudget.tier2Used >= tierBudget.maxTier2;
 
   // Walk the query chain (most specific → most general) until we get hits.
-  for (const query of queries) {
+  for (const query of queries.slice(0, subjectKind === "humanities" ? 3 : 2)) {
+    if (Date.now() > deadline) return null;
     const urls = await searchUrls(query, allowList, allowGenericTlds);
     if (urls.length === 0) {
       console.warn("[sources] no allow-listed results for query:", query);
@@ -566,9 +584,10 @@ export async function fetchGroundedSource(
       console.warn("[sources] all candidates already used for query:", query);
       continue;
     }
-    for (const url of candidates.slice(0, 8)) {
+    for (const url of candidates.slice(0, subjectKind === "humanities" ? 3 : 2)) {
+      if (Date.now() > deadline) return null;
       try {
-        const scraped = await firecrawlScrape(url);
+        const scraped = await scrapeUrl(url);
         if (!scraped) continue;
         const excerpt = extractExcerpt(scraped.markdown);
         if (!excerpt) continue;
