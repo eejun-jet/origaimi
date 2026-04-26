@@ -700,6 +700,39 @@ export type Database = {
           },
         ]
       }
+      syllabus_topic_papers: {
+        Row: {
+          created_at: string
+          paper_id: string
+          topic_id: string
+        }
+        Insert: {
+          created_at?: string
+          paper_id: string
+          topic_id: string
+        }
+        Update: {
+          created_at?: string
+          paper_id?: string
+          topic_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "syllabus_topic_papers_paper_id_fkey"
+            columns: ["paper_id"]
+            isOneToOne: false
+            referencedRelation: "syllabus_papers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "syllabus_topic_papers_topic_id_fkey"
+            columns: ["topic_id"]
+            isOneToOne: false
+            referencedRelation: "syllabus_topics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       syllabus_topics: {
         Row: {
           ao_codes: string[]
