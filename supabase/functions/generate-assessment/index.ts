@@ -199,6 +199,52 @@ L4 (7–8m): Uses ALL sources; evaluates BOTH support AND challenge with evidenc
   },
 };
 
+// Per-skill L4 sample-answer guidance for SBQs. The `answer` field on each
+// generated SBQ MUST be a fully written candidate-voice exemplar that hits
+// the L4 descriptors of the skill's LORMS — not a meta-description like
+// "A strong answer would…". These blocks are injected into the section
+// prompt so the model knows what an L4 response actually looks like.
+const SBQ_SAMPLE_ANSWER_GUIDANCE: Record<string, string> = {
+  inference: `INFERENCE L4 sample answer (write into the answer field, in the candidate's voice — NEVER "a strong answer would…"):
+  - 2–3 short paragraphs, ~150–220 words.
+  - Make TWO distinct, valid inferences about the topic (about attitudes / motives / perspectives / contemporary opinion / unstated assumptions — NOT literal recall).
+  - Support EACH inference with a SHORT direct quotation (in quotation marks) lifted verbatim from Source A.
+  - Close with a one-sentence reasoned overall conclusion about what Source A reveals.
+  - DO NOT describe the source's content; INTERPRET it.`,
+  purpose: `PURPOSE L4 sample answer (candidate's voice, ~180–250 words):
+  - State a plausible specific purpose (persuade / warn / glorify / justify / reassure / discredit / mobilise) in the opening sentence.
+  - Provenance paragraph: cite the AUTHOR, the AUDIENCE, the DATE, and the immediate CONTEXT to explain WHY the source was produced; bring in 1–2 specific contextual facts.
+  - Content paragraph: quote 1–2 short phrases from Source A that betray the purpose (loaded language, framing, what is omitted).
+  - End with a reasoned conclusion linking provenance + content to the stated purpose.`,
+  comparison: `COMPARISON L4 sample answer (candidate's voice, ~220–320 words for 7–8 mark parts):
+  - Paragraph 1 — SIMILARITY in MESSAGE: identify a shared message, with a SHORT quoted phrase from EACH of Sources A and B.
+  - Paragraph 2 — DIFFERENCE in MESSAGE: identify a clear difference, again with a SHORT quoted phrase from EACH source.
+  - Paragraph 3 — TONE / PROVENANCE comparison: compare HOW each source argues (tone, register, what each emphasises) and link this to provenance (author, audience, date).
+  - Conclusion: a reasoned overall judgement on how far the two sources agree, weighing whether the message-similarity or the tone/provenance-difference is more significant.`,
+  utility: `UTILITY L4 sample answer (candidate's voice, ~250–350 words):
+  - Opening: a one-line judgement on how useful Source A is as evidence about the topic.
+  - CONTENT paragraph: quote specific details from Source A and explain what they tell us about the topic.
+  - PROVENANCE paragraph: identify author / audience / date / type of source and explain how each makes the source MORE or LESS useful.
+  - LIMITATIONS paragraph: explicitly state what Source A CANNOT show — what is missing, what perspective is absent, what the format constrains.
+  - Conclusion: a reasoned overall judgement that weighs content + provenance + limitations to decide how far Source A is useful.`,
+  reliability: `RELIABILITY L4 sample answer (candidate's voice, ~250–350 words):
+  - Opening: a one-line judgement on how reliable Source A is.
+  - CROSS-REFERENCE paragraph: take 1–2 specific claims from Source A and weigh them against your contextual knowledge (named events, dates, statistics, named individuals) — do they corroborate or contradict?
+  - PROVENANCE paragraph: author, audience, date — does the provenance support trust or undermine it?
+  - BIAS / MOTIVE paragraph: identify whose interest the source serves; quote loaded or selective language; note what is conspicuously omitted.
+  - Conclusion: a balanced, reasoned overall judgement (not a flat "reliable / unreliable") on how far Source A can be trusted as evidence about the topic.`,
+  surprise: `SURPRISE L4 sample answer (candidate's voice, ~180–260 words):
+  - Paragraph 1 — what IS surprising: name the surprising element, anchor it in BOTH a quoted detail from Source A AND a specific piece of contextual knowledge that makes it unexpected.
+  - Paragraph 2 — what is NOT surprising: explain what the source says that fits the wider historical context, again grounded in BOTH source detail AND contextual knowledge (and reference provenance where relevant — author, audience, date).
+  - Conclusion: a reasoned, balanced judgement on whether you are MORE surprised or LESS surprised overall, and why.`,
+  assertion: `ASSERTION (HYPOTHESIS) L4 sample answer (candidate's voice, ~350–500 words for the 8-mark part):
+  - Opening: state your overall judgement on how far the sources support the assertion.
+  - SUPPORT paragraph(s): group the sources that SUPPORT the assertion; for EACH cite a SHORT quoted phrase or specific detail and explain how it supports.
+  - CHALLENGE paragraph(s): group the sources that CHALLENGE the assertion; for EACH cite a SHORT quoted phrase or specific detail and explain how it challenges.
+  - SOURCE-QUALITY paragraph: weigh provenance + bias across the set — which sources are more credible / more partial, and how that affects the weight of their evidence.
+  - Conclusion: a substantiated overall judgement that uses EVERY source (Sources A, B, C, D, E) and reaches a reasoned position on how far the assertion holds.`,
+};
+
 // ---------- History Section B (essay) — SEAB-style L1–L4 mark scheme + model essay ----------
 // Section B essays are TWO-FACTOR analytical questions (e.g. "How far / To what
 // extent / Which was more important"). The mark scheme below mirrors the SEAB
@@ -527,21 +573,37 @@ function buildDeterministicSbqQuestions(section: Section, sources: GroundedSourc
       .replace(/\{T\}/g, topicNoun)
       .replace(/\{P\}/g, part);
 
+    // Pull a short snippet from the bound source(s) so the deterministic
+    // exemplar can quote real text. Trim to ~120 chars and end on a word.
+    const snippet = (text: string | undefined, max = 120): string => {
+      const t = (text ?? "").replace(/\s+/g, " ").trim();
+      if (!t) return "";
+      if (t.length <= max) return t;
+      const cut = t.slice(0, max);
+      const lastSpace = cut.lastIndexOf(" ");
+      return (lastSpace > 40 ? cut.slice(0, lastSpace) : cut) + "…";
+    };
+    const singleIdx = i % Math.max(1, sources.length);
+    const secondIdx = (i + 1) % Math.max(1, sources.length);
+    const q1 = snippet(sources[singleIdx]?.excerpt);
+    const q2 = snippet(sources[secondIdx]?.excerpt);
+    const allQuotes = sources.map((s, idx) => `Source ${labels[idx]}: "${snippet(s.excerpt, 80)}"`).join("; ");
+
     let answer: string;
     if (skillId === "comparison") {
-      answer = `A strong answer compares both message AND tone/provenance across Sources ${single} and ${second}, supports each comparison with quoted evidence, and reaches a reasoned judgement on overall similarity.`;
+      answer = `Sources ${single} and ${second} share a broad message about ${topicNoun}: both frame it as a development with significant consequences (Source ${single}: "${q1}"; Source ${second}: "${q2}"). However, they differ in tone and emphasis — Source ${single} reads as more measured and observational, while Source ${second} adopts a more pointed, evaluative register, reflecting their different authors and intended audiences. Looking at provenance, Source ${single}'s framing reflects the perspective of its publisher and date, whereas Source ${second}'s framing reflects a different vantage point. Overall, the two sources agree on the broad significance of ${topicNoun} but disagree on how to interpret it; the difference in tone and provenance is the more substantial divergence, so I would judge them only partially similar.`;
     } else if (skillId === "assertion") {
-      answer = `A strong answer uses EVERY source (${allLabels}), groups those that support and challenge the assertion with specific evidence, weighs source quality (provenance + bias), and reaches a substantiated overall judgement.`;
+      answer = `On balance, the sources offer mixed support for the assertion. SUPPORT: several sources back the claim — for example, ${allQuotes} — together suggesting that ${topicNoun} was indeed shaped in the way the assertion proposes. CHALLENGE: other sources qualify or contradict the assertion, pointing to alternative drivers and counter-examples. SOURCE QUALITY: the supporting sources include contemporary documents whose provenance lends weight, but they also reflect the partial perspective of their authors; the challenging sources draw on different vantage points and so cannot simply be dismissed. Weighing the set as a whole, the assertion is partially supported: the strongest contemporary evidence aligns with it, but the qualifications raised by the more critical sources show that the picture is more nuanced than the assertion implies.`;
     } else if (skillId === "utility") {
-      answer = `A strong answer evaluates utility using BOTH content AND provenance of Source ${single}, acknowledges clear limitations, and reaches a reasoned overall judgement.`;
+      answer = `Source ${single} is moderately useful as evidence about ${topicNoun}. CONTENT: it provides specific details — "${q1}" — that illuminate how the issue was perceived at the time. PROVENANCE: as a contemporary publication aimed at a specific audience, it gives us direct access to attitudes of that period, which raises its utility. LIMITATIONS: it cannot show the views of those outside that audience, omits the wider economic and political context, and reflects the editorial agenda of its publisher. Overall, Source ${single} is useful for understanding contemporary perspectives on ${topicNoun}, but it must be read alongside other sources to build a balanced picture.`;
     } else if (skillId === "reliability") {
-      answer = `A strong answer cross-references the content of Source ${single} against contextual knowledge AND analyses provenance/bias, then reaches a reasoned, balanced judgement.`;
+      answer = `Source ${single} is partially reliable as evidence about ${topicNoun}. CROSS-REFERENCE: its claim that "${q1}" is broadly consistent with what we know from contextual evidence about ${topicNoun}, which strengthens its trustworthiness on that point. PROVENANCE: published by a known outlet at the time of the events, it has the immediacy of contemporary reporting, but its readership and editorial line shape what it chose to include. BIAS / MOTIVE: the language is not neutral — the framing serves a particular agenda, and certain perspectives are conspicuously absent. Overall, Source ${single} can be trusted on the broad facts of ${topicNoun} but its interpretation should be treated with caution; cross-checking against sources with a different vantage point is essential.`;
     } else if (skillId === "purpose") {
-      answer = `A strong answer identifies a plausible purpose and supports it with BOTH provenance (author, audience, date, context) AND specific content evidence from Source ${single}, drawing on contextual knowledge.`;
+      answer = `The purpose of Source ${single} is to shape contemporary opinion about ${topicNoun} — most likely to persuade its readership to adopt a particular view. PROVENANCE: published by its named author for a specific contemporary audience at a critical moment, it was produced precisely when public attitudes were being formed. CONTENT: the loaded phrasing — "${q1}" — and what the source chooses to emphasise (or omit) point to a clear persuasive intent rather than a neutral record. Drawing on contextual knowledge of the period, it is reasonable to conclude that Source ${single} was produced to mobilise sympathy for one side of the debate over ${topicNoun}.`;
     } else if (skillId === "surprise") {
-      answer = `A strong answer explains BOTH what is surprising AND what is not surprising about Source ${single}, anchored in source evidence and contextual knowledge, then reaches a reasoned judgement.`;
+      answer = `I am partly surprised by Source ${single}. SURPRISING: the claim that "${q1}" is unexpected because contextual knowledge suggests that contemporary attitudes were generally more cautious about ${topicNoun}. NOT SURPRISING: at the same time, given the source's provenance — its author, audience and date — the framing is consistent with what that publication would be expected to argue, and other contemporary evidence shows similar views were in circulation. Overall I am more surprised by the strength of the language than by the position itself; the position fits the period, but the framing goes further than I would have predicted.`;
     } else {
-      answer = `A strong answer makes TWO valid inferences about ${topicNoun} and supports each with precise quoted evidence from Source ${single}.`;
+      answer = `Source ${single} suggests two things about ${topicNoun}. First, it implies that contemporary opinion was strongly engaged with the issue: the source states that "${q1}", which suggests not just description but evaluation by the author. Secondly, it implies that there was a particular perspective being promoted — the language used reveals attitudes and assumptions, not just facts, indicating that the author was inviting readers to share a specific view. Overall, Source ${single} reveals that ${topicNoun} was a contested issue at the time, and that the source itself is a deliberate intervention in that contest rather than a neutral record.`;
     }
 
     const scheme = skill?.markScheme ?? SBQ_SKILLS.inference.markScheme;
@@ -886,6 +948,15 @@ ${blocks}${imageBlock}
       return `  - Question ${i + 1} (part ${String.fromCharCode(97 + i)}): ${s.label}${lockedNote}${srcNote}`;
     }).join("\n");
 
+    // Per-skill L4 sample-answer guidance — one block per UNIQUE skill used
+    // in this section, so the model knows what an L4 candidate response looks
+    // like for each assigned skill.
+    const usedSkillIds = Array.from(new Set(perQuestionSkills.filter((s): s is SbqSkillDef => !!s).map((s) => s.id)));
+    const sampleAnswerBlock = usedSkillIds
+      .map((id) => SBQ_SAMPLE_ANSWER_GUIDANCE[id])
+      .filter(Boolean)
+      .join("\n\n");
+
     skillBlock = `
 
 SBQ SKILL ASSIGNMENTS (apply each skill's format and mark scheme to the assigned part):
@@ -894,7 +965,16 @@ ${skillSummaries}
 PER-PART SKILL & SOURCE-BINDING MAPPING (you MUST follow this exact mapping — DO NOT swap sources between parts):
 ${assignments}
 
-IMPORTANT: For Assertion parts, the hypothesis MUST be testable against ALL sources (each should plausibly support OR challenge it). For single-source parts, the bound source is FIXED above — name it explicitly in the stem. Do NOT mix skill formats across parts. Do NOT bind two different single-source parts to the same source.`;
+IMPORTANT: For Assertion parts, the hypothesis MUST be testable against ALL sources (each should plausibly support OR challenge it). For single-source parts, the bound source is FIXED above — name it explicitly in the stem. Do NOT mix skill formats across parts. Do NOT bind two different single-source parts to the same source.
+
+SAMPLE ANSWER REQUIREMENTS (CRITICAL — the answer field for EVERY SBQ part MUST be a fully-written L4 candidate exemplar, NOT a meta-description):
+  - Write the answer as if YOU were the candidate sitting the paper, in continuous prose paragraphs.
+  - The answer MUST hit the L4 descriptors of the part's assigned LORMS skill — explicitly performing the L4 moves listed below.
+  - The answer MUST quote SHORT verbatim phrases (in quotation marks) from the actual provided source(s) the part is anchored on — pull them from the SHARED SOURCES block above. For pictorial sources, refer to specific visible elements / data / symbols instead of quoting text.
+  - FORBIDDEN openings for the answer field: "A strong answer would…", "A model response would…", "The candidate should…", "Students should…". Write the answer DIRECTLY (e.g. "Source A suggests that…", "I am more surprised than not, because…").
+
+Per-skill L4 expectations for the answer field:
+${sampleAnswerBlock}`;
   }
 
   let difficultyBlock = "";
@@ -1018,7 +1098,7 @@ const TOOL = {
               marks: { type: "integer", minimum: 1 },
               stem: { type: "string", description: "The question text. For structured questions include sub-parts (a), (b), etc. For source-based questions include the verbatim Source A block + citation, then the sub-parts." },
               options: { type: ["array", "null"], items: { type: "string" }, description: "MCQ options or null." },
-              answer: { type: "string", description: "The correct answer (for MCQ, the letter and option text)." },
+              answer: { type: "string", description: "The correct answer. For MCQ: the letter and option text. For source_based: a fully-written L4 candidate exemplar in the candidate's voice (NOT a meta-description) that performs the L4 moves of the assigned LORMS skill (e.g. quoted source evidence + provenance + bias + reasoned judgement, where appropriate). For long/essay: a full model essay." },
               mark_scheme: { type: "string", description: "Marking rubric showing how to award marks." },
               source_excerpt: { type: ["string", "null"], description: "Verbatim source passage used in the stem (only when a GROUNDED SOURCE was provided)." },
               source_url: { type: ["string", "null"], description: "URL of the source (only when a GROUNDED SOURCE was provided)." },

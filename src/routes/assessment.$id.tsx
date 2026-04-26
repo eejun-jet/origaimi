@@ -1283,7 +1283,7 @@ function QuestionCard({
                 <summary className="cursor-pointer text-xs font-medium uppercase tracking-wide text-muted-foreground">Mark scheme</summary>
                 {q.answer && (
                   <div className="mt-2">
-                    <span className="font-medium">Answer:</span>
+                    <span className="font-medium">{q.question_type === "source_based" ? "Sample answer (L4):" : "Answer:"}</span>
                     {/* Render as discrete paragraphs so essay model answers aren't a wall of text. */}
                     <div className="mt-1 space-y-2 font-paper leading-relaxed">
                       {q.answer.split(/\n\s*\n/).map((para, i) => (
