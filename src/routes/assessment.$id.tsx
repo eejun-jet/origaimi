@@ -2216,6 +2216,15 @@ function SeverityIcon({ severity }: { severity: Severity }) {
   return <Info className="h-3.5 w-3.5 text-muted-foreground" />;
 }
 
+type CoachDiscussTarget = {
+  key: string;
+  title: string;
+  subtitle?: string;
+  severity: Severity;
+  body: React.ReactNode;
+  questionId?: string;
+};
+
 function CoachReviewBody({
   findings,
   dismissed,
@@ -2223,6 +2232,8 @@ function CoachReviewBody({
   onScrollToQuestion,
   onApply,
   applyingId,
+  onDiscuss,
+  remarkCountFor,
 }: {
   findings: CoachFindings;
   dismissed: Set<string>;
@@ -2230,6 +2241,8 @@ function CoachReviewBody({
   onScrollToQuestion: (id: string) => void;
   onApply: (s: CoachFindings["suggestions"][number], key: string) => void;
   applyingId: string | null;
+  onDiscuss: (t: CoachDiscussTarget) => void;
+  remarkCountFor: (key: string) => number;
 }) {
   return (
     <div className="mt-3 space-y-2 text-xs">
