@@ -1584,6 +1584,19 @@ Deno.serve(async (req) => {
         const qKOs: string[] = Array.isArray(q.knowledge_outcomes) && q.knowledge_outcomes.length > 0 ? q.knowledge_outcomes : fallbackKOs;
         const qLOs: string[] = Array.isArray(q.learning_outcomes) && q.learning_outcomes.length > 0 ? q.learning_outcomes : fallbackLOs;
 
+        // Semantic post-pass: add LOs/KOs/AOs the stem demonstrably exercises
+        // even when the model under-tagged. Only ADDS, never removes.
+        const inferKind: "humanities" | "english" | "science_math" | "other" =
+          subjectKind === "humanities" ? "humanities"
+          : subjectKind === "english" ? "english"
+          : scienceMathKind ? "science_math" : "other";
+        const expanded = expandQuestionTags(
+          { stem: q.stem ?? "", answer: q.answer ?? null, mark_scheme: q.mark_scheme ?? null, topic: q.topic ?? null, options: Array.isArray(q.options) ? q.options : null },
+          { ao_codes: qAOs, knowledge_outcomes: qKOs, learning_outcomes: qLOs },
+          { loPool: sectionLOs, koPool: sectionKOs, aoPool: sectionAOs },
+          inferKind,
+        );
+
         allRows.push({
           assessment_id: assessmentId,
           user_id: userId,
