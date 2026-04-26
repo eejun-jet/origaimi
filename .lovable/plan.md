@@ -1,68 +1,98 @@
-## Goal
+# Why “History mock paper” failed again
 
-Make the AO / LO / KO coverage checker treat content from the **L4 sample answer** and **mark scheme** as first-class evidence that an LO/KO/AO is being tested. Now that every SBQ part and every essay carries a substantial sample answer, an LO the student must deploy to write that answer counts as covered — even when the bare stem doesn't name it explicitly.
+The backend generation function is being killed with:
 
-This stops the false "uncovered" warnings the user is seeing.
+```text
+CPU Time exceeded
+```
 
-## Where the change lives
+The failing path is the History source-based-question pipeline. After the earlier change to keep sources on-topic and cap them at 6, the generator now does too much live work before it can save the paper:
 
-The matcher is in three near-duplicate files (one for the React app, two for Deno edge functions, which can't import from `src/`):
+1. It seeds curated History sources.
+2. It launches live text-source searches/scrapes with up to 14s per fetch.
+3. If those under-deliver, it does a second “rescue” round of live searches/scrapes.
+4. It then tries pictorial source search across many image query angles.
+5. It then calls AI again to generate source provenances.
 
-- `src/lib/coverage-infer.ts` (Coverage panel in `src/routes/assessment.$id.tsx`)
-- `supabase/functions/coach-review/coverage-infer.ts` (input to the Coach LLM)
-- `supabase/functions/generate-assessment/coverage-infer.ts` (post-pass before insert)
+For a Cold War / History SBQ, those steps can exceed the compute limit before the deterministic question builder and database insert finish. That is why the generation fails even though the local app server is fine.
 
-All three already concatenate `stem + answer + mark_scheme + topic + options` into the matching text. So the fix is purely about *thresholds and verb lists*, not call sites — keep all three in sync with identical content.
+The logs also show the source fetcher still wasting time on unusable/off-topic results before shutdown, e.g. it dropped an irrelevant `analytics.usa.gov` result and then the function exceeded CPU.
 
-## Changes to `coverage-infer.ts` (×3)
+# Fix plan
 
-### 1. LO matcher — context-sensitive threshold
+## 1. Make History SBQ generation bounded and deterministic
 
-Currently a question matches an LO when ≥60% of the LO's content tokens (stemmed) appear in the supporting text, AND every proper-noun token in the LO appears verbatim. This is too strict once the sample answer gets long.
+For humanities `source_based` sections:
 
-- Detect "rich support": the supporting text has ≥60 content tokens (i.e. the question carries a real sample answer / mark scheme, not just a stem).
-- Drop the LO-token threshold from **60% → 40%** when support is rich.
-- For short LOs (≤3 content tokens, currently require ALL): also accept **2-of-3** when support is rich.
-- Soften the proper-noun gate: instead of requiring EVERY named entity in the LO, require **≥ ceil(N/2)** of them. Single-name LOs still require that one name (otherwise the question really is about a different topic).
+- Use curated topic-matched sources first.
+- Require enough curated text sources before doing live search.
+- If curated sources already provide at least 4 text sources, skip live text crawling entirely.
+- Keep the hard cap of 6 total sources.
 
-### 2. KO inference — broader verb pool + factual-recall heuristic
+This keeps “Origins of the Cold War” anchored to Cold War material instead of web-search drift.
 
-Add verbs that surface in L4 sample answers and SBQ mark schemes:
+## 2. Remove the expensive rescue pass
 
-- **Understanding**: + "account for", "suggest", "imply", "reveal", "indicate"
-- **Application**: + "draw on contextual" (matches "draw on your contextual knowledge")
-- **Skills**: + "cross-reference", "weighing", "balanced judgement", "reasoned judgement", "provenance", "bias", "motive", "limitations"
+Delete or disable the second live “rescue” fetch round for SBQs. If initial fetches under-deliver, top up from curated sources only.
 
-Fix the matcher so multi-word verbs (e.g. "account for", "show that") use substring match, not the existing single-word boundary match (which silently misses them today).
+This prevents the function from repeatedly scraping the web after it already has usable sources.
 
-Add a **Knowledge fold-in**: if the supporting text contains ≥2 four-digit year tokens (1500–2099) OR ≥6 capitalised proper nouns, treat **Knowledge** as engaged when it's in the pool. This catches essays / SBQ answers that visibly demonstrate factual recall without using a "state/name/list" verb.
+## 3. Put pictorial sources on a strict budget
 
-### 3. AO inference — broader verb pool + cascade rules
+Change pictorial source fetching so it cannot dominate the run:
 
-Expand the humanities AO pool to include verbs the L4 sample answer naturally uses:
+- Max 1 pictorial source by default for History SBQs, unless the curated bundle already includes a safe pictorial item.
+- Shorten image search deadline substantially.
+- Limit image query attempts to the first 2–3 angles, not all 7.
+- If no picture is found quickly, continue without a picture rather than failing or timing out.
 
-- **AO1**: + "outline", "recount"
-- **AO2**: + "suggest", "imply", "reveal"
-- **AO3**: + "evaluate", "assess", "judgement / judgment", "provenance", "bias", "motive", "limitation", "cross-reference", "weighing", "weigh"
+The UI will still label pictorial sources separately when present.
 
-Add two cascade rules:
+## 4. Remove AI provenance generation from the critical path
 
-- For humanities, when AO3 fires AND AO2 is in the pool → also add AO2 (you cannot evaluate without explaining).
-- When the supporting text shows ≥2 year tokens OR ≥6 proper nouns AND AO1 is in the pool → also add AO1 (factual-recall demonstration).
+Skip `generateProvenances()` for SBQ generation and use deterministic provenance strings from publisher/title/date where available.
 
-### 4. Comment update
+This saves another AI call and avoids spending compute after sources have already been selected.
 
-Update the file header comment to spell out: "now that every SBQ + essay carries a substantial L4 sample answer, content the student would have to deploy to write that answer is treated as evidence the LO is being tested."
+## 5. Strengthen query/result filtering
 
-## Non-goals / kept as-is
+Tighten search filtering so generic data/API pages are ignored earlier:
 
-- No DB / schema change.
-- No change to the call sites in `src/routes/assessment.$id.tsx` or `supabase/functions/coach-review/index.ts` — they already pass `answer` and `mark_scheme` into the matcher.
-- The matcher is still **additive only** — it never removes a tag the LLM or the teacher set.
-- After updating the two Deno copies, redeploy `coach-review` and `generate-assessment`.
+- Add `analytics.usa.gov` and similar data endpoints to the deny list.
+- Reject CSV/API/data URLs before scraping.
+- Prefer Cold War-specific curated bundles for topics matching “origins of the Cold War”, “Truman Doctrine”, “Marshall Plan”, “Berlin Blockade”, “Soviet expansion”, etc.
 
-## Acceptance
+## 6. Better failure message
 
-- Re-opening an existing History paper's Coverage panel shows fewer false "uncovered" LO/KO/AO warnings, because LOs the sample answer demonstrably engages now register as covered.
-- Newly generated papers run the same expanded matcher in the post-pass, so the saved `learning_outcomes` / `knowledge_outcomes` / `ao_codes` arrays are more complete from the start.
-- The Coach LLM receives the same expanded tags, so its AO drift / KO balance checks reflect what the answer actually tests.
+If a generation still fails due to backend limits, return a clearer UI error such as:
+
+```text
+History source generation took too long while collecting live sources. Try again, or reduce live source fetching.
+```
+
+But the main fix is to avoid hitting the limit in the first place.
+
+# Files to update
+
+- `supabase/functions/generate-assessment/index.ts`
+  - Bound SBQ source pool work.
+  - Disable rescue fetch.
+  - Skip AI provenance for SBQs.
+  - Reduce/limit image fetching.
+
+- `supabase/functions/generate-assessment/sources.ts`
+  - Tighten deny/filter rules.
+  - Shorten image fetch loop/deadline.
+  - Reject obvious data/API URLs early.
+
+- Redeploy `generate-assessment` after changes.
+
+# Expected result
+
+“History mock paper” should generate successfully because the History SBQ path will no longer spend most of its backend budget crawling, rescuing, image-searching, and provenance-generating before inserting the assessment.
+
+The output should still respect your source requirements:
+
+- Cold War topic stays Cold War.
+- No more than 6 sources total.
+- Pictorial sources, when present, are clearly separated from documentary sources.
