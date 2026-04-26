@@ -1,53 +1,68 @@
 ## Goal
-Every source in History/Social Studies SBQ sections must show a **one-sentence provenance** describing what the source is (e.g. "An editorial published in The Straits Times in August 1965", "A cartoon by David Low published in the Evening Standard, 1936"). The hyperlink to the original source must be displayed per source so reviewers can verify it.
 
-## Why this matters
-SEAB SBQ sources are always introduced by provenance — origin, author, date, audience. The current generator strips this context: students see only an excerpt or image. Provenance is also evidence used to evaluate reliability/utility, so it must be present for the questions themselves to be valid.
+For History Section B (essay) questions, generate answers and mark schemes in a strict **two-factor SEAB-style essay format** with explicit L1–L4 level descriptors and a model essay answer that demonstrates the historical analysis required for each level.
 
-## Current behaviour
-- `GroundedSource` and `GroundedImageSource` carry `source_url`, `source_title`, `publisher` — no provenance field.
-- `source_excerpt` encodes the pool as `Source A: <text>` / `Source A: [IMAGE] caption — url`. Per-source URL is **not** encoded — the UI only shows ONE primary citation (Source A's URL) at the bottom of the Sources card.
-- Frontend parser `parseSharedSourcePool` (`src/routes/assessment.$id.tsx`) extracts label + text/image only.
+## Current Behaviour
 
-## Changes
+- `supabase/functions/generate-assessment/index.ts` has detailed L1–L4 mark schemes for source-based skills (lines 105–200) but **no equivalent block for `long` (essay) questions**.
+- Humanities essays fall through to the generic prompt: the LLM produces a free-form `mark_scheme` and a short `answer`, with no enforced level descriptors and often no real model essay.
+- Section B essays are detected by `subjectKind === "humanities" && question_type === "long"` (the `isHumanitiesNonEssay` check at line 1097–1100 already excludes them from source fetching).
 
-### 1. `supabase/functions/generate-assessment/sources.ts`
-- Add `provenance?: string` to `GroundedSource` and `GroundedImageSource` types.
-- Add curated provenance entries to the existing `curatedHumanitiesSourcePool` bundles (WWII, Nazi/Weimar, Stalin, Cold War origins/end, SG decolonisation) so curated text sources ship with hand-written one-sentence provenance.
+## Plan
 
-### 2. `supabase/functions/generate-assessment/provenance.ts` (new file)
-- `generateProvenances(sources, images, topic): Promise<{textProv: string[], imageProv: string[]}>` — single Lovable AI Gateway call (`google/gemini-2.5-flash-lite`, `tool_choice` for structured JSON).
-- Prompt instructs the model to write **one short historian's provenance sentence** per source, naming source type + author/issuer + venue/publisher + date when inferable, e.g. "A speech delivered by Winston Churchill to the House of Commons on 18 June 1940."
-- Fallback when AI fails or omits an entry: deterministic `"From <publisher>: <source_title>."` so every source still has a value.
-- 8s timeout — non-blocking; if it fails the section continues with the deterministic fallback.
+### 1. Add a History Essay Mark Scheme constant
+In `index.ts`, beside the existing `SBQ_SKILLS` block, add a new `HISTORY_ESSAY_MARK_SCHEME` string with the exact level descriptors the user specified:
 
-### 3. `supabase/functions/generate-assessment/index.ts`
-- After the SBQ pool (text + images) is assembled and BEFORE the prompt is sent to the main LLM, call `generateProvenances` and write the result back onto each source's `provenance` field. Use curated `provenance` if already present and skip those in the AI batch.
-- Update the `[Source X]` blocks inside `sbqSectionPreamble` (around lines 724–741) so each source block lists `Provenance: <provenance>` and `Citation/Link: <source_url>`. The main LLM should reference provenance when writing utility/reliability sub-parts.
-- Update the encoded `source_excerpt` writer (around lines 1410–1420) to a structured marker format the frontend can parse:
-  - Text source: `Source A: [PROV] <provenance> [URL] <source_url> [TEXT] <excerpt>`
-  - Image source: `Source A: [IMAGE] <caption> — <image_url> [PROV] <provenance> [URL] <source_url>`
-  - Markers (`[PROV]`, `[URL]`, `[TEXT]`, `[IMAGE]`) are unique enough to be safely extracted with anchored regex without colliding with normal source text. Provenance and excerpt have any embedded `[PROV]/[URL]/[TEXT]` stripped before encoding (defensive sanitiser).
+```
+LEVEL DESCRIPTORS (use VERBATIM in the mark_scheme field, then add a short awarding note):
+L1 (1–2 marks): Describes without focus on the question.
+L2 (3–4 marks): Describes one or both factors with details, without explanation.
+L3 (5–8 marks): Explains one or both factors with explanation.
+   - Maximum of 6 marks if only ONE factor is explained.
+   - 7–8 marks requires BOTH factors explained with detail.
+L4 (9–10 marks): L3 + a clear, detailed evaluation reaching a substantiated overall judgement.
+```
 
-### 4. `src/routes/assessment.$id.tsx`
-- Extend `ParsedSource` type:
-  - Both variants gain `provenance?: string` and `sourceUrl?: string`.
-- Update `parseSharedSourcePool`:
-  - For each `Source X:` chunk, extract `[PROV] … [URL] … [TEXT] …` (text) or `[IMAGE] … — <imgUrl> [PROV] … [URL] …` (image). Fall back to current parsing when markers absent (back-compat with existing assessments).
-- Update the Sources card render (around lines 727–754):
-  - Above the excerpt/image, show `Provenance: <provenance>` in italic muted text.
-  - Below each source, show `View source ↗` linking to that source's `sourceUrl` (replacing — or in addition to — the single "Primary citation" footer; keep the footer hidden when per-source links are present).
+It will also include a one-paragraph guidance block explaining what counts as "describe" vs "explain" vs "evaluate" so the LLM applies the bands consistently.
 
-### 5. `.lovable/plan.md`
-Append a note recording the new provenance requirement and encoding format so future edits preserve it.
+### 2. Add a History Essay Answer Template
+A second constant `HISTORY_ESSAY_ANSWER_TEMPLATE` instructing the model to write the `answer` field as a **full model essay** structured as:
 
-## Notes
-- No database migration. `assessment_questions.source_excerpt` is text and stores the marker-encoded pool as before.
-- Back-compat: existing assessments without `[PROV]` markers continue to render via the existing fallback path.
-- Cost: one extra `gemini-2.5-flash-lite` call per SBQ section (~5–6 sources). Budget impact is negligible compared to the main generation call.
+- **Introduction** (1 short paragraph): defines key terms, identifies the two factors to be discussed, states a preliminary stand.
+- **Factor 1 (PEEL paragraph)**: Point → Evidence (specific dates, names, statistics, events) → Explanation linking to the question → Mini-link.
+- **Factor 2 (PEEL paragraph)**: same structure for the contrasting/second factor.
+- **Evaluation paragraph**: weighs the two factors against each other (more important / decisive / necessary-vs-sufficient / short-vs-long-term), reaches a substantiated judgement.
+- **Conclusion** (1–2 sentences): restates the judgement.
 
+The template enforces inclusion of concrete historical detail (dates, named actors, events, figures) so the answer is usable as a student exemplar — not a generic outline.
 
-## 2026-04-26 — Per-source provenance + hyperlink
-- Every SBQ source (text + pictorial) now ships with a one-sentence provenance generated by Lovable AI Gateway (gemini-2.5-flash-lite) in a single batched call after pool assembly. Falls back to "From <publisher>: <title>." on failure.
-- source_excerpt encoding extended with [PROV] / [URL] / [TEXT] markers per source. Image format: "Source X: [IMAGE] caption — imgUrl [PROV] … [URL] …". Text format: "Source X: [PROV] … [URL] … [TEXT] …".
-- Frontend parser (parseSharedSourcePool) recognises both new and legacy formats. The Sources card shows provenance above each source and a "View source ↗" link per item.
+### 3. Wire it into the prompt builder
+In `buildSectionUserPrompt` (around line 679), detect History essay sections:
+```ts
+const isHistoryEssay =
+  opts.subjectKind === "humanities" &&
+  section.question_type === "long";
+```
+When true, append a new `historyEssayBlock` to the prompt containing:
+- The level descriptor block (rendered verbatim).
+- The model-answer template.
+- A hard instruction: "The `mark_scheme` field MUST contain the four level descriptors verbatim, followed by 1–2 indicative-content bullets per level tailored to this specific question. The `answer` field MUST be a full model essay (~400–600 words) following the template above, with at least 4 specific historical references (dates, names, events, statistics) per factor."
+
+This block is inserted between `humanitiesSourceGuidance` and `sbqSectionPreamble` (line 900) so it only applies to History essay sections and does not interfere with SBQ logic.
+
+### 4. Strengthen the question stem guidance for essays
+Add an instruction that the essay stem must be a two-factor "How far / To what extent / Which was more important" question phrased so that exactly two named factors can be discussed (the prompt will list the two factors explicitly to anchor L2/L3 marking).
+
+### 5. No DB / frontend changes needed
+The frontend (`src/routes/assessment.$id.tsx`) already renders `mark_scheme` and `answer` as preformatted text (`whitespace-pre-wrap`) so multi-paragraph essays and level descriptors will display correctly without UI work.
+
+### 6. Redeploy the edge function
+`generate-assessment` is redeployed automatically; no other functions change.
+
+## Files to edit
+
+- `supabase/functions/generate-assessment/index.ts`
+  - Add `HISTORY_ESSAY_MARK_SCHEME` and `HISTORY_ESSAY_ANSWER_TEMPLATE` constants (near existing `SBQ_SKILLS`).
+  - Inject `historyEssayBlock` into `buildSectionUserPrompt` when `subjectKind === "humanities"` and `question_type === "long"`.
+
+No schema, no frontend changes.
