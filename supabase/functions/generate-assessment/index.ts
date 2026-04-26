@@ -1626,9 +1626,9 @@ Deno.serve(async (req) => {
           diagram_source: null,
           diagram_citation: null,
           diagram_caption: null,
-          ao_codes: qAOs,
-          knowledge_outcomes: qKOs,
-          learning_outcomes: qLOs,
+          ao_codes: expanded.ao_codes,
+          knowledge_outcomes: expanded.knowledge_outcomes,
+          learning_outcomes: expanded.learning_outcomes,
           // transient — used by the post-insert diagram pass, stripped before insert
           _wantDiagram: wantDiagram,
           _diagramTopic: q.topic ?? t?.topic ?? "",
