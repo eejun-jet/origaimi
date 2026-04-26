@@ -1,0 +1,1 @@
+UPDATE assessments SET status = 'draft' WHERE id = '28330bbc-3793-462b-a010-9842e3bf0fa1' AND status = 'generating';

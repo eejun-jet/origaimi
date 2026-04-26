@@ -2017,12 +2017,28 @@ Deno.serve(async (req) => {
         .filter(({ r }) => r._wantDiagram && r._diagramKind);
 
       if (diagramTasks.length > 0) {
+        // Cap the entire diagram phase by wall-clock so we always reach the
+        // final status update. Big MCQ papers (e.g. Combined Science Paper 1
+        // with 40 items) used to time out the whole edge function here,
+        // leaving the assessment stuck in `generating` even though all
+        // questions were already inserted.
+        const DIAGRAM_PHASE_BUDGET_MS = 25_000;
+        const phaseDeadline = Date.now() + DIAGRAM_PHASE_BUDGET_MS;
         const CONCURRENCY = 8;
         let cursor = 0;
+        let skippedAfterDeadline = 0;
         const runOne = async () => {
           while (cursor < diagramTasks.length) {
+            if (Date.now() >= phaseDeadline) {
+              // Drain remaining tasks without doing any work.
+              const remaining = diagramTasks.length - cursor;
+              if (remaining > 0) skippedAfterDeadline += remaining;
+              cursor = diagramTasks.length;
+              break;
+            }
             const myIdx = cursor++;
             const { r, idx } = diagramTasks[myIdx];
+            const remainingMs = Math.max(1000, phaseDeadline - Date.now());
             try {
               const diag = await fetchDiagram({
                 supabase,
@@ -2034,10 +2050,11 @@ Deno.serve(async (req) => {
                 assessmentId,
                 usedUrls: usedDiagramUrls,
                 // Per-stage timeouts keep total wall-clock bounded even with
-                // 40+ MCQs running 8-wide.
-                pastPapersTimeoutMs: 4000,
-                webTimeoutMs: 8000,
-                aiTimeoutMs: 14000,
+                // 40+ MCQs running 8-wide. Each stage is also capped by the
+                // remaining phase budget so a slow tail can't push us past it.
+                pastPapersTimeoutMs: Math.min(4000, remainingMs),
+                webTimeoutMs: Math.min(8000, remainingMs),
+                aiTimeoutMs: Math.min(14000, remainingMs),
               });
               if (diag) {
                 usedDiagramUrls.add(diag.url);
@@ -2058,7 +2075,15 @@ Deno.serve(async (req) => {
           }
         };
         const workers = Array.from({ length: Math.min(CONCURRENCY, diagramTasks.length) }, runOne);
-        await Promise.all(workers);
+        // Belt-and-braces: even if a worker hangs, Promise.race ensures we
+        // unblock once the budget is exhausted.
+        await Promise.race([
+          Promise.all(workers),
+          new Promise((resolve) => setTimeout(resolve, DIAGRAM_PHASE_BUDGET_MS + 2000)),
+        ]);
+        if (skippedAfterDeadline > 0) {
+          console.warn(`[generate] diagram phase budget exhausted — skipped ${skippedAfterDeadline} of ${diagramTasks.length} diagrams`);
+        }
       }
     }
 
