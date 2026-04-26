@@ -1558,7 +1558,24 @@ function SectionCard({
       <div className="mt-3 grid gap-3 sm:grid-cols-3">
         <div>
           <Label className="text-xs">Question type</Label>
-          <Select value={section.question_type} onValueChange={(v) => onUpdate({ question_type: v, ...(v !== "source_based" ? { sbq_skill: undefined, sbq_skills: undefined } : {}) })}>
+          <Select value={section.question_type} onValueChange={(v) => {
+            if (v === "source_based") {
+              // SEAB History/Social Studies SBQ sections present 5 sub-questions
+              // built around 5 sources. Pre-fill a sensible default skill mix
+              // (Inference → Comparison → Reliability → Purpose → Assertion)
+              // and bump num_questions / marks so users don't have to.
+              const defaultSkills: SbqSkill[] = ["inference", "comparison", "reliability", "purpose", "assertion"];
+              onUpdate({
+                question_type: v,
+                num_questions: Math.max(5, section.num_questions),
+                marks: Math.max(35, section.marks),
+                sbq_skills: defaultSkills,
+                sbq_skill: undefined,
+              });
+            } else {
+              onUpdate({ question_type: v, sbq_skill: undefined, sbq_skills: undefined });
+            }
+          }}>
             <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
             <SelectContent>
               {visibleQuestionTypes.map((q) => (

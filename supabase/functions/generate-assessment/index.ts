@@ -112,11 +112,11 @@ type SbqSkillDef = {
 const SBQ_SKILLS: Record<string, SbqSkillDef> = {
   inference: {
     id: "inference", label: "Inference", marks: [5, 6, 7, 8], default: 6, locked: false, minSources: 1,
-    promptHeader: `Write an INFERENCE question (AO3.2 — drawing inferences from given information). Use ONE of these SEAB command-word stems verbatim, choosing the one that best fits the source:
+    promptHeader: `Write an INFERENCE question (AO3.2 — drawing inferences from given information). The student MUST go BEYOND surface description to reason about what the source SUGGESTS / IMPLIES / REVEALS — never a content-recall question. Use ONE of these SEAB inference command-word stems verbatim:
   • "What can you infer from Source A about [topic]? Explain your answer using details from the source."
-  • "What is the message of Source A? Explain your answer using details of the source."
-  • "What does Source A tell you about [topic]? Explain your answer using details of the source."
-The student must make an INFERENCE (not literal recall) and support it with a quoted detail from Source A.`,
+  • "What is the message of Source A about [topic]? Explain your answer using details of the source."
+  • "What does Source A suggest about [topic]? Explain your answer using details of the source."
+The student must make an INFERENCE (e.g. about attitudes, motives, perspectives, intent, contemporary opinion — NOT literal recall) and support it with a quoted detail from Source A. FORBIDDEN openings: "What does Source A describe / show / depict / list …", "What characteristics / features does Source A …", "According to Source A, what …".`,
     markScheme: `LORMS — award the highest level the candidate's response REACHES; reward attempts at inferring even when evidence is thin.
 L1 (1m): Lifts/copies surface details from the source without inferring. Award if any attempt is made to engage with the source.
 L2 (2–3m): Attempts a valid inference but supporting evidence from the source is missing, vague, or one-sided.
@@ -283,8 +283,8 @@ function assignSkillsToQuestions(skills: SbqSkillDef[], numQuestions: number): (
 const SBQ_STEM_TEMPLATES: Record<string, string[]> = {
   inference: [
     `Study Source {S1}. ({P}) What can you infer from Source {S1} about {T}? Explain your answer using details from the source.`,
-    `Study Source {S1}. ({P}) What is the message of Source {S1}? Explain your answer using details of the source.`,
-    `Study Source {S1}. ({P}) What does Source {S1} tell you about {T}? Explain your answer using details of the source.`,
+    `Study Source {S1}. ({P}) What is the message of Source {S1} about {T}? Explain your answer using details of the source.`,
+    `Study Source {S1}. ({P}) What does Source {S1} suggest about {T}? Explain your answer using details of the source.`,
   ],
   comparison: [
     `Study Sources {S1} and {S2}. ({P}) How similar are Sources {S1} and {S2} in their views about {T}? Explain your answer.`,
@@ -800,6 +800,16 @@ STRUCTURE — READ CAREFULLY:
   - You MUST open the FIRST part's stem with a clear KEY INQUIRY QUESTION (a debatable, analytical line of inquiry — e.g. "How far was X responsible for Y?", "To what extent did X cause Y?", "Why did X happen?"), then a blank line, then the (a) sub-question.
   - Sub-parts (b), (c), (d), (e) do NOT repeat the inquiry question; they are simply further parts of the same investigation.
 
+ABSOLUTE BAN ON CONTENT-RECALL STEMS (CRITICAL — non-negotiable):
+  - Every SBQ sub-part MUST require, at minimum, an INFERENCE — a reading of the source that goes BEYOND what is literally stated.
+  - The following stem patterns are FORBIDDEN because they only test surface description, not inference:
+      ✗ "What does Source A describe / show / depict / say about …?"
+      ✗ "What characteristics / features / details does Source A tell you about …?"
+      ✗ "List / Identify / State / Name what Source A says about …" (any version that asks the student to lift content)
+      ✗ "According to Source A, what is …?" (pure recall of stated content)
+  - The MINIMUM acceptable stem starts with one of: "What can you infer from Source A about …?", "What is the message of Source A?", "What does Source A SUGGEST / IMPLY / REVEAL about …?" (note: "tell you about" is acceptable ONLY when paired with a topic that demands inference — e.g. "what does Source A tell you about contemporary attitudes / perspectives / motivations / unstated assumptions about …", NEVER "what does Source A tell you about the events / facts / characteristics of …").
+  - Higher-skill stems (Comparison, Reliability, Utility, Purpose, Surprise, Assertion) are also acceptable; the inference floor only forbids questions BELOW inference.
+
 SOURCE-BINDING RULES (CRITICAL):
   - Each sub-part is built on ONE specific source from Sources ${labelList} below — NOT a free choice.
   - The ONLY exceptions:
@@ -1280,6 +1290,41 @@ Deno.serve(async (req) => {
               sharedSourcePool.push(src);
               usedUrls.add(src.source_url);
               try { usedHosts.add(new URL(src.source_url).hostname.toLowerCase()); } catch { /* ignore */ }
+            }
+          }
+
+          // Rescue pass: if the pool is STILL under target after live fetches
+          // and curated backfill (e.g. niche topic, no curated bundle match),
+          // fire a final round with broader queries. SBQ pools below 5 break
+          // the SEAB Source A–E format the teacher requires.
+          if (sharedSourcePool.length < FETCH_TARGET) {
+            const RESCUE_HINTS = [
+              "primary source historical document",
+              "secondary source historian explanation",
+              "policy decision official record",
+              "photograph image archive",
+            ];
+            const rescueNeeded = Math.max(0, FETCH_TARGET - sharedSourcePool.length);
+            const rescued = await Promise.all(
+              Array.from({ length: rescueNeeded }, (_, i) =>
+                withTimeout(
+                  fetchGroundedSource(
+                    subjectKind, sectionTopic.topic, sectionTopic.learning_outcomes ?? [],
+                    usedHosts, usedUrls, RESCUE_HINTS[i % RESCUE_HINTS.length],
+                    tierBudget,
+                  ),
+                  PER_FETCH_TIMEOUT_MS,
+                ).catch(() => null),
+              ),
+            );
+            for (const src of rescued) {
+              if (!src) continue;
+              if (sharedSourcePool.length >= poolSize) break;
+              if (sharedSourcePool.some((s) => s.source_url === src.source_url)) continue;
+              sharedSourcePool.push(src);
+            }
+            if (sharedSourcePool.length < FETCH_TARGET) {
+              console.warn(`[generate] section ${section.letter}: SBQ pool still ${sharedSourcePool.length}/${FETCH_TARGET} after rescue; continuing`);
             }
           }
 
