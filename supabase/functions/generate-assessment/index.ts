@@ -1704,10 +1704,23 @@ Deno.serve(async (req) => {
             chunkQCount,
             Math.round((section.marks * chunkQCount) / totalQs),
           );
+          // Narrow the chunk's topic_pool to the planned per-question topics
+          // so the AI prompt prescribes exactly which discipline and topic each
+          // slot must target. This is what makes the 50/50 Physics+Chemistry
+          // split survive into the Combined Science Paper 1 (MCQ) output.
+          const plannedSlice: SectionTopic[] = [];
+          for (let qi = startIdx; qi < endIdx; qi++) {
+            const t = pickTopic(section, qi, si);
+            if (t) plannedSlice.push(t);
+          }
+          const chunkTopicPool = plannedSlice.length > 0
+            ? plannedSlice
+            : section.topic_pool;
           const chunkSection: Section = {
             ...section,
             num_questions: chunkQCount,
             marks: chunkMarks,
+            topic_pool: chunkTopicPool,
           };
           const chunkSources = sourcesForSection.slice(startIdx, endIdx);
           const chunkDifficultyTargets = sectionDifficultyTargets
