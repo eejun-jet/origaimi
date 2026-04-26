@@ -1201,12 +1201,11 @@ Deno.serve(async (req) => {
           // source so the SBQ pool stays primary-source heavy. This is shared
           // across all parallel fetches in the pool.
           const tierBudget: TierBudget = { tier2Used: 0, maxTier2: 1 };
-          // Fetch the minimum reliable SBQ pool within the backend CPU budget.
-          // We keep 5 sources (the required minimum) and leave the 6th as an
-          // optional future expansion rather than spending a whole extra crawl.
-          // We target 4 text sources so that, with 2 pictorial sources added,
-          // the section totals 5–6 sources without crowding the prompt.
-          const FETCH_TARGET = 4;
+          // Fetch a fuller SBQ pool: target 5 text sources so that, with 2
+          // pictorial sources, every History/Social Studies SBQ section ships
+          // with 5–6 distinct sources (per teacher requirement). Pool is hard
+          // capped at `poolSize` (≤6) so labels don't run past Source F.
+          const FETCH_TARGET = 5;
           const PER_FETCH_TIMEOUT_MS = 14000;
           const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T | null> =>
             new Promise((resolve) => {
