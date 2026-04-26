@@ -1205,28 +1205,33 @@ Deno.serve(async (req) => {
             }
           }
 
-          // Pictorial primary source: try to fetch ONE cartoon / poster /
-          // photograph for this SBQ pool. Non-fatal — if no good image is
-          // found within the timeout, the section still has its 5 text
-          // sources. Per teacher request: a History SBQ paper should give
-          // students at least one visual primary source to interpret.
+          // Pictorial primary sources: fetch up to 2 distinct visuals
+          // (cartoons, posters, photographs, graphs, charts, maps, statistical
+          // tables) for this SBQ pool. Per teacher requirement: each SBQ
+          // section should give students at least 2 visual primary sources to
+          // interpret. Non-fatal — if Tavily is unavailable or filters reject
+          // everything, the section still ships with its text sources.
           try {
-            const img = await fetchGroundedImageSource(
+            const imgs = await fetchGroundedImageSources(
               sectionTopic.topic,
               sectionTopic.learning_outcomes ?? [],
+              2,
               usedHosts,
             );
-            if (img) {
-              sharedImageSource = img;
+            for (const img of imgs) {
+              sharedImageSources.push(img);
               console.log(`[generate] section ${section.letter}: pictorial source ${img.image_url} from ${img.publisher}`);
-            } else {
+            }
+            if (imgs.length === 0) {
               console.log(`[generate] section ${section.letter}: no pictorial source found`);
+            } else if (imgs.length < 2) {
+              console.warn(`[generate] section ${section.letter}: only ${imgs.length} pictorial source(s) found (target 2)`);
             }
           } catch (e) {
             console.warn(`[generate] section ${section.letter}: image source fetch failed`, (e as Error).message);
           }
         }
-        console.log(`[generate] section ${section.letter} SBQ pool: ${sharedSourcePool.length} text sources + ${sharedImageSource ? 1 : 0} image (target ${Math.min(poolSize, 5)} min, max ${poolSize})`);
+        console.log(`[generate] section ${section.letter} SBQ pool: ${sharedSourcePool.length} text sources + ${sharedImageSources.length} image(s) (target ${Math.min(poolSize, FETCH_TARGET)} text min, 2 images)`);
 
         // Hard floor: an SBQ section needs at least 2 distinct sources to be
         // worth presenting (anything less and the labels collapse to "Source
