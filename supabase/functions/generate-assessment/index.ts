@@ -1344,7 +1344,12 @@ Deno.serve(async (req) => {
           "political cartoon poster propaganda",
         ];
         if (sectionTopic) {
-          sharedSourcePool.push(...curatedHumanitiesSourcePool(sectionTopic.topic, sectionTopic.learning_outcomes ?? []));
+          // Seed from the curated bundle, but cap so live fetches still get
+          // slots — the curated bundle for a topic can have 5–6 entries which
+          // would otherwise saturate the pool before live primary sources run.
+          const CURATED_SEED_CAP = 2;
+          const curatedSeed = curatedHumanitiesSourcePool(sectionTopic.topic, sectionTopic.learning_outcomes ?? []).slice(0, CURATED_SEED_CAP);
+          sharedSourcePool.push(...curatedSeed);
           // Per-pool budget: allow at most ONE Tier-2 (historian/historiography)
           // source so the SBQ pool stays primary-source heavy. This is shared
           // across all parallel fetches in the pool.
