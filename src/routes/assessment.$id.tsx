@@ -724,17 +724,32 @@ function EditorPage() {
                               Refer to these sources when answering Section {sec.letter}.
                             </p>
                             <div className="mt-4 space-y-4">
-                              {sectionSources.map((src: { label: string; text: string }) => (
+                              {sectionSources.map((src) => (
                                 <div
                                   key={src.label}
                                   className="rounded-lg border-l-4 border-primary bg-muted/40 p-4"
                                 >
                                   <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">
                                     Source {src.label}
+                                    {src.kind === "image" ? " · pictorial" : ""}
                                   </div>
-                                  <p className="mt-2 font-paper text-sm italic leading-relaxed text-foreground whitespace-pre-wrap">
-                                    {src.text}
-                                  </p>
+                                  {src.kind === "image" ? (
+                                    <div className="mt-2 space-y-2">
+                                      <img
+                                        src={src.imageUrl}
+                                        alt={src.caption}
+                                        loading="lazy"
+                                        className="max-h-80 w-auto rounded border border-border bg-background object-contain"
+                                      />
+                                      <p className="font-paper text-xs italic leading-relaxed text-muted-foreground">
+                                        {src.caption}
+                                      </p>
+                                    </div>
+                                  ) : (
+                                    <p className="mt-2 font-paper text-sm italic leading-relaxed text-foreground whitespace-pre-wrap">
+                                      {src.text}
+                                    </p>
+                                  )}
                                 </div>
                               ))}
                               {q.source_url && (
