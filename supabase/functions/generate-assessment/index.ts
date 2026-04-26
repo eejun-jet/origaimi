@@ -112,11 +112,11 @@ type SbqSkillDef = {
 const SBQ_SKILLS: Record<string, SbqSkillDef> = {
   inference: {
     id: "inference", label: "Inference", marks: [5, 6, 7, 8], default: 6, locked: false, minSources: 1,
-    promptHeader: `Write an INFERENCE question (AO3.2 — drawing inferences from given information). Use ONE of these SEAB command-word stems verbatim, choosing the one that best fits the source:
+    promptHeader: `Write an INFERENCE question (AO3.2 — drawing inferences from given information). The student MUST go BEYOND surface description to reason about what the source SUGGESTS / IMPLIES / REVEALS — never a content-recall question. Use ONE of these SEAB inference command-word stems verbatim:
   • "What can you infer from Source A about [topic]? Explain your answer using details from the source."
-  • "What is the message of Source A? Explain your answer using details of the source."
-  • "What does Source A tell you about [topic]? Explain your answer using details of the source."
-The student must make an INFERENCE (not literal recall) and support it with a quoted detail from Source A.`,
+  • "What is the message of Source A about [topic]? Explain your answer using details of the source."
+  • "What does Source A suggest about [topic]? Explain your answer using details of the source."
+The student must make an INFERENCE (e.g. about attitudes, motives, perspectives, intent, contemporary opinion — NOT literal recall) and support it with a quoted detail from Source A. FORBIDDEN openings: "What does Source A describe / show / depict / list …", "What characteristics / features does Source A …", "According to Source A, what …".`,
     markScheme: `LORMS — award the highest level the candidate's response REACHES; reward attempts at inferring even when evidence is thin.
 L1 (1m): Lifts/copies surface details from the source without inferring. Award if any attempt is made to engage with the source.
 L2 (2–3m): Attempts a valid inference but supporting evidence from the source is missing, vague, or one-sided.
