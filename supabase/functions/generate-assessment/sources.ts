@@ -149,6 +149,19 @@ export type GroundedSource = {
   publisher: string;
 };
 
+/** A pictorial primary source — cartoon, propaganda poster, photograph, etc.
+ *  Discovered via Tavily image search and gated against the same allow-list /
+ *  deny-list as text sources. The renderer turns this into "Source X" with
+ *  an embedded image and the same publisher citation. */
+export type GroundedImageSource = {
+  kind: "image";
+  image_url: string;
+  caption: string;
+  source_url: string;
+  source_title: string;
+  publisher: string;
+};
+
 export function classifySubject(subject: string | null | undefined): SubjectKind {
   if (!subject) return null;
   const s = subject.toLowerCase();
