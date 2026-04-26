@@ -70,10 +70,37 @@ Deno.serve(async (req) => {
     if (targetLOs) objectivesBlock.push(`Target Learning Outcomes (the question MUST cover ALL of these): ${targetLOs.map((lo) => `• ${lo}`).join(" ")}. Return learning_outcomes containing exactly these statements.`);
     const objectivesDirective = objectivesBlock.length > 0 ? `\n${objectivesBlock.join("\n")}` : `\nReturn ao_codes, knowledge_outcomes and learning_outcomes accurately reflecting what the question actually addresses.`;
 
+    // For SBQs, infer the underlying skill from the existing stem and inject
+    // a directive that the answer field MUST be a fully-written L4 candidate
+    // exemplar that performs the LORMS L4 moves of that skill.
+    let sbqDirective = "";
+    if (q.question_type === "source_based") {
+      const stemLc = String(q.stem ?? "").toLowerCase();
+      let skill = "inference";
+      if (/how far do sources?\s+[a-f].*support this assertion/.test(stemLc)) skill = "assertion";
+      else if (/\bcompare\b|how (similar|different)|how far are sources/.test(stemLc)) skill = "comparison";
+      else if (/\b(reliab|trust|accurate)\b/.test(stemLc)) skill = "reliability";
+      else if (/\b(useful|utility)\b/.test(stemLc)) skill = "utility";
+      else if (/\b(purpose|why was source|would.*have agreed)\b/.test(stemLc)) skill = "purpose";
+      else if (/\bsurprised\b/.test(stemLc)) skill = "surprise";
+
+      const skillL4: Record<string, string> = {
+        inference: `INFERENCE L4: 2 distinct supported inferences (about attitudes / motives / perspectives — NOT recall), each with a SHORT verbatim quotation from the source, plus a one-sentence reasoned overall conclusion.`,
+        purpose: `PURPOSE L4: state a specific purpose; justify with BOTH provenance (author, audience, date, context) AND specific content evidence (quoted phrases) AND contextual knowledge.`,
+        comparison: `COMPARISON L4: identify BOTH a similarity AND a difference in MESSAGE (each with a quoted phrase from EACH source); compare TONE / PROVENANCE; reach a reasoned overall judgement on similarity.`,
+        utility: `UTILITY L4: evaluate using CONTENT (quoted evidence) AND PROVENANCE (author/audience/date/type), explicitly acknowledge LIMITATIONS (what the source cannot show), reach a reasoned overall judgement.`,
+        reliability: `RELIABILITY L4: CROSS-REFERENCE specific claims against contextual knowledge; analyse PROVENANCE; analyse BIAS / MOTIVE (loaded language, omissions); reach a balanced reasoned judgement.`,
+        surprise: `SURPRISE L4: explain BOTH what is surprising AND what is not, each anchored in BOTH source detail AND contextual knowledge; reach a reasoned balanced judgement.`,
+        assertion: `ASSERTION L4: use EVERY source; group SUPPORT and CHALLENGE (each with a short quoted detail); weigh PROVENANCE / BIAS across the set; reach a substantiated overall judgement.`,
+      };
+      sbqDirective = `\n\nThis is a SOURCE-BASED QUESTION. The "answer" field MUST be a fully-written L4 candidate exemplar (continuous prose paragraphs, in the candidate's voice — NEVER "a strong answer would…" or "the candidate should…"). It must perform the L4 moves of the assigned skill: ${skillL4[skill]} Quote SHORT verbatim phrases from the source(s) named in the stem. Length: ~150–250 words for 5–6 mark parts, ~250–400 words for 7–8 mark parts.`;
+    }
+
     const user = `Rewrite the following question. Keep its question_type (${q.question_type}), topic (${q.topic}), Bloom's level (${q.bloom_level}), and marks (${q.marks}).
 Original stem: ${q.stem}
-${instruction ? `Teacher instruction: ${instruction}` : "Make it a fresh, equivalent alternative."}${difficultyDirective}${objectivesDirective}
+${instruction ? `Teacher instruction: ${instruction}` : "Make it a fresh, equivalent alternative."}${difficultyDirective}${objectivesDirective}${sbqDirective}
 Return via the tool.`;
+
 
     const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
