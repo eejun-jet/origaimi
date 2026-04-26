@@ -1968,11 +1968,16 @@ function CoachPanel({
   assessmentId,
   onScrollToQuestion,
   onApplied,
+  comments,
+  identity,
+  onAddComment,
+  onSetCommentStatus,
+  onDeleteComment,
 }: {
   assessmentId: string;
   onScrollToQuestion: (questionId: string) => void;
   onApplied: () => void;
-}) {
+} & CoverageCommentHandlers) {
   const [runs, setRuns] = useState<CoachRun[]>([]);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
