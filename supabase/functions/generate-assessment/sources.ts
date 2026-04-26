@@ -671,30 +671,60 @@ export async function fetchGroundedSource(
 
 const IMAGE_URL_RE = /\.(png|jpe?g|gif|svg|webp)(\?|#|$)/i;
 
-export async function fetchGroundedImageSource(
+// Visual-category tag used for diversity ranking. We try to return images
+// drawn from DIFFERENT categories (e.g. one cartoon + one chart) rather than
+// two near-identical posters.
+type VisualCategory = "cartoon" | "poster" | "photograph" | "graph_chart" | "map" | "table_figure" | "other";
+
+function classifyVisualCategory(desc: string): VisualCategory {
+  const d = desc.toLowerCase();
+  if (/cartoon|caricature|satirical/.test(d)) return "cartoon";
+  if (/poster|propaganda|broadside|flyer/.test(d)) return "poster";
+  if (/photograph|photo\b|portrait|snapshot/.test(d)) return "photograph";
+  if (/graph|chart|bar\b|line\b|pie\b|histogram|statistic|gdp|inflation|unemployment/.test(d)) return "graph_chart";
+  if (/\bmap\b|cartograph|atlas|territor/.test(d)) return "map";
+  if (/table|figure|diagram|infographic|data/.test(d)) return "table_figure";
+  return "other";
+}
+
+/**
+ * Fetch up to `count` distinct pictorial primary sources for an SBQ pool.
+ * Categories include cartoons, posters, photographs, graphs/charts, maps,
+ * and statistical tables. Returns images from DIFFERENT hosts and (where
+ * possible) DIFFERENT visual categories so a section gets variety.
+ */
+export async function fetchGroundedImageSources(
   topic: string,
   learningOutcomes: string[] = [],
+  count: number,
   usedHosts?: Set<string>,
-): Promise<GroundedImageSource | null> {
-  if (!hasTavily()) return null;
+): Promise<GroundedImageSource[]> {
+  if (!hasTavily() || count <= 0) return [];
   const topicKw = extractKeywords(topic, 5);
   const loKw = extractKeywords(learningOutcomes.join(" "), 4);
-  if (topicKw.length === 0) return null;
+  if (topicKw.length === 0) return [];
 
-  // Try a few angles — propaganda poster, cartoon, photograph — so we surface
-  // a real pictorial primary source rather than an article hero image.
+  // Try a wide set of angles — pictorial sources include cartoons, posters,
+  // photographs, graphs/charts, maps, and statistical tables.
   const baseTerms = [...topicKw, ...loKw].slice(0, 8).join(" ");
   const queries = [
     `${baseTerms} political cartoon`,
     `${baseTerms} propaganda poster`,
     `${baseTerms} historical photograph`,
+    `${baseTerms} graph chart statistics`,
+    `${baseTerms} map historical`,
+    `${baseTerms} data table figure`,
     `${baseTerms} primary source image archive`,
   ];
 
   const topicVocab = syllabusKeywordsFor(topic, learningOutcomes);
-  const deadline = Date.now() + 8000;
+  const deadline = Date.now() + 12000;
+  const localUsedHosts = new Set<string>(usedHosts ? [...usedHosts] : []);
+  const picked: GroundedImageSource[] = [];
+  const pickedCategories = new Set<VisualCategory>();
 
   for (const query of queries) {
+    if (picked.length >= count) break;
     if (Date.now() > deadline) break;
     let response;
     try {
