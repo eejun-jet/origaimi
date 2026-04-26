@@ -295,10 +295,23 @@ function hostnameOf(url: string): string {
   try { return new URL(url).hostname.toLowerCase(); } catch { return ""; }
 }
 
+// Reject obvious data/API/feed URLs that can never produce a usable
+// historical-source excerpt (CSV exports, JSON feeds, RSS, sitemaps,
+// analytics endpoints). These previously wasted scrape budget and pushed
+// the generator over the CPU limit.
+const DATA_PATH_RE = /\.(csv|json|xml|tsv|rss|atom)(\?|#|$)/i;
+const DATA_HOST_RE = /^(analytics|api|data|feeds?|raw)\./i;
+
 function isAllowed(url: string, allowList: string[], allowGenericTlds = false): boolean {
   const h = hostnameOf(url);
   if (!h) return false;
   if (DENY_DOMAINS.some((d) => h.endsWith(d) || h.includes(d))) return false;
+  // Reject data endpoints early so they never enter the candidate pool.
+  if (DATA_HOST_RE.test(h)) return false;
+  try {
+    const path = new URL(url).pathname;
+    if (DATA_PATH_RE.test(path)) return false;
+  } catch { /* ignore */ }
   if (allowList.some((d) => h === d || h.endsWith("." + d) || h.endsWith(d))) return true;
   // For humanities, also allow any .gov, .edu, .ac.uk, .mil, or .org host as
   // a Tier-1 primary publisher (gated by DENY_DOMAINS + downstream
@@ -711,21 +724,19 @@ export async function fetchGroundedImageSources(
   const loKw = extractKeywords(learningOutcomes.join(" "), 4);
   if (topicKw.length === 0) return [];
 
-  // Try a wide set of angles — pictorial sources include cartoons, posters,
-  // photographs, graphs/charts, maps, and statistical tables.
+  // Try a small set of angles — pictorial sources include cartoons, posters,
+  // photographs, graphs/charts, maps. We deliberately cap to the 3 highest-
+  // value angles so this fetch never dominates total run time.
   const baseTerms = [...topicKw, ...loKw].slice(0, 8).join(" ");
   const queries = [
     `${baseTerms} political cartoon`,
     `${baseTerms} propaganda poster`,
     `${baseTerms} historical photograph`,
-    `${baseTerms} graph chart statistics`,
-    `${baseTerms} map historical`,
-    `${baseTerms} data table figure`,
-    `${baseTerms} primary source image archive`,
   ];
 
   const topicVocab = syllabusKeywordsFor(topic, learningOutcomes);
-  const deadline = Date.now() + 18000;
+  // Hard wall-clock cap: pictorial fetches must never spend more than ~6s.
+  const deadline = Date.now() + 6000;
   // We track image-host usage SEPARATELY from text-source hosts. A pictorial
   // and a text source from the same publisher (e.g. BBC, Britannica) is
   // perfectly fine and should NOT block the image. We still de-dupe images
@@ -733,10 +744,10 @@ export async function fetchGroundedImageSources(
   const localImageHosts = new Set<string>();
   const picked: GroundedImageSource[] = [];
   const pickedCategories = new Set<VisualCategory>();
-  // Cross-pass relaxation: pass 1 strict (allow-list + score>0 + diverse host),
-  // pass 2 relaxed (score>=0, ignore host overlap with text), pass 3 final
-  // (drop allow-list — any non-deny host with a real image URL).
-  const passes: Array<"strict" | "relaxed" | "final"> = ["strict", "relaxed", "final"];
+  // Single pass only — we previously had 3 passes (strict / relaxed / final)
+  // which combined with 7 query angles could fire 21 image searches per
+  // section. That was the dominant cost in History SBQ generation.
+  const passes: Array<"strict" | "relaxed" | "final"> = ["strict"];
 
   for (const pass of passes) {
     if (picked.length >= count) break;
