@@ -1187,8 +1187,29 @@ Deno.serve(async (req) => {
               try { usedHosts.add(new URL(src.source_url).hostname.toLowerCase()); } catch { /* ignore */ }
             }
           }
+
+          // Pictorial primary source: try to fetch ONE cartoon / poster /
+          // photograph for this SBQ pool. Non-fatal — if no good image is
+          // found within the timeout, the section still has its 5 text
+          // sources. Per teacher request: a History SBQ paper should give
+          // students at least one visual primary source to interpret.
+          try {
+            const img = await fetchGroundedImageSource(
+              sectionTopic.topic,
+              sectionTopic.learning_outcomes ?? [],
+              usedHosts,
+            );
+            if (img) {
+              sharedImageSource = img;
+              console.log(`[generate] section ${section.letter}: pictorial source ${img.image_url} from ${img.publisher}`);
+            } else {
+              console.log(`[generate] section ${section.letter}: no pictorial source found`);
+            }
+          } catch (e) {
+            console.warn(`[generate] section ${section.letter}: image source fetch failed`, (e as Error).message);
+          }
         }
-        console.log(`[generate] section ${section.letter} SBQ pool: ${sharedSourcePool.length} sources (target ${Math.min(poolSize, 5)} min, max ${poolSize})`);
+        console.log(`[generate] section ${section.letter} SBQ pool: ${sharedSourcePool.length} text sources + ${sharedImageSource ? 1 : 0} image (target ${Math.min(poolSize, 5)} min, max ${poolSize})`);
 
         // Hard floor: an SBQ section needs at least 2 distinct sources to be
         // worth presenting (anything less and the labels collapse to "Source
