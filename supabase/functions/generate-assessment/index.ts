@@ -198,6 +198,40 @@ L4 (7–8m): Uses ALL sources; evaluates BOTH support AND challenge with evidenc
   },
 };
 
+// ---------- History Section B (essay) — SEAB-style L1–L4 mark scheme + model essay ----------
+// Section B essays are TWO-FACTOR analytical questions (e.g. "How far / To what
+// extent / Which was more important"). The mark scheme below mirrors the SEAB
+// O-Level / N(A)-Level History Elective marking ladder the user specified.
+const HISTORY_ESSAY_MARK_SCHEME = `LEVEL DESCRIPTORS (copy these four lines VERBATIM into the mark_scheme field, then add 1–2 indicative-content bullets per level tailored to THIS specific question):
+
+L1 (1–2 marks): Describes without focus on the question.
+L2 (3–4 marks): Describes one or both factors with details, without explanation.
+L3 (5–8 marks): Explains one or both factors with explanation. Maximum 6 marks if only ONE factor is explained; 7–8 marks requires BOTH factors explained with detail.
+L4 (9–10 marks): L3 + a clear, detailed evaluation reaching a substantiated overall judgement (e.g. weighs which factor was more decisive, or distinguishes necessary vs sufficient causes, or short-term vs long-term).
+
+LEVEL-AWARDING GUIDANCE (apply when writing the indicative-content bullets):
+  - "Describe" = states what happened (events, dates, names) without saying WHY it mattered to the question.
+  - "Explain" = links the factor causally to the outcome named in the question, using historical reasoning ("This led to … because …", "As a result …").
+  - "Evaluate" = compares the two factors against each other and reaches a reasoned judgement (most important / decisive / interconnected / triggering vs underlying).`;
+
+const HISTORY_ESSAY_ANSWER_TEMPLATE = `MODEL ESSAY (write the answer field as a complete student exemplar of ~400–600 words, structured EXACTLY as below — use clear paragraph breaks):
+
+  1. INTRODUCTION (1 short paragraph): Define key terms in the question. Identify the TWO factors that will be discussed. State a preliminary stand on the question (which factor you will argue is more important, or your overall judgement on the "How far / To what extent" prompt).
+
+  2. FACTOR 1 — PEEL paragraph:
+     • Point: Name the factor and assert its contribution to the outcome.
+     • Evidence: At least 4 specific historical references — dates, named individuals, named events, organisations, statistics, treaty/policy names.
+     • Explanation: Link the evidence causally to the question. Show HOW and WHY this factor produced the outcome.
+     • Mini-link: One sentence tying the paragraph back to the question.
+
+  3. FACTOR 2 — PEEL paragraph (same structure for the second/contrasting factor): At least 4 specific historical references.
+
+  4. EVALUATION paragraph: Weigh Factor 1 against Factor 2. Use one clear evaluative framework — e.g. more important vs less important, necessary vs sufficient, trigger vs underlying cause, short-term vs long-term, or interconnected (one enabled the other). Reach a reasoned overall judgement supported by the evidence already given.
+
+  5. CONCLUSION (1–2 sentences): Restate the substantiated judgement.
+
+QUALITY BAR — the answer must demonstrate L4-level historical analysis so it is usable as a model exemplar for students. Do NOT write a generic outline; write a fully developed essay with concrete, accurate historical detail throughout.`;
+
 // Resolve effective skill IDs for a section, supporting new sbq_skills array
 // and legacy single sbq_skill. Caps at 5 and filters unknown ids.
 function resolveEffectiveSkills(section: Section): string[] {
@@ -693,6 +727,8 @@ function buildSectionUserPrompt(opts: {
   const typeLabel = QUESTION_TYPE_LABELS[section.question_type] ?? section.question_type;
   const isHumanitiesSBQ =
     opts.subjectKind === "humanities" && section.question_type === "source_based";
+  const isHistoryEssay =
+    opts.subjectKind === "humanities" && section.question_type === "long";
 
   const topicLines = section.topic_pool.map((t, i) => {
     const code = t.topic_code ? ` [${t.topic_code}]` : "";
@@ -886,6 +922,27 @@ LO/KO USAGE RULE (CRITICAL — applies to every question stem):
   - Question stems MUST NOT start with directive verbs taken from the LO statements: NO "Examine …", "Evaluate …", "Analyse …", "Assess …", "Discuss …", "Explain …", "Describe …" as the opening of an SBQ sub-part. Those verbs belong in the rubric the STUDENT performs, not the question.
   - The TOPIC field on a question is a short noun-phrase tag (e.g. "Nazi rise to power", "Berlin Blockade") — never a full sentence directive copied from the syllabus title.` : "";
 
+  const historyEssayBlock = isHistoryEssay ? `
+
+HISTORY SECTION B ESSAY FORMAT (mandatory for every question in this section):
+
+QUESTION STEM REQUIREMENTS:
+  - Each stem MUST be a TWO-FACTOR analytical question using one of these SEAB command-word openings: "How far …", "To what extent …", "Which was more important in …, X or Y?", "Was X the most important reason for …?".
+  - The stem MUST explicitly NAME the two factors the student will weigh (e.g. "How far was Hitler's leadership, rather than the weakness of the Weimar Republic, responsible for the Nazi rise to power?"). Do NOT leave the second factor implied.
+  - The stem MUST require both DESCRIPTION + EXPLANATION + EVALUATION to access full marks — pure recall stems are not acceptable.
+
+MARK SCHEME (write into the mark_scheme field):
+${HISTORY_ESSAY_MARK_SCHEME}
+
+ANSWER (write into the answer field):
+${HISTORY_ESSAY_ANSWER_TEMPLATE}
+
+HARD REQUIREMENTS:
+  - The mark_scheme field MUST contain the four L1–L4 lines VERBATIM (exact wording, exact mark ranges) followed by 1–2 indicative-content bullets per level tailored to the specific question.
+  - The answer field MUST be a fully written model essay (~400–600 words) following the 5-part structure (Introduction → Factor 1 PEEL → Factor 2 PEEL → Evaluation → Conclusion), with at least 4 specific historical references (dates, named individuals, named events, organisations, statistics, treaty/policy names) per factor paragraph. The model essay must demonstrate L4 historical analysis and evaluation.
+  - Do NOT shorten the answer to a bullet outline. Write full prose paragraphs.
+` : "";
+
   return `${grounding}You are drafting ${sectionLabel} of "${opts.title}" (${opts.level} ${opts.subject}, ${opts.assessmentType}, ${opts.durationMinutes} min, ${opts.totalMarks} total marks across ${opts.totalSections} sections).
 
 THIS SECTION:
@@ -897,7 +954,7 @@ THIS SECTION:
   - Bloom's level focus: ${section.bloom ?? "Apply"} (use other levels only if the topic clearly demands it)
   ${section.instructions ? `- Section instructions for the rubric: ${section.instructions}` : ""}
 ${skillBlock}${difficultyBlock}${objectivesBlock}
-${humanitiesSourceGuidance}${sbqSectionPreamble}
+${humanitiesSourceGuidance}${sbqSectionPreamble}${historyEssayBlock}
 ALLOWED TOPICS (pick from these only — DO NOT invent topics outside this pool):
 ${topicLines}
 ${sourceBlocks}
