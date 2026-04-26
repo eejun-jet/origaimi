@@ -1323,12 +1323,13 @@ Deno.serve(async (req) => {
       const sourcesForSection: (GroundedSource | null)[][] = [];
 
       if (isHumanitiesSBQ) {
-        // Pool size = max minSources across selected skills, clamped to [5, 6].
-        // SEAB History SBQs typically present 5 sources; we allow up to 6 so an
-        // Assertion sub-part can draw on the full set without crowding out
-        // single-source skills like Inference.
+        // SEAB History SBQ papers cap at ~6 sources total. We reserve up to 2
+        // slots for pictorial primary sources (cartoons, posters, photographs)
+        // and up to 4 slots for documentary text sources — hard ceiling of 6.
+        const MAX_TOTAL_SOURCES = 6;
+        const MAX_IMAGE_SOURCES = 2;
         const maxMinSources = effectiveSkillDefs.reduce((m, s) => Math.max(m, s.minSources), 0);
-        const poolSize = Math.min(6, Math.max(5, maxMinSources));
+        const poolSize = Math.min(MAX_TOTAL_SOURCES, Math.max(4, maxMinSources));
         const sectionTopic = section.topic_pool[0] ?? null;
         // Vary the query angle for each fetch so we get DIFFERENT perspectives
         // on the SAME inquiry question (rather than near-duplicate articles).
@@ -1348,11 +1349,10 @@ Deno.serve(async (req) => {
           // source so the SBQ pool stays primary-source heavy. This is shared
           // across all parallel fetches in the pool.
           const tierBudget: TierBudget = { tier2Used: 0, maxTier2: 1 };
-          // Fetch a fuller SBQ pool: target 5 text sources so that, with 2
-          // pictorial sources, every History/Social Studies SBQ section ships
-          // with 5–6 distinct sources (per teacher requirement). Pool is hard
-          // capped at `poolSize` (≤6) so labels don't run past Source F.
-          const FETCH_TARGET = 5;
+          // Target up to 4 text sources so that, with up to 2 pictorial sources,
+          // every History/Social Studies SBQ section ships with ≤6 sources
+          // total (SEAB SBQ format / teacher requirement).
+          const FETCH_TARGET = Math.max(0, MAX_TOTAL_SOURCES - MAX_IMAGE_SOURCES);
           const PER_FETCH_TIMEOUT_MS = 14000;
           const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T | null> =>
             new Promise((resolve) => {
