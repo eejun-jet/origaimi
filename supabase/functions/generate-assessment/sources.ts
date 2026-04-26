@@ -671,30 +671,60 @@ export async function fetchGroundedSource(
 
 const IMAGE_URL_RE = /\.(png|jpe?g|gif|svg|webp)(\?|#|$)/i;
 
-export async function fetchGroundedImageSource(
+// Visual-category tag used for diversity ranking. We try to return images
+// drawn from DIFFERENT categories (e.g. one cartoon + one chart) rather than
+// two near-identical posters.
+type VisualCategory = "cartoon" | "poster" | "photograph" | "graph_chart" | "map" | "table_figure" | "other";
+
+function classifyVisualCategory(desc: string): VisualCategory {
+  const d = desc.toLowerCase();
+  if (/cartoon|caricature|satirical/.test(d)) return "cartoon";
+  if (/poster|propaganda|broadside|flyer/.test(d)) return "poster";
+  if (/photograph|photo\b|portrait|snapshot/.test(d)) return "photograph";
+  if (/graph|chart|bar\b|line\b|pie\b|histogram|statistic|gdp|inflation|unemployment/.test(d)) return "graph_chart";
+  if (/\bmap\b|cartograph|atlas|territor/.test(d)) return "map";
+  if (/table|figure|diagram|infographic|data/.test(d)) return "table_figure";
+  return "other";
+}
+
+/**
+ * Fetch up to `count` distinct pictorial primary sources for an SBQ pool.
+ * Categories include cartoons, posters, photographs, graphs/charts, maps,
+ * and statistical tables. Returns images from DIFFERENT hosts and (where
+ * possible) DIFFERENT visual categories so a section gets variety.
+ */
+export async function fetchGroundedImageSources(
   topic: string,
   learningOutcomes: string[] = [],
+  count: number,
   usedHosts?: Set<string>,
-): Promise<GroundedImageSource | null> {
-  if (!hasTavily()) return null;
+): Promise<GroundedImageSource[]> {
+  if (!hasTavily() || count <= 0) return [];
   const topicKw = extractKeywords(topic, 5);
   const loKw = extractKeywords(learningOutcomes.join(" "), 4);
-  if (topicKw.length === 0) return null;
+  if (topicKw.length === 0) return [];
 
-  // Try a few angles — propaganda poster, cartoon, photograph — so we surface
-  // a real pictorial primary source rather than an article hero image.
+  // Try a wide set of angles — pictorial sources include cartoons, posters,
+  // photographs, graphs/charts, maps, and statistical tables.
   const baseTerms = [...topicKw, ...loKw].slice(0, 8).join(" ");
   const queries = [
     `${baseTerms} political cartoon`,
     `${baseTerms} propaganda poster`,
     `${baseTerms} historical photograph`,
+    `${baseTerms} graph chart statistics`,
+    `${baseTerms} map historical`,
+    `${baseTerms} data table figure`,
     `${baseTerms} primary source image archive`,
   ];
 
   const topicVocab = syllabusKeywordsFor(topic, learningOutcomes);
-  const deadline = Date.now() + 8000;
+  const deadline = Date.now() + 12000;
+  const localUsedHosts = new Set<string>(usedHosts ? [...usedHosts] : []);
+  const picked: GroundedImageSource[] = [];
+  const pickedCategories = new Set<VisualCategory>();
 
   for (const query of queries) {
+    if (picked.length >= count) break;
     if (Date.now() > deadline) break;
     let response;
     try {
@@ -715,49 +745,75 @@ export async function fetchGroundedImageSource(
     const candidates = images
       .filter((im) => im.url && IMAGE_URL_RE.test(im.url))
       .filter((im) => isAllowed(im.url, ALLOW_DOMAINS_HUMANITIES, true))
-      .filter((im) => !(usedHosts && usedHosts.has(hostnameOf(im.url))));
+      .filter((im) => !localUsedHosts.has(hostnameOf(im.url)));
 
     if (candidates.length === 0) continue;
 
     // Rank: Tier-1 host + topic-keyword overlap in description boosts score.
+    // Visual-category bonus rewards cartoons, posters, photos, graphs, charts,
+    // maps, and statistical tables alike.
     const ranked = candidates
       .map((im) => {
         const host = hostnameOf(im.url);
         const tier = humanitiesTier(host);
         const desc = (im.description ?? "").toLowerCase();
+        const category = classifyVisualCategory(desc);
         let score = 0;
         if (tier === 1) score += 6;
         else if (tier === 2) score += 2;
         for (const kw of topicVocab) {
           if (kw.length >= 4 && desc.includes(kw)) score += 2;
         }
-        if (/cartoon|poster|propaganda|photograph|portrait|engraving|painting/.test(desc)) score += 3;
+        if (/cartoon|poster|propaganda|photograph|portrait|engraving|painting|graph|chart|map|diagram|figure|table|statistic|infographic/.test(desc)) score += 3;
         if (/logo|icon|avatar|sprite|banner|advert/.test(desc)) score -= 6;
-        return { im, score, host };
+        // Diversity bonus: prefer a category we haven't picked yet.
+        if (category !== "other" && !pickedCategories.has(category)) score += 4;
+        return { im, score, host, category };
       })
       .sort((a, b) => b.score - a.score)
       .filter((r) => r.score > 0);
 
     if (ranked.length === 0) continue;
-    const best = ranked[0];
 
-    // Find the page that contained the image, for a clean citation.
-    const sourcePage = results.find((r) => hostnameOf(r.url) === best.host)?.url ?? best.im.url;
-    const sourceTitle = results.find((r) => hostnameOf(r.url) === best.host)?.title
-      ?? best.im.description?.slice(0, 120)
-      ?? `${topic} — pictorial primary source`;
+    for (const cand of ranked) {
+      if (picked.length >= count) break;
+      if (localUsedHosts.has(cand.host)) continue;
+      // Find the page that contained the image, for a clean citation.
+      const sourcePage = results.find((r) => hostnameOf(r.url) === cand.host)?.url ?? cand.im.url;
+      const sourceTitle = results.find((r) => hostnameOf(r.url) === cand.host)?.title
+        ?? cand.im.description?.slice(0, 120)
+        ?? `${topic} — pictorial primary source`;
 
-    if (usedHosts) usedHosts.add(best.host);
+      localUsedHosts.add(cand.host);
+      if (usedHosts) usedHosts.add(cand.host);
+      pickedCategories.add(cand.category);
 
-    return {
-      kind: "image",
-      image_url: best.im.url,
-      caption: (best.im.description ?? "").trim().slice(0, 220) || `Pictorial source: ${topic}`,
-      source_url: sourcePage,
-      source_title: sourceTitle,
-      publisher: publisherOf(sourcePage),
-    };
+      picked.push({
+        kind: "image",
+        image_url: cand.im.url,
+        caption: (cand.im.description ?? "").trim().slice(0, 220) || `Pictorial source: ${topic}`,
+        source_url: sourcePage,
+        source_title: sourceTitle,
+        publisher: publisherOf(sourcePage),
+      });
+      // Only take ONE image per query angle, so the next query has a chance
+      // to contribute a DIFFERENT category.
+      break;
+    }
   }
 
-  return null;
+  return picked;
+}
+
+/**
+ * Backward-compatible single-image helper. Returns the first image picked by
+ * `fetchGroundedImageSources` or null if none were available.
+ */
+export async function fetchGroundedImageSource(
+  topic: string,
+  learningOutcomes: string[] = [],
+  usedHosts?: Set<string>,
+): Promise<GroundedImageSource | null> {
+  const results = await fetchGroundedImageSources(topic, learningOutcomes, 1, usedHosts);
+  return results[0] ?? null;
 }

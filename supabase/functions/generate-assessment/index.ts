@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.0";
-import { fetchGroundedSource, fetchGroundedImageSource, classifySubject, humanitiesTier, type GroundedSource, type GroundedImageSource, type TierBudget } from "./sources.ts";
+import { fetchGroundedSource, fetchGroundedImageSource, fetchGroundedImageSources, classifySubject, humanitiesTier, type GroundedSource, type GroundedImageSource, type TierBudget } from "./sources.ts";
 import { fetchDiagram, classifyScienceMath, questionWantsDiagram } from "./diagrams.ts";
 import { fetchExemplars } from "./exemplars.ts";
 
@@ -682,7 +682,7 @@ function buildSectionUserPrompt(opts: {
   syllabusCode?: string | null; paperCode?: string | null;
   groundedSources: (GroundedSource | null)[][]; // [questionIdx][sourceIdx]
   sharedSourcePool?: GroundedSource[]; // For humanities SBQ: ONE shared pool A–E
-  sharedImageSource?: GroundedImageSource | null; // Optional pictorial source appended to the pool
+  sharedImageSources?: GroundedImageSource[]; // Optional pictorial sources appended to the pool
   subjectKind?: "humanities" | "english" | null;
   instructions?: string;
   /** Per-question difficulty targets for THIS chunk (length === section.num_questions). */
@@ -717,10 +717,9 @@ function buildSectionUserPrompt(opts: {
     const pool = opts.sharedSourcePool;
     const sectionTopic = section.topic_pool[0]?.topic ?? "the topic";
     const labels = pool.map((_, i) => String.fromCharCode(65 + i));
-    const imageLabel = opts.sharedImageSource
-      ? String.fromCharCode(65 + pool.length)
-      : null;
-    const allLabels = imageLabel ? [...labels, imageLabel] : labels;
+    const images = opts.sharedImageSources ?? [];
+    const imageLabels = images.map((_, i) => String.fromCharCode(65 + pool.length + i));
+    const allLabels = [...labels, ...imageLabels];
     const labelList = allLabels.join(", ");
     const blocks = pool.map((src, i) => {
       const label = labels[i];
@@ -730,15 +729,17 @@ function buildSectionUserPrompt(opts: {
   ---
   Citation: Source: ${src.publisher} — ${src.source_url}`;
     }).join("\n\n");
-    const imageBlock = opts.sharedImageSource && imageLabel
-      ? `\n\n  [Source ${imageLabel}] PICTORIAL PRIMARY SOURCE (cartoon / poster / photograph):
+    const imageBlocks = images.map((img, i) => {
+      const label = imageLabels[i];
+      return `  [Source ${label}] PICTORIAL PRIMARY SOURCE (cartoon / poster / photograph / graph / chart / map / table):
   ---
-  Caption: ${opts.sharedImageSource.caption}
-  Image URL: ${opts.sharedImageSource.image_url}
+  Caption: ${img.caption}
+  Image URL: ${img.image_url}
   ---
-  Citation: Source: ${opts.sharedImageSource.publisher} — ${opts.sharedImageSource.source_url}
-  NOTE: Source ${imageLabel} is an IMAGE, not text. The student will SEE the picture. Do NOT quote text from it. When you write a sub-part anchored on Source ${imageLabel}, ask students to INTERPRET the image — e.g. "Study Source ${imageLabel}. What is the message of the cartoonist?", "Study Source ${imageLabel}. What does this poster suggest about [issue]?". Reference the caption only as context.`
-      : "";
+  Citation: Source: ${img.publisher} — ${img.source_url}
+  NOTE: Source ${label} is an IMAGE, not text. The student will SEE the picture. Do NOT quote text from it. When you write a sub-part anchored on Source ${label}, ask students to INTERPRET the image — for cartoons/posters: message, perspective, audience, intent ("Study Source ${label}. What is the message of the cartoonist?"); for photographs: what it shows and what it implies; for graphs/charts/tables: trends, comparisons, scale, what the data suggests ("Study Source ${label}. What does the chart suggest about [issue]?"); for maps: territory, change, projection, what is emphasised. Reference the caption only as context.`;
+    }).join("\n\n");
+    const imageBlock = imageBlocks ? `\n\n${imageBlocks}` : "";
     const concatenatedExcerpt = pool
       .map((s, i) => `Source ${labels[i]}: ${s.excerpt}`)
       .join("\\n\\n");
@@ -758,7 +759,7 @@ SOURCE-BINDING RULES (CRITICAL):
       • COMPARISON sub-parts may reference EXACTLY TWO sources (e.g. "Compare Sources A and B").
       • ASSERTION (hypothesis) sub-parts must use ALL ${allLabels.length} sources (Sources ${labelList}).
   - Every sub-part's stem MUST begin with an explicit instruction naming the source(s) it uses, e.g. "Study Source A.", "Study Sources A and B.", "Study Sources ${labelList}."
-  - Across the section, DIFFERENT sub-parts should be anchored on DIFFERENT sources where possible (e.g. (a) → Source A, (b) → Source B, (c) → Source C, comparison → A & B, assertion → all). Do NOT bind two different sub-parts to the same single source.${imageLabel ? `\n  - If you anchor a sub-part on Source ${imageLabel} (the pictorial source), the stem MUST ask the student to INTERPRET the image — message, perspective, audience, intent — NEVER to quote text from it.` : ""}
+  - Across the section, DIFFERENT sub-parts should be anchored on DIFFERENT sources where possible (e.g. (a) → Source A, (b) → Source B, (c) → Source C, comparison → A & B, assertion → all). Do NOT bind two different sub-parts to the same single source.${imageLabels.length > 0 ? `\n  - At least ONE sub-part SHOULD be anchored on a pictorial source (Sources ${imageLabels.join(", ")}). If you anchor a sub-part on a pictorial source, the stem MUST ask the student to INTERPRET the image — message, perspective, trend, data, scale, territory — NEVER to quote text from it.` : ""}
   - DO NOT invent new sources. DO NOT paraphrase or modify the source text.
   - For EVERY part in this section, set source_excerpt to the FULL concatenated pool below (so the editor shows all sources to the student). Set source_url to Source A's URL.
 
@@ -1106,7 +1107,7 @@ Deno.serve(async (req) => {
       // ONE key inquiry question for ONE topic, mirroring SEAB SBQ paper format.
       const isHumanitiesSBQ = subjectKind === "humanities" && section.question_type === "source_based";
       const sharedSourcePool: GroundedSource[] = [];
-      let sharedImageSource: GroundedImageSource | null = null;
+      const sharedImageSources: GroundedImageSource[] = [];
       const sourcesForSection: (GroundedSource | null)[][] = [];
 
       if (isHumanitiesSBQ) {
@@ -1138,7 +1139,9 @@ Deno.serve(async (req) => {
           // Fetch the minimum reliable SBQ pool within the backend CPU budget.
           // We keep 5 sources (the required minimum) and leave the 6th as an
           // optional future expansion rather than spending a whole extra crawl.
-          const FETCH_TARGET = 5;
+          // We target 4 text sources so that, with 2 pictorial sources added,
+          // the section totals 5–6 sources without crowding the prompt.
+          const FETCH_TARGET = 4;
           const PER_FETCH_TIMEOUT_MS = 14000;
           const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T | null> =>
             new Promise((resolve) => {
@@ -1202,28 +1205,33 @@ Deno.serve(async (req) => {
             }
           }
 
-          // Pictorial primary source: try to fetch ONE cartoon / poster /
-          // photograph for this SBQ pool. Non-fatal — if no good image is
-          // found within the timeout, the section still has its 5 text
-          // sources. Per teacher request: a History SBQ paper should give
-          // students at least one visual primary source to interpret.
+          // Pictorial primary sources: fetch up to 2 distinct visuals
+          // (cartoons, posters, photographs, graphs, charts, maps, statistical
+          // tables) for this SBQ pool. Per teacher requirement: each SBQ
+          // section should give students at least 2 visual primary sources to
+          // interpret. Non-fatal — if Tavily is unavailable or filters reject
+          // everything, the section still ships with its text sources.
           try {
-            const img = await fetchGroundedImageSource(
+            const imgs = await fetchGroundedImageSources(
               sectionTopic.topic,
               sectionTopic.learning_outcomes ?? [],
+              2,
               usedHosts,
             );
-            if (img) {
-              sharedImageSource = img;
+            for (const img of imgs) {
+              sharedImageSources.push(img);
               console.log(`[generate] section ${section.letter}: pictorial source ${img.image_url} from ${img.publisher}`);
-            } else {
+            }
+            if (imgs.length === 0) {
               console.log(`[generate] section ${section.letter}: no pictorial source found`);
+            } else if (imgs.length < 2) {
+              console.warn(`[generate] section ${section.letter}: only ${imgs.length} pictorial source(s) found (target 2)`);
             }
           } catch (e) {
             console.warn(`[generate] section ${section.letter}: image source fetch failed`, (e as Error).message);
           }
         }
-        console.log(`[generate] section ${section.letter} SBQ pool: ${sharedSourcePool.length} text sources + ${sharedImageSource ? 1 : 0} image (target ${Math.min(poolSize, 5)} min, max ${poolSize})`);
+        console.log(`[generate] section ${section.letter} SBQ pool: ${sharedSourcePool.length} text sources + ${sharedImageSources.length} image(s) (target 4 text, 2 images)`);
 
         // Hard floor: an SBQ section needs at least 2 distinct sources to be
         // worth presenting (anything less and the labels collapse to "Source
@@ -1324,7 +1332,7 @@ Deno.serve(async (req) => {
               section: chunkSection, sectionIndex: si, totalSections: sections.length,
               syllabusCode, paperCode, groundedSources: chunkSources,
               sharedSourcePool: isHumanitiesSBQ ? sharedSourcePool : undefined,
-              sharedImageSource: isHumanitiesSBQ ? sharedImageSource : null,
+              sharedImageSources: isHumanitiesSBQ ? sharedImageSources : [],
               subjectKind, instructions,
               difficultyTargets: chunkDifficultyTargets,
             }),
@@ -1401,14 +1409,15 @@ Deno.serve(async (req) => {
           question_type = "source_based";
           const textBlocks = sharedSourcePool
             .map((s, i) => `Source ${String.fromCharCode(65 + i)}: ${s.excerpt}`);
-          // If a pictorial source was found for this section, append it as the
-          // final Source label using a [IMAGE] marker the renderer recognises.
-          if (sharedImageSource) {
-            const imgLabel = String.fromCharCode(65 + sharedSourcePool.length);
+          // Append each pictorial source as a separate Source label using the
+          // [IMAGE] marker the renderer recognises (parseSharedSourcePool in
+          // src/routes/assessment.$id.tsx handles multiple image markers).
+          sharedImageSources.forEach((img, i) => {
+            const imgLabel = String.fromCharCode(65 + sharedSourcePool.length + i);
             textBlocks.push(
-              `Source ${imgLabel}: [IMAGE] ${sharedImageSource.caption} — ${sharedImageSource.image_url}`,
+              `Source ${imgLabel}: [IMAGE] ${img.caption} — ${img.image_url}`,
             );
-          }
+          });
           source_excerpt = textBlocks.join("\n\n");
           source_url = sharedSourcePool[0].source_url;
           groundedCount++;
