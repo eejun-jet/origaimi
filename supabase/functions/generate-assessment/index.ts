@@ -1139,7 +1139,9 @@ Deno.serve(async (req) => {
           // Fetch the minimum reliable SBQ pool within the backend CPU budget.
           // We keep 5 sources (the required minimum) and leave the 6th as an
           // optional future expansion rather than spending a whole extra crawl.
-          const FETCH_TARGET = 5;
+          // We target 4 text sources so that, with 2 pictorial sources added,
+          // the section totals 5–6 sources without crowding the prompt.
+          const FETCH_TARGET = 4;
           const PER_FETCH_TIMEOUT_MS = 14000;
           const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T | null> =>
             new Promise((resolve) => {
