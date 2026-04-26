@@ -41,3 +41,8 @@ Append a short note recording the new pictorial-source minimum so future iterati
 - No DB migration required — `assessment_questions.source_excerpt` already stores the concatenated marker string.
 - No frontend changes — `parseSharedSourcePool` already iterates and renders any `[IMAGE]` entries.
 - The hard floor (`sharedSourcePool.length < 2 → skip section`) still applies to text sources; image fetches remain best-effort to avoid section drops on Tavily misses, but the prompt and stats explicitly target 2 images.
+
+## 2026-04-26 — Pictorial sources expanded
+- SBQ sections now fetch up to 2 pictorial primary sources per section (cartoons, posters, photos, graphs, charts, maps, statistical tables) via fetchGroundedImageSources.
+- Text-source target reduced from 5 to 4 so total stays in the 5–6 source ceiling once images are added.
+- Renderer (parseSharedSourcePool) already supports multiple [IMAGE] markers — no UI change needed.
