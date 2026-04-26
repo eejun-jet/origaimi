@@ -1454,13 +1454,30 @@ Deno.serve(async (req) => {
               sectionTopic.topic,
               sectionTopic.learning_outcomes ?? [],
             );
+            // Backfill PASS 1: prefer NEW hosts not already represented in
+            // the pool, to keep source diversity.
             for (const src of curated) {
               if (sharedSourcePool.length >= poolSize) break;
               if (usedUrls.has(src.source_url)) continue;
               if (sharedSourcePool.some((s) => s.source_url === src.source_url)) continue;
+              const h = hostOf(src.source_url);
+              if (h && usedHosts.has(h)) continue;
               sharedSourcePool.push(src);
               usedUrls.add(src.source_url);
-              try { usedHosts.add(new URL(src.source_url).hostname.toLowerCase()); } catch { /* ignore */ }
+              if (h) usedHosts.add(h);
+            }
+            // Backfill PASS 2: only if still short, allow same-host duplicates.
+            if (sharedSourcePool.length < FETCH_TARGET) {
+              for (const src of curated) {
+                if (sharedSourcePool.length >= poolSize) break;
+                if (usedUrls.has(src.source_url)) continue;
+                if (sharedSourcePool.some((s) => s.source_url === src.source_url)) continue;
+                sharedSourcePool.push(src);
+                usedUrls.add(src.source_url);
+                const h = hostOf(src.source_url);
+                if (h) usedHosts.add(h);
+                console.warn(`[generate] section ${section.letter}: backfill reusing host ${h} (curated bundle exhausted)`);
+              }
             }
           }
           if (sharedSourcePool.length < FETCH_TARGET) {
