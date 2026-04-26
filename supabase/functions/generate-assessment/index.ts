@@ -214,7 +214,7 @@ LEVEL-AWARDING GUIDANCE (apply when writing the indicative-content bullets):
   - "Explain" = links the factor causally to the outcome named in the question, using historical reasoning ("This led to … because …", "As a result …").
   - "Evaluate" = compares the two factors against each other and reaches a reasoned judgement (most important / decisive / interconnected / triggering vs underlying).`;
 
-const HISTORY_ESSAY_ANSWER_TEMPLATE = `MODEL ESSAY (write the answer field as a complete student exemplar of ~400–600 words, structured EXACTLY as below — use clear paragraph breaks):
+const HISTORY_ESSAY_ANSWER_TEMPLATE = `MODEL ESSAY (write the answer field as a complete student exemplar of ~400–600 words, structured EXACTLY as below — separate EVERY paragraph with a BLANK LINE so paragraph breaks survive rendering):
 
   1. INTRODUCTION (1 short paragraph): Define key terms in the question. Identify the TWO factors that will be discussed. State a preliminary stand on the question (which factor you will argue is more important, or your overall judgement on the "How far / To what extent" prompt).
 
@@ -229,6 +229,8 @@ const HISTORY_ESSAY_ANSWER_TEMPLATE = `MODEL ESSAY (write the answer field as a 
   4. EVALUATION paragraph: Weigh Factor 1 against Factor 2. Use one clear evaluative framework — e.g. more important vs less important, necessary vs sufficient, trigger vs underlying cause, short-term vs long-term, or interconnected (one enabled the other). Reach a reasoned overall judgement supported by the evidence already given.
 
   5. CONCLUSION (1–2 sentences): Restate the substantiated judgement.
+
+FORMATTING — the answer field MUST contain at least 5 distinct paragraphs separated by blank lines (\\n\\n between paragraphs). Do NOT cram the whole essay into one block. Do NOT use bullet points in the final answer — write flowing prose paragraphs.
 
 QUALITY BAR — the answer must demonstrate L4-level historical analysis so it is usable as a model exemplar for students. Do NOT write a generic outline; write a fully developed essay with concrete, accurate historical detail throughout.`;
 
@@ -1201,12 +1203,11 @@ Deno.serve(async (req) => {
           // source so the SBQ pool stays primary-source heavy. This is shared
           // across all parallel fetches in the pool.
           const tierBudget: TierBudget = { tier2Used: 0, maxTier2: 1 };
-          // Fetch the minimum reliable SBQ pool within the backend CPU budget.
-          // We keep 5 sources (the required minimum) and leave the 6th as an
-          // optional future expansion rather than spending a whole extra crawl.
-          // We target 4 text sources so that, with 2 pictorial sources added,
-          // the section totals 5–6 sources without crowding the prompt.
-          const FETCH_TARGET = 4;
+          // Fetch a fuller SBQ pool: target 5 text sources so that, with 2
+          // pictorial sources, every History/Social Studies SBQ section ships
+          // with 5–6 distinct sources (per teacher requirement). Pool is hard
+          // capped at `poolSize` (≤6) so labels don't run past Source F.
+          const FETCH_TARGET = 5;
           const PER_FETCH_TIMEOUT_MS = 14000;
           const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T | null> =>
             new Promise((resolve) => {
@@ -1296,7 +1297,7 @@ Deno.serve(async (req) => {
             console.warn(`[generate] section ${section.letter}: image source fetch failed`, (e as Error).message);
           }
         }
-        console.log(`[generate] section ${section.letter} SBQ pool: ${sharedSourcePool.length} text sources + ${sharedImageSources.length} image(s) (target 4 text, 2 images)`);
+        console.log(`[generate] section ${section.letter} SBQ pool: ${sharedSourcePool.length} text sources + ${sharedImageSources.length} image(s) (target 5 text, 2 images)`);
 
         // Hard floor: an SBQ section needs at least 2 distinct sources to be
         // worth presenting (anything less and the labels collapse to "Source

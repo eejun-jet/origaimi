@@ -1,29 +1,27 @@
-# History Section B essay — SEAB-style L1–L4 mark scheme + model essay
+# SBQ pool 5–6 sources, paragraphed essay answers, pictorial display
 
 ## Status: implemented
 
 ## Changes
 
-### `supabase/functions/generate-assessment/index.ts`
-1. Added `HISTORY_ESSAY_MARK_SCHEME` constant — verbatim L1–L4 level descriptors:
-   - L1 (1–2): describes without focus
-   - L2 (3–4): describes one or both factors with details, no explanation
-   - L3 (5–8): explains one or both factors; max 6 if only one factor
-   - L4 (9–10): L3 + clear, detailed evaluation
-   Plus level-awarding guidance on what counts as describe / explain / evaluate.
+1. **`supabase/functions/generate-assessment/index.ts`**
+   - Bumped SBQ `FETCH_TARGET` from 4 → 5 (so each History/SS SBQ section ships
+     with 5 text + 2 images = up to 6 distinct sources, hard-capped at
+     poolSize 6).
+   - Updated `HISTORY_ESSAY_ANSWER_TEMPLATE` to require explicit blank-line
+     paragraph breaks (≥5 paragraphs, `\n\n` separators, no bullet points)
+     so the model essay survives rendering as discrete paragraphs.
 
-2. Added `HISTORY_ESSAY_ANSWER_TEMPLATE` constant — 5-part PEEL essay structure (Intro → Factor 1 → Factor 2 → Evaluation → Conclusion) with an at-least-4-historical-references-per-factor rule and a 400–600 word target. Designed as an L4 student exemplar.
+2. **`src/routes/assessment.$id.tsx`**
+   - Mark-scheme "Answer:" now splits on blank lines and renders each block
+     as its own `<p>` (font-paper, leading-relaxed, whitespace-pre-wrap),
+     so essay model answers display as paragraphs instead of one wall.
 
-3. Added `isHistoryEssay` detection in `buildSectionUserPrompt` (`subjectKind === "humanities" && question_type === "long"`).
-
-4. Added `historyEssayBlock` injected into the section prompt only for History essay sections. It enforces:
-   - Two-factor question stems opening with SEAB command words (How far, To what extent, Which was more important).
-   - The two factors must be named explicitly in the stem.
-   - `mark_scheme` must contain the four L1–L4 lines verbatim plus indicative-content bullets.
-   - `answer` must be a fully written model essay following the template, not a bullet outline.
-
-### No frontend / DB changes
-`mark_scheme` and `answer` are already rendered as `whitespace-pre-wrap` text in `src/routes/assessment.$id.tsx`, so multi-paragraph essays and level descriptors display correctly without UI work.
+3. **Pictorial sources & hyperlinks**: already wired end-to-end (image
+   markers parsed in `parseSharedSourcePool`, displayed as `<img>` with
+   provenance and clickable "View source ↗" link). No UI change needed —
+   the data path was already complete; the only knob to turn was raising
+   the text-source target so the section reaches 5–6 total.
 
 ### Deployment
 `generate-assessment` redeployed.
