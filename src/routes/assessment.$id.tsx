@@ -304,6 +304,8 @@ function EditorPage() {
     parentId: string | null;
     sectionLetter: string | null;
     questionId: string | null;
+    targetKind?: "ao" | "ko" | "lo" | "coach" | null;
+    targetKey?: string | null;
   }) => {
     const { error } = await supabase.from("assessment_comments").insert({
       assessment_id: id,
@@ -316,6 +318,8 @@ function EditorPage() {
       author_role: identity.role,
       body: input.body,
       status: "open",
+      target_kind: input.targetKind ?? null,
+      target_key: input.targetKey ?? null,
     });
     if (error) toast.error("Could not post comment");
   };
