@@ -199,6 +199,52 @@ L4 (7–8m): Uses ALL sources; evaluates BOTH support AND challenge with evidenc
   },
 };
 
+// Per-skill L4 sample-answer guidance for SBQs. The `answer` field on each
+// generated SBQ MUST be a fully written candidate-voice exemplar that hits
+// the L4 descriptors of the skill's LORMS — not a meta-description like
+// "A strong answer would…". These blocks are injected into the section
+// prompt so the model knows what an L4 response actually looks like.
+const SBQ_SAMPLE_ANSWER_GUIDANCE: Record<string, string> = {
+  inference: `INFERENCE L4 sample answer (write into the answer field, in the candidate's voice — NEVER "a strong answer would…"):
+  - 2–3 short paragraphs, ~150–220 words.
+  - Make TWO distinct, valid inferences about the topic (about attitudes / motives / perspectives / contemporary opinion / unstated assumptions — NOT literal recall).
+  - Support EACH inference with a SHORT direct quotation (in quotation marks) lifted verbatim from Source A.
+  - Close with a one-sentence reasoned overall conclusion about what Source A reveals.
+  - DO NOT describe the source's content; INTERPRET it.`,
+  purpose: `PURPOSE L4 sample answer (candidate's voice, ~180–250 words):
+  - State a plausible specific purpose (persuade / warn / glorify / justify / reassure / discredit / mobilise) in the opening sentence.
+  - Provenance paragraph: cite the AUTHOR, the AUDIENCE, the DATE, and the immediate CONTEXT to explain WHY the source was produced; bring in 1–2 specific contextual facts.
+  - Content paragraph: quote 1–2 short phrases from Source A that betray the purpose (loaded language, framing, what is omitted).
+  - End with a reasoned conclusion linking provenance + content to the stated purpose.`,
+  comparison: `COMPARISON L4 sample answer (candidate's voice, ~220–320 words for 7–8 mark parts):
+  - Paragraph 1 — SIMILARITY in MESSAGE: identify a shared message, with a SHORT quoted phrase from EACH of Sources A and B.
+  - Paragraph 2 — DIFFERENCE in MESSAGE: identify a clear difference, again with a SHORT quoted phrase from EACH source.
+  - Paragraph 3 — TONE / PROVENANCE comparison: compare HOW each source argues (tone, register, what each emphasises) and link this to provenance (author, audience, date).
+  - Conclusion: a reasoned overall judgement on how far the two sources agree, weighing whether the message-similarity or the tone/provenance-difference is more significant.`,
+  utility: `UTILITY L4 sample answer (candidate's voice, ~250–350 words):
+  - Opening: a one-line judgement on how useful Source A is as evidence about the topic.
+  - CONTENT paragraph: quote specific details from Source A and explain what they tell us about the topic.
+  - PROVENANCE paragraph: identify author / audience / date / type of source and explain how each makes the source MORE or LESS useful.
+  - LIMITATIONS paragraph: explicitly state what Source A CANNOT show — what is missing, what perspective is absent, what the format constrains.
+  - Conclusion: a reasoned overall judgement that weighs content + provenance + limitations to decide how far Source A is useful.`,
+  reliability: `RELIABILITY L4 sample answer (candidate's voice, ~250–350 words):
+  - Opening: a one-line judgement on how reliable Source A is.
+  - CROSS-REFERENCE paragraph: take 1–2 specific claims from Source A and weigh them against your contextual knowledge (named events, dates, statistics, named individuals) — do they corroborate or contradict?
+  - PROVENANCE paragraph: author, audience, date — does the provenance support trust or undermine it?
+  - BIAS / MOTIVE paragraph: identify whose interest the source serves; quote loaded or selective language; note what is conspicuously omitted.
+  - Conclusion: a balanced, reasoned overall judgement (not a flat "reliable / unreliable") on how far Source A can be trusted as evidence about the topic.`,
+  surprise: `SURPRISE L4 sample answer (candidate's voice, ~180–260 words):
+  - Paragraph 1 — what IS surprising: name the surprising element, anchor it in BOTH a quoted detail from Source A AND a specific piece of contextual knowledge that makes it unexpected.
+  - Paragraph 2 — what is NOT surprising: explain what the source says that fits the wider historical context, again grounded in BOTH source detail AND contextual knowledge (and reference provenance where relevant — author, audience, date).
+  - Conclusion: a reasoned, balanced judgement on whether you are MORE surprised or LESS surprised overall, and why.`,
+  assertion: `ASSERTION (HYPOTHESIS) L4 sample answer (candidate's voice, ~350–500 words for the 8-mark part):
+  - Opening: state your overall judgement on how far the sources support the assertion.
+  - SUPPORT paragraph(s): group the sources that SUPPORT the assertion; for EACH cite a SHORT quoted phrase or specific detail and explain how it supports.
+  - CHALLENGE paragraph(s): group the sources that CHALLENGE the assertion; for EACH cite a SHORT quoted phrase or specific detail and explain how it challenges.
+  - SOURCE-QUALITY paragraph: weigh provenance + bias across the set — which sources are more credible / more partial, and how that affects the weight of their evidence.
+  - Conclusion: a substantiated overall judgement that uses EVERY source (Sources A, B, C, D, E) and reaches a reasoned position on how far the assertion holds.`,
+};
+
 // ---------- History Section B (essay) — SEAB-style L1–L4 mark scheme + model essay ----------
 // Section B essays are TWO-FACTOR analytical questions (e.g. "How far / To what
 // extent / Which was more important"). The mark scheme below mirrors the SEAB
