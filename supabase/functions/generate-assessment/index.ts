@@ -283,8 +283,8 @@ function assignSkillsToQuestions(skills: SbqSkillDef[], numQuestions: number): (
 const SBQ_STEM_TEMPLATES: Record<string, string[]> = {
   inference: [
     `Study Source {S1}. ({P}) What can you infer from Source {S1} about {T}? Explain your answer using details from the source.`,
-    `Study Source {S1}. ({P}) What is the message of Source {S1}? Explain your answer using details of the source.`,
-    `Study Source {S1}. ({P}) What does Source {S1} tell you about {T}? Explain your answer using details of the source.`,
+    `Study Source {S1}. ({P}) What is the message of Source {S1} about {T}? Explain your answer using details of the source.`,
+    `Study Source {S1}. ({P}) What does Source {S1} suggest about {T}? Explain your answer using details of the source.`,
   ],
   comparison: [
     `Study Sources {S1} and {S2}. ({P}) How similar are Sources {S1} and {S2} in their views about {T}? Explain your answer.`,
