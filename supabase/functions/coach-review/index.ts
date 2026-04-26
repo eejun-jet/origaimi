@@ -201,23 +201,56 @@ Deno.serve(async (req) => {
     const isHum = isHumanities(assessment.subject);
 
     const sectionedBlueprint = Array.isArray(assessment.blueprint) ? assessment.blueprint : [];
-    const compactQuestions = (questions as any[]).map((q) => ({
-      id: q.id,
-      position: q.position,
-      type: q.question_type,
-      topic: q.topic,
-      bloom: q.bloom_level,
-      difficulty: q.difficulty,
-      marks: q.marks,
-      stem: typeof q.stem === "string" ? q.stem.slice(0, 1200) : "",
-      options: q.options ?? null,
-      mark_scheme: typeof q.mark_scheme === "string" ? q.mark_scheme.slice(0, 600) : null,
-      ao_codes: q.ao_codes ?? [],
-      knowledge_outcomes: q.knowledge_outcomes ?? [],
-      learning_outcomes: q.learning_outcomes ?? [],
-      source_excerpt: typeof q.source_excerpt === "string" ? q.source_excerpt.slice(0, 600) : null,
-      source_url: q.source_url ?? null,
-    }));
+
+    // Map question position → section so we can pull the right LO/KO/AO pool.
+    const sectionByPos: any[] = [];
+    for (const s of sectionedBlueprint as any[]) {
+      const n = s?.num_questions ?? 0;
+      for (let i = 0; i < n; i++) sectionByPos.push(s);
+    }
+    const inferKind: "humanities" | "english" | "science_math" | "other" = isHum ? "humanities" : "science_math";
+
+    const compactQuestions = (questions as any[]).map((q) => {
+      const sec = sectionByPos[q.position] ?? null;
+      const poolAOs = sec
+        ? (Array.isArray(sec.ao_codes) && sec.ao_codes.length > 0
+            ? sec.ao_codes
+            : Array.from(new Set((sec.topic_pool ?? []).flatMap((t: any) => t?.ao_codes ?? []))))
+        : [];
+      const poolKOs = sec
+        ? (Array.isArray(sec.knowledge_outcomes) && sec.knowledge_outcomes.length > 0
+            ? sec.knowledge_outcomes
+            : Array.from(new Set((sec.topic_pool ?? []).flatMap((t: any) => t?.outcome_categories ?? []))))
+        : [];
+      const poolLOs = sec
+        ? (Array.isArray(sec.learning_outcomes) && sec.learning_outcomes.length > 0
+            ? sec.learning_outcomes
+            : Array.from(new Set((sec.topic_pool ?? []).flatMap((t: any) => t?.learning_outcomes ?? []))))
+        : [];
+      const expanded = expandQuestionTags(
+        { stem: q.stem ?? "", answer: q.answer ?? null, mark_scheme: q.mark_scheme ?? null, topic: q.topic ?? null, options: Array.isArray(q.options) ? q.options : null },
+        { ao_codes: q.ao_codes ?? [], knowledge_outcomes: q.knowledge_outcomes ?? [], learning_outcomes: q.learning_outcomes ?? [] },
+        { loPool: poolLOs as string[], koPool: poolKOs as string[], aoPool: poolAOs as string[] },
+        inferKind,
+      );
+      return {
+        id: q.id,
+        position: q.position,
+        type: q.question_type,
+        topic: q.topic,
+        bloom: q.bloom_level,
+        difficulty: q.difficulty,
+        marks: q.marks,
+        stem: typeof q.stem === "string" ? q.stem.slice(0, 1200) : "",
+        options: q.options ?? null,
+        mark_scheme: typeof q.mark_scheme === "string" ? q.mark_scheme.slice(0, 600) : null,
+        ao_codes: expanded.ao_codes,
+        knowledge_outcomes: expanded.knowledge_outcomes,
+        learning_outcomes: expanded.learning_outcomes,
+        source_excerpt: typeof q.source_excerpt === "string" ? q.source_excerpt.slice(0, 600) : null,
+        source_url: q.source_url ?? null,
+      };
+    });
 
     const sys = `You are an experienced Singapore MOE Head of Department reviewing a junior teacher's draft assessment for ${assessment.level} ${assessment.subject}.
 Your job is the Assessment Literacy Coach. Be candid but constructive — no empty praise. Use British spelling and Singapore phrasing.
