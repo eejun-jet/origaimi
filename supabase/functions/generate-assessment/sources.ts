@@ -110,17 +110,28 @@ const HUMANITIES_TIER_2_HISTORIAN = new Set([
   "jstor.org", "historytoday.com", "historyextra.com", "oxfordre.com",
 ]);
 
+// Additional academic / government TLD suffixes that should count as Tier-1
+// even though they don't appear verbatim in HUMANITIES_TLD_TIER_1 (which uses
+// short TLDs only). E.g. ".ac.au" (Australian universities), ".edu.sg".
+const HUMANITIES_TLD_TIER_1_SUFFIXES = [
+  ".ac.au", ".ac.nz", ".ac.jp", ".ac.kr", ".ac.in", ".ac.id", ".ac.za",
+  ".edu.au", ".edu.sg", ".edu.my", ".edu.hk", ".edu.cn", ".edu.tw",
+  ".gov.uk", ".gov.au", ".gov.nz", ".gov.sg", ".gov.ca", ".gov.in",
+];
+
 export function humanitiesTier(host: string): 1 | 2 | 3 {
-  // Walk parent domains for subdomain matches (e.g. www.nas.gov.sg → nas.gov.sg).
+  // Tier-2 (historian/historiography) takes precedence over the generic .org
+  // rule so jstor.org / historyextra.com keep their scholarly classification.
   const parts = host.split(".");
   for (let i = 0; i < parts.length; i++) {
     const d = parts.slice(i).join(".");
-    if (HUMANITIES_TIER_1_PRIMARY.has(d)) return 1;
     if (HUMANITIES_TIER_2_HISTORIAN.has(d)) return 2;
+    if (HUMANITIES_TIER_1_PRIMARY.has(d)) return 1;
   }
-  // Generic TLD heuristic: official government / academic / military hosts are
-  // treated as primary by default.
+  // Generic TLD heuristic: official government / academic / military / .org
+  // hosts are treated as primary by default (subject to DENY_DOMAINS).
   if (HUMANITIES_TLD_TIER_1.some((tld) => host.endsWith(tld) || host.includes(tld + "."))) return 1;
+  if (HUMANITIES_TLD_TIER_1_SUFFIXES.some((sfx) => host.endsWith(sfx))) return 1;
   return 3;
 }
 
