@@ -1376,6 +1376,7 @@ function computeCoverage(
   sections: Section[],
   aoDefs: AODef[],
   totalMarks: number,
+  subject: string,
 ): Coverage {
   // Build a flat blueprint to map question position → section
   const sectionByPos: Section[] = [];
@@ -1383,6 +1384,42 @@ function computeCoverage(
   for (const s of sections) {
     for (let i = 0; i < (s.num_questions || 0); i++) sectionByPos[cursor++] = s;
   }
+
+  // ── Expand each question's tags using semantic inference against its
+  //    section's LO/KO/AO pool. The teacher-visible tags on each question
+  //    card stay unchanged; this expansion only feeds the coverage rollup
+  //    so multi-LO questions stop being mislabelled as "uncovered".
+  const inferKind: "humanities" | "english" | "science_math" | "other" =
+    isHumanitiesSubject(subject) ? "humanities" : "science_math";
+  const expandedById = new Map<string, { ao_codes: string[]; knowledge_outcomes: string[]; learning_outcomes: string[] }>();
+  questions.forEach((q) => {
+    const sec = sectionByPos[q.position];
+    const poolAOs = sec
+      ? ((sec.ao_codes && sec.ao_codes.length > 0)
+          ? sec.ao_codes
+          : Array.from(new Set((sec.topic_pool ?? []).flatMap((t) => t.ao_codes ?? []))))
+      : [];
+    const poolKOs = sec
+      ? ((sec.knowledge_outcomes && sec.knowledge_outcomes.length > 0)
+          ? sec.knowledge_outcomes
+          : Array.from(new Set((sec.topic_pool ?? []).flatMap((t) => t.outcome_categories ?? []))))
+      : [];
+    const poolLOs = sec
+      ? ((sec.learning_outcomes && sec.learning_outcomes.length > 0)
+          ? sec.learning_outcomes
+          : Array.from(new Set((sec.topic_pool ?? []).flatMap((t) => t.learning_outcomes ?? []))))
+      : [];
+    const ex = expandQuestionTags(
+      { stem: q.stem, answer: q.answer, mark_scheme: q.mark_scheme, topic: q.topic, options: q.options ?? null },
+      { ao_codes: q.ao_codes ?? [], knowledge_outcomes: q.knowledge_outcomes ?? [], learning_outcomes: q.learning_outcomes ?? [] },
+      { loPool: poolLOs, koPool: poolKOs, aoPool: poolAOs },
+      inferKind,
+    );
+    expandedById.set(q.id, ex);
+  });
+  const aoOf = (q: Question) => expandedById.get(q.id)?.ao_codes ?? q.ao_codes ?? [];
+  const koOf = (q: Question) => expandedById.get(q.id)?.knowledge_outcomes ?? q.knowledge_outcomes ?? [];
+  const loOf = (q: Question) => expandedById.get(q.id)?.learning_outcomes ?? q.learning_outcomes ?? [];
 
   // ── Paper-wide AO targets from syllabus weightings + actuals from questions
   const aoCodeSet = new Set<string>();
