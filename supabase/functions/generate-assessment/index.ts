@@ -1283,6 +1283,41 @@ Deno.serve(async (req) => {
             }
           }
 
+          // Rescue pass: if the pool is STILL under target after live fetches
+          // and curated backfill (e.g. niche topic, no curated bundle match),
+          // fire a final round with broader queries. SBQ pools below 5 break
+          // the SEAB Source A–E format the teacher requires.
+          if (sharedSourcePool.length < FETCH_TARGET) {
+            const RESCUE_HINTS = [
+              "primary source historical document",
+              "secondary source historian explanation",
+              "policy decision official record",
+              "photograph image archive",
+            ];
+            const rescueNeeded = Math.max(0, FETCH_TARGET - sharedSourcePool.length);
+            const rescued = await Promise.all(
+              Array.from({ length: rescueNeeded }, (_, i) =>
+                withTimeout(
+                  fetchGroundedSource(
+                    subjectKind, sectionTopic.topic, sectionTopic.learning_outcomes ?? [],
+                    usedHosts, usedUrls, RESCUE_HINTS[i % RESCUE_HINTS.length],
+                    tierBudget,
+                  ),
+                  PER_FETCH_TIMEOUT_MS,
+                ).catch(() => null),
+              ),
+            );
+            for (const src of rescued) {
+              if (!src) continue;
+              if (sharedSourcePool.length >= poolSize) break;
+              if (sharedSourcePool.some((s) => s.source_url === src.source_url)) continue;
+              sharedSourcePool.push(src);
+            }
+            if (sharedSourcePool.length < FETCH_TARGET) {
+              console.warn(`[generate] section ${section.letter}: SBQ pool still ${sharedSourcePool.length}/${FETCH_TARGET} after rescue; continuing`);
+            }
+          }
+
           // Pictorial primary sources: fetch up to 2 distinct visuals
           // (cartoons, posters, photographs, graphs, charts, maps, statistical
           // tables) for this SBQ pool. Per teacher requirement: each SBQ
