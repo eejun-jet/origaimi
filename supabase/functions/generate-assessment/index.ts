@@ -1231,7 +1231,7 @@ Deno.serve(async (req) => {
             console.warn(`[generate] section ${section.letter}: image source fetch failed`, (e as Error).message);
           }
         }
-        console.log(`[generate] section ${section.letter} SBQ pool: ${sharedSourcePool.length} text sources + ${sharedImageSources.length} image(s) (target ${Math.min(poolSize, FETCH_TARGET)} text min, 2 images)`);
+        console.log(`[generate] section ${section.letter} SBQ pool: ${sharedSourcePool.length} text sources + ${sharedImageSources.length} image(s) (target 4 text, 2 images)`);
 
         // Hard floor: an SBQ section needs at least 2 distinct sources to be
         // worth presenting (anything less and the labels collapse to "Source
