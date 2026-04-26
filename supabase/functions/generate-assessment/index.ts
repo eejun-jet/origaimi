@@ -800,6 +800,16 @@ STRUCTURE — READ CAREFULLY:
   - You MUST open the FIRST part's stem with a clear KEY INQUIRY QUESTION (a debatable, analytical line of inquiry — e.g. "How far was X responsible for Y?", "To what extent did X cause Y?", "Why did X happen?"), then a blank line, then the (a) sub-question.
   - Sub-parts (b), (c), (d), (e) do NOT repeat the inquiry question; they are simply further parts of the same investigation.
 
+ABSOLUTE BAN ON CONTENT-RECALL STEMS (CRITICAL — non-negotiable):
+  - Every SBQ sub-part MUST require, at minimum, an INFERENCE — a reading of the source that goes BEYOND what is literally stated.
+  - The following stem patterns are FORBIDDEN because they only test surface description, not inference:
+      ✗ "What does Source A describe / show / depict / say about …?"
+      ✗ "What characteristics / features / details does Source A tell you about …?"
+      ✗ "List / Identify / State / Name what Source A says about …" (any version that asks the student to lift content)
+      ✗ "According to Source A, what is …?" (pure recall of stated content)
+  - The MINIMUM acceptable stem starts with one of: "What can you infer from Source A about …?", "What is the message of Source A?", "What does Source A SUGGEST / IMPLY / REVEAL about …?" (note: "tell you about" is acceptable ONLY when paired with a topic that demands inference — e.g. "what does Source A tell you about contemporary attitudes / perspectives / motivations / unstated assumptions about …", NEVER "what does Source A tell you about the events / facts / characteristics of …").
+  - Higher-skill stems (Comparison, Reliability, Utility, Purpose, Surprise, Assertion) are also acceptable; the inference floor only forbids questions BELOW inference.
+
 SOURCE-BINDING RULES (CRITICAL):
   - Each sub-part is built on ONE specific source from Sources ${labelList} below — NOT a free choice.
   - The ONLY exceptions:
