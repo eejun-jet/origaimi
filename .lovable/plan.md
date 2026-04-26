@@ -1,68 +1,60 @@
-# Fix History SBQ: missing sources + LO-pasted stems
+## Why pictorial sources never appear today
 
-Looking at the saved "History Mock Up" assessment, two distinct bugs are interacting:
+The History SBQ pool is built entirely from **text excerpts**. The `GroundedSource` type only carries `excerpt`, `source_url`, `source_title`, `publisher` — there is no image field, and `fetchGroundedSource` only calls `tavilySearch`/`firecrawlScrape` for **markdown text**. The "political cartoon poster propaganda" hint in `index.ts` (line 1115) is just a query keyword that biases the *text* search; it never asks Tavily for images, never extracts an `<img>`, and the renderer in `assessment.$id.tsx` only shows the textual `Source X: …` block from `source_excerpt`. So even when a search hits a page with a great cartoon, the system throws the image away and stores the surrounding article text.
 
-**Bug A — Only "Source A" exists.** The Sources A–E pool was supposed to hold 5 sources, but only 1 made it through. Result: every sub-question references "Source A" and the comparison stem absurdly says "Sources A and A".
+A fully-working pictorial-source pipeline already exists in `diagrams.ts` (`fromTavilyImages` + `fromFirecrawl` → `pickBestImage`) and the DB already has `diagram_url` / `diagram_source` / `diagram_caption` / `diagram_citation` columns on `assessment_questions`. We can reuse both.
 
-**Bug B — Stems paste the Learning Outcome verbatim.** The deterministic SBQ builder substitutes `{T}` (topic) into stem templates, but the "topic" stored is the entire syllabus directive — `"3 · Examine the rise of authoritarian regimes (Nazi Germany) and evaluate the roles of key players in the establishment of authoritarian rule."` — so we end up with stems like *"How far did the developments in 3 · Examine the rise of authoritarian regimes…shape the issue being studied?"*. That violates the rule that KOs/LOs should be tested *through* analytical questions, not handed back as the question.
+## What we'll change
 
-## What to change
+### 1. Add a pictorial-source fetcher for humanities (`sources.ts`)
 
-### 1. Guarantee a 5–6 source pool (`generate-assessment/index.ts`)
+- Export a new `fetchGroundedImageSource()` that, given a topic + LOs, runs a Tavily image search restricted to the same humanities allow-list (with `includeImages: true, includeImageDescriptions: true`), filters to real raster/SVG URLs, ranks by allow-list membership + topic-keyword overlap with the description, and returns a new shape:
+  ```
+  { kind: "image", image_url, caption, source_url, source_title, publisher }
+  ```
+- Reuse the existing humanities allow-list, generic `.gov`/`.edu`/`.org` rule, and `DENY_DOMAINS` for filtering.
+- Per-fetch timeout 6–8s, returns `null` on miss so it's non-fatal.
 
-The SBQ pool target is 5, but live web fetches frequently return `null` within the 14s per-fetch budget, and the curated WWII/appeasement fallback regex doesn't match the topics actually selected (Nazi rise, Cold War, decolonisation, etc.). Fix in three layers:
+### 2. Slot images into the shared SBQ pool (`index.ts`)
 
-- **Expand the curated humanities pool** (`curatedHumanitiesSourcePool`) with primary-source bundles for the topics we actually see in MOE Sec History:
-  - Rise of Nazism / Weimar Germany (Reichstag Fire decree, Enabling Act, Mein Kampf excerpts, Hindenburg's appointment notice)
-  - Stalinist USSR (Five-Year Plan speeches, purge testimony)
-  - Cold War origins (Long Telegram, Truman Doctrine, Marshall Plan speech, Zhdanov Doctrine)
-  - End of the Cold War (Gorbachev's perestroika address, Reagan's "Tear down this wall", fall-of-the-Wall reportage)
-  - Decolonisation in Southeast Asia / Singapore independence (Lee Kuan Yew speeches, Separation Agreement)
-  Each entry includes verbatim excerpt, archival URL (yale avalon, UK National Archives, NSA archive, NAS Singapore, USHMM), title, publisher.
-- **Topic-aware regex matching** instead of one giant alternation: derive a topic-keyword set from `topic + learning_outcomes` and match against multiple themed source-bundles, returning whichever matches.
-- **Backfill loop after parallel fetch**: after the `Promise.all` for live fetches, if `sharedSourcePool.length < 5`, top up from the curated pool by topic match (skipping any URL already in `usedUrls`) until length ≥ 5 or we exhaust the curated pool. This guarantees the pool *never* drops below 5 for supported topics, regardless of crawler luck.
-- **Pool-size assertion before deterministic build**: if pool length is still < 2 (e.g. exotic topic, no curated match, all crawls failed), drop the section with a clearer error so we don't emit a paper saying "Sources A and A". Today it silently builds 5 questions all pointing at the same source.
+In the `isHumanitiesSBQ` block (around line 1097–1170):
+- After fetching the 5 textual sources, **always try to fetch ONE pictorial source** via `fetchGroundedImageSource()` (cartoon, poster, propaganda image, photograph).
+- Append it to `sharedSourcePool` as the last entry (so it becomes Source E or F) tagged with a `kind: "image"` marker.
+- Persist it on the question rows by:
+  - Encoding it inside the existing `source_excerpt` text as `Source E: [IMAGE] caption — image_url` so older parsers still see something, AND
+  - Writing the URL/caption into the existing `diagram_url` / `diagram_caption` / `diagram_source = "web"` / `diagram_citation` columns on the SBQ questions that reference it (these columns already exist; no migration needed).
+- If the image fetch fails or returns null, the section silently keeps 5 text sources — never block generation.
 
-### 2. Rewrite the SBQ stem renderer to use an *inquiry*, not the LO (`buildDeterministicSbqQuestions`)
+### 3. Render the picture in the UI (`src/routes/assessment.$id.tsx`)
 
-The current builder uses the raw topic string for `{T}`. Replace with a clean derivation:
+- Extend `parseSharedSourcePool()` to recognise the `[IMAGE] caption — url` marker and return entries shaped `{ label, kind: "image" | "text", text, imageUrl?, caption? }`.
+- In the "Sources for this section" block, render image entries as `<img src=… alt=caption>` inside the same Source X card, with the caption beneath, plus the publisher citation link.
+- Keep text-source rendering unchanged.
 
-- **Build `cleanTopic`** by stripping leading numeric/alpha codes (`/^[\d\.\w]+\s*·\s*/`), trimming, and lower-casing the first word so it reads naturally inside a sentence ("Nazi Germany" stays capitalised; "examine the rise of…" gets reduced — see next point).
-- **Detect directive-style topic titles** (start with command words like Examine / Analyse / Evaluate / Assess / Discuss / Explain). When detected, the topic *is* the LO, so we can't use it as `{T}` directly. Instead derive a noun-phrase subject from it by:
-  1. dropping the leading command word and any "and evaluate / and explain" tail,
-  2. extracting the parenthetical scope if present ("(Nazi Germany)" → "Nazi Germany") OR the head noun phrase before the next verb.
-  This is a small string transformation, not an AI call. Result: `"the rise of authoritarian regimes in Nazi Germany"` or `"Nazi Germany"`.
-- **Build a real inquiry question** from the SBQ skill set + topic, *not* the templated `"How far did the developments in {T} shape the issue being studied?"` line we have now. Use the SEAB-style question stems already documented in the SBQ_SKILLS prompts:
-  - Cause: *"Why did {T} happen / develop / succeed / fail?"*
-  - Significance: *"How significant was {T} in shaping {era}?"*
-  - Hypothesis (paired with the assertion sub-part): *"How far was {T} caused / shaped mainly by {factor}?"*
-  Pick deterministically from the assigned skill mix so the inquiry fits the assertion sub-part below it.
-- **Tighten the per-skill templates** so `{T}` is always inserted as a concise noun phrase, never a directive. Add a guard inside `buildDeterministicSbqQuestions` that asserts `cleanTopic` doesn't start with a command word; if it does, fall back to the noun-phrase extractor above before substituting.
+### 4. Expand primary-source publishers to all `.org` and `.edu` (`sources.ts`)
 
-### 3. Tighten the AI-generated SBQ path too
+Today `.org` is allowed but tagged Tier 3 (last-resort), and `.edu` is Tier 1 only by TLD heuristic — both subordinated to the curated whitelist. Per your request, treat **all `.edu`, `.ac.uk`, `.ac.*`, `.gov`, `.gov.*`, `.mil`** AND **all `.org`** hosts as **Tier 1 primary publishers** for humanities, with these guardrails so quality stays high:
 
-For non-deterministic SBQ generation (when present), augment `buildSectionUserPrompt` with an explicit anti-pattern instruction near the LO objectives block:
+- Keep `DENY_DOMAINS` (Wikipedia, Quora, Reddit, Medium, Substack, blogspot, wordpress, tumblr, pinterest) as a hard block.
+- Add a small extra deny list for low-quality `.org` aggregators that have caused noise before (e.g. `pinterest.com` is already denied; we'll add `slideshare.net`, `scribd.com`, `studocu.com`, `coursehero.com`, `chegg.com`, `prezi.com`, `weebly.com`).
+- Promote `.org` to Tier 1 in `humanitiesTier()` so it's no longer down-ranked behind Britannica.
+- The existing relevance + richness gates (`relevanceMetrics`, `richnessReason`, `JUNK_PATTERNS`) still filter out off-topic, thin, or catalogue-style pages, so opening up `.org`/`.edu` won't flood the pool with junk.
+- The Tier-2 historiography cap (`maxTier2: 1`) is unchanged — your "primary sources first, scholars sparingly" rule is preserved.
 
-> The Learning Outcomes listed are what the student must DEMONSTRATE through their answer. They are NOT question stems. Do NOT copy any LO into a question stem verbatim. Each sub-part must be an *analytical inquiry* that requires the student to use the source(s) to reason toward an answer that *evidences* one or more LOs.
+### 5. Light prompt update (`index.ts`)
 
-Also add: *"Question stems MUST start with a command word from the SEAB AO3 list (Study, Compare, How far, Why, To what extent, How useful, How reliable). They MUST NOT start with directive verbs from the LO statements (Examine, Evaluate, Analyse, Assess, Discuss)."*
+Add one line to the History SBQ prompt explaining that one of the supplied sources may be a pictorial source (cartoon/poster/photograph) referenced by `[IMAGE]` and the model should write a question that asks students to **interpret** it (e.g. "Study Source E. What is the message of the cartoonist?") rather than quote text from it.
 
-### 4. Reset the broken assessment so the user can regenerate
+## Files touched
 
-Delete the 7 questions from `84114f3a-1cca-4917-a8e9-23c7cd3c2a16` and reset its status to `draft` so the user can re-run generation against the fixed function.
+- `supabase/functions/generate-assessment/sources.ts` — add `fetchGroundedImageSource`, new image-source type, expand Tier-1 to all `.edu`/`.org`/`.gov*`/`.ac.*`/`.mil`, add small deny list.
+- `supabase/functions/generate-assessment/index.ts` — call image fetcher in SBQ pool builder, persist via existing `diagram_*` columns, add prompt note for pictorial source.
+- `src/routes/assessment.$id.tsx` — parse `[IMAGE]` entries and render `<img>` inside the section's "Sources" card.
 
-## Verification
+No DB migration needed (reusing `diagram_*` columns already on `assessment_questions`).
 
-- Curl the regenerated assessment via `supabase--curl_edge_functions` and inspect that:
-  - the SBQ section's questions list `Source A:` through at least `Source E:` in a single concatenated `source_excerpt`,
-  - sub-part stems reference distinct sources (`A`, `B`, `C`, `A & B`, `A–E`),
-  - no stem contains the substring "Examine the rise" or any other directive copied from the LO,
-  - mark sum still equals the section budget.
-- Spot-check edge-function logs for `[generate] section … SBQ pool: N sources` showing N ≥ 5.
+## What you'll see after deploy
 
-## Files
-
-- `supabase/functions/generate-assessment/index.ts` — expand `curatedHumanitiesSourcePool`, add backfill loop, harden `buildDeterministicSbqQuestions` with topic cleaning + inquiry derivation, add anti-LO-paste instructions in `buildSectionUserPrompt`, abort cleanly if pool < 2.
-- DB cleanup migration (or transient query through migration tool) to reset the failed assessment.
-
-No frontend changes required.
+- Generating a History SBQ section will produce 5 text sources **plus 1 cartoon/poster/photograph** (when one is found) — typically labelled Source F.
+- The pictorial source displays inline with the text sources, with caption + clickable citation.
+- Source diversity expands because any `.edu` / `.org` / `.gov*` / `.ac.*` host that passes the relevance + richness gates is now a first-class primary publisher, not a fallback.

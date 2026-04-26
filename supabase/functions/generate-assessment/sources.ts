@@ -74,9 +74,17 @@ const ALLOW_DOMAINS_ENGLISH = [
 ];
 
 const DENY_DOMAINS = [
+  // User-generated, unreliable, or aggregator content
   "wikipedia.org", "wikiwand.com", "quora.com", "reddit.com",
   "medium.com", "blogspot.com", "wordpress.com", "substack.com",
   "tumblr.com", "pinterest.com",
+  // Low-quality .org / .com aggregators that polluted earlier pools.
+  // These often surface in .org/.edu searches but are essay mills, slide
+  // sharing, or note-swap sites — never legitimate primary publishers.
+  "slideshare.net", "scribd.com", "studocu.com", "coursehero.com",
+  "chegg.com", "prezi.com", "weebly.com", "academia.edu",
+  "sparknotes.com", "cliffsnotes.com", "shmoop.com", "schmoop.com",
+  "studymode.com", "bartleby.com", "enotes.com",
 ];
 
 // Tiered preference for humanities domains. Tier 1 = primary sources;
