@@ -218,7 +218,9 @@ Deno.serve(async (req) => {
       const n = s?.num_questions ?? 0;
       for (let i = 0; i < n; i++) sectionByPos.push(s);
     }
-    const inferKind: "humanities" | "english" | "science_math" | "other" = isHum ? "humanities" : "science_math";
+    const isSci = isScience(assessment.subject);
+    const isCombSci = isCombinedScience(assessment.subject, assessment.syllabus_code);
+    const inferKind: "humanities" | "english" | "science_math" | "other" = isHum ? "humanities" : (isSci ? "science_math" : "science_math");
 
     const compactQuestions = (questions as any[]).map((q) => {
       const sec = sectionByPos[q.position] ?? null;
