@@ -21,6 +21,9 @@ type SectionTopic = {
   learning_outcomes?: string[];
   ao_codes?: string[];
   outcome_categories?: string[];
+  /** Discipline label e.g. "Physics", "Chemistry", "Practical". Used to enforce
+   *  50/50 splits on multi-track papers like Combined Science 5086 Paper 1. */
+  section?: string | null;
 };
 
 type DifficultyMix = { easy: number; medium: number; hard: number };
