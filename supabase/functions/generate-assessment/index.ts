@@ -727,6 +727,8 @@ function buildSectionUserPrompt(opts: {
   const typeLabel = QUESTION_TYPE_LABELS[section.question_type] ?? section.question_type;
   const isHumanitiesSBQ =
     opts.subjectKind === "humanities" && section.question_type === "source_based";
+  const isHistoryEssay =
+    opts.subjectKind === "humanities" && section.question_type === "long";
 
   const topicLines = section.topic_pool.map((t, i) => {
     const code = t.topic_code ? ` [${t.topic_code}]` : "";
