@@ -764,61 +764,69 @@ export async function fetchGroundedImageSources(
         .filter((im) => pass === "final" ? true : isAllowed(im.url, ALLOW_DOMAINS_HUMANITIES, true))
         .filter((im) => !localImageHosts.has(hostnameOf(im.url)));
 
-    if (candidates.length === 0) continue;
+      if (candidates.length === 0) continue;
 
-    // Rank: Tier-1 host + topic-keyword overlap in description boosts score.
-    // Visual-category bonus rewards cartoons, posters, photos, graphs, charts,
-    // maps, and statistical tables alike.
-    const ranked = candidates
-      .map((im) => {
-        const host = hostnameOf(im.url);
-        const tier = humanitiesTier(host);
-        const desc = (im.description ?? "").toLowerCase();
-        const category = classifyVisualCategory(desc);
-        let score = 0;
-        if (tier === 1) score += 6;
-        else if (tier === 2) score += 2;
-        for (const kw of topicVocab) {
-          if (kw.length >= 4 && desc.includes(kw)) score += 2;
-        }
-        if (/cartoon|poster|propaganda|photograph|portrait|engraving|painting|graph|chart|map|diagram|figure|table|statistic|infographic/.test(desc)) score += 3;
-        if (/logo|icon|avatar|sprite|banner|advert/.test(desc)) score -= 6;
-        // Diversity bonus: prefer a category we haven't picked yet.
-        if (category !== "other" && !pickedCategories.has(category)) score += 4;
-        return { im, score, host, category };
-      })
-      .sort((a, b) => b.score - a.score)
-      .filter((r) => r.score > 0);
+      // Rank: Tier-1 host + topic-keyword overlap in description boosts score.
+      // Visual-category bonus rewards cartoons, posters, photos, graphs, charts,
+      // maps, and statistical tables alike.
+      const ranked = candidates
+        .map((im) => {
+          const host = hostnameOf(im.url);
+          const tier = humanitiesTier(host);
+          const desc = (im.description ?? "").toLowerCase();
+          const category = classifyVisualCategory(desc);
+          let score = 0;
+          if (tier === 1) score += 6;
+          else if (tier === 2) score += 2;
+          for (const kw of topicVocab) {
+            if (kw.length >= 4 && desc.includes(kw)) score += 2;
+          }
+          if (/cartoon|poster|propaganda|photograph|portrait|engraving|painting|graph|chart|map|diagram|figure|table|statistic|infographic/.test(desc)) score += 3;
+          if (/logo|icon|avatar|sprite|banner|advert/.test(desc)) score -= 6;
+          // Diversity bonus: prefer a category we haven't picked yet.
+          if (category !== "other" && !pickedCategories.has(category)) score += 4;
+          return { im, score, host, category };
+        })
+        .sort((a, b) => b.score - a.score)
+        // Strict pass demands a positive score (clearly relevant). Relaxed/final
+        // passes accept anything not obviously a logo/icon (score > -3) so a
+        // section never ships pictorial-less just because keyword overlap was
+        // weak in the image description.
+        .filter((r) => pass === "strict" ? r.score > 0 : r.score > -3);
 
-    if (ranked.length === 0) continue;
+      if (ranked.length === 0) continue;
 
-    for (const cand of ranked) {
-      if (picked.length >= count) break;
-      if (localUsedHosts.has(cand.host)) continue;
-      // Find the page that contained the image, for a clean citation.
-      const sourcePage = results.find((r) => hostnameOf(r.url) === cand.host)?.url ?? cand.im.url;
-      const sourceTitle = results.find((r) => hostnameOf(r.url) === cand.host)?.title
-        ?? cand.im.description?.slice(0, 120)
-        ?? `${topic} — pictorial primary source`;
+      for (const cand of ranked) {
+        if (picked.length >= count) break;
+        if (localImageHosts.has(cand.host)) continue;
+        // Find the page that contained the image, for a clean citation.
+        const sourcePage = results.find((r) => hostnameOf(r.url) === cand.host)?.url ?? cand.im.url;
+        const sourceTitle = results.find((r) => hostnameOf(r.url) === cand.host)?.title
+          ?? cand.im.description?.slice(0, 120)
+          ?? `${topic} — pictorial primary source`;
 
-      localUsedHosts.add(cand.host);
-      if (usedHosts) usedHosts.add(cand.host);
-      pickedCategories.add(cand.category);
+        localImageHosts.add(cand.host);
+        // NOTE: do NOT add to usedHosts — text and image sources are tracked
+        // separately so a publisher contributing one of each is allowed.
+        pickedCategories.add(cand.category);
 
-      picked.push({
-        kind: "image",
-        image_url: cand.im.url,
-        caption: (cand.im.description ?? "").trim().slice(0, 220) || `Pictorial source: ${topic}`,
-        source_url: sourcePage,
-        source_title: sourceTitle,
-        publisher: publisherOf(sourcePage),
-      });
-      // Only take ONE image per query angle, so the next query has a chance
-      // to contribute a DIFFERENT category.
-      break;
+        picked.push({
+          kind: "image",
+          image_url: cand.im.url,
+          caption: (cand.im.description ?? "").trim().slice(0, 220) || `Pictorial source: ${topic}`,
+          source_url: sourcePage,
+          source_title: sourceTitle,
+          publisher: publisherOf(sourcePage),
+        });
+        // Only take ONE image per query angle, so the next query has a chance
+        // to contribute a DIFFERENT category.
+        break;
+      }
     }
   }
 
+  // Mark `usedHosts` arg as referenced (we intentionally don't write to it).
+  void usedHosts;
   return picked;
 }
 
