@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.0";
 import { fetchGroundedSource, fetchGroundedImageSource, fetchGroundedImageSources, classifySubject, humanitiesTier, type GroundedSource, type GroundedImageSource, type TierBudget } from "./sources.ts";
+import { generateProvenances } from "./provenance.ts";
 import { fetchDiagram, classifyScienceMath, questionWantsDiagram } from "./diagrams.ts";
 import { fetchExemplars } from "./exemplars.ts";
 
@@ -723,7 +724,11 @@ function buildSectionUserPrompt(opts: {
     const labelList = allLabels.join(", ");
     const blocks = pool.map((src, i) => {
       const label = labels[i];
-      return `  [Source ${label}] (use VERBATIM, do not modify):
+      const prov = src.provenance ?? `From ${src.publisher}.`;
+      return `  [Source ${label}]
+  Provenance: ${prov}
+  Link: ${src.source_url}
+  Excerpt (use VERBATIM, do not modify):
   ---
   ${src.excerpt}
   ---
@@ -731,7 +736,10 @@ function buildSectionUserPrompt(opts: {
     }).join("\n\n");
     const imageBlocks = images.map((img, i) => {
       const label = imageLabels[i];
+      const prov = img.provenance ?? `From ${img.publisher}.`;
       return `  [Source ${label}] PICTORIAL PRIMARY SOURCE (cartoon / poster / photograph / graph / chart / map / table):
+  Provenance: ${prov}
+  Link: ${img.source_url}
   ---
   Caption: ${img.caption}
   Image URL: ${img.image_url}
@@ -1243,6 +1251,24 @@ Deno.serve(async (req) => {
           continue;
         }
 
+        // Generate a one-sentence provenance for every source in the pool
+        // (text + images) so SBQ sources are introduced in proper SEAB style.
+        // Non-blocking: failure falls back to "From <publisher>: <title>." per
+        // source.
+        try {
+          const sectionTopicForProv = section.topic_pool[0]?.topic ?? "this topic";
+          const { textProv, imageProv } = await generateProvenances(
+            sharedSourcePool,
+            sharedImageSources,
+            sectionTopicForProv,
+          );
+          textProv.forEach((p, i) => { if (sharedSourcePool[i]) sharedSourcePool[i].provenance = p; });
+          imageProv.forEach((p, i) => { if (sharedImageSources[i]) sharedImageSources[i].provenance = p; });
+          console.log(`[generate] section ${section.letter}: provenance assigned to ${textProv.length + imageProv.length} sources`);
+        } catch (e) {
+          console.warn(`[generate] section ${section.letter}: provenance step failed`, (e as Error).message);
+        }
+
         // Every question slot references the SAME shared pool.
         for (let qi = 0; qi < section.num_questions; qi++) {
           sourcesForSection.push(sharedSourcePool.slice());
@@ -1407,15 +1433,28 @@ Deno.serve(async (req) => {
             continue;
           }
           question_type = "source_based";
-          const textBlocks = sharedSourcePool
-            .map((s, i) => `Source ${String.fromCharCode(65 + i)}: ${s.excerpt}`);
+          // Defensive sanitiser: strip our marker tokens from any free-text
+          // field so they can't break the parser if a publisher / excerpt
+          // happens to contain "[PROV]" / "[URL]" / "[TEXT]" / "[IMAGE]".
+          const stripMarkers = (s: string) => (s ?? "").replace(/\[(PROV|URL|TEXT|IMAGE)\]/g, "");
+          const textBlocks = sharedSourcePool.map((s, i) => {
+            const label = String.fromCharCode(65 + i);
+            const prov = stripMarkers(s.provenance ?? `From ${s.publisher}.`);
+            const url = stripMarkers(s.source_url ?? "");
+            const excerpt = stripMarkers(s.excerpt ?? "");
+            return `Source ${label}: [PROV] ${prov} [URL] ${url} [TEXT] ${excerpt}`;
+          });
           // Append each pictorial source as a separate Source label using the
           // [IMAGE] marker the renderer recognises (parseSharedSourcePool in
-          // src/routes/assessment.$id.tsx handles multiple image markers).
+          // src/routes/assessment.$id.tsx handles multiple image markers and
+          // the [PROV]/[URL] markers we attach here).
           sharedImageSources.forEach((img, i) => {
             const imgLabel = String.fromCharCode(65 + sharedSourcePool.length + i);
+            const prov = stripMarkers(img.provenance ?? `From ${img.publisher}.`);
+            const url = stripMarkers(img.source_url ?? "");
+            const caption = stripMarkers(img.caption ?? "");
             textBlocks.push(
-              `Source ${imgLabel}: [IMAGE] ${img.caption} — ${img.image_url}`,
+              `Source ${imgLabel}: [IMAGE] ${caption} — ${img.image_url} [PROV] ${prov} [URL] ${url}`,
             );
           });
           source_excerpt = textBlocks.join("\n\n");
