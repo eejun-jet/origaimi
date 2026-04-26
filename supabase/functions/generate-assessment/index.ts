@@ -4,6 +4,7 @@ import { fetchGroundedSource, fetchGroundedImageSource, fetchGroundedImageSource
 import { generateProvenances } from "./provenance.ts";
 import { fetchDiagram, classifyScienceMath, questionWantsDiagram } from "./diagrams.ts";
 import { fetchExemplars } from "./exemplars.ts";
+import { expandQuestionTags } from "./coverage-infer.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -915,7 +916,18 @@ Calibrate stem complexity, distractor closeness (for MCQ), required reasoning st
 
 OBJECTIVES TO COVER (each generated question MUST list the AO codes, KO categories, and LO statements it actually addresses — set ao_codes, knowledge_outcomes and learning_outcomes accordingly):
 ${sectionAOs.length > 0 ? `  - Assessment Objectives pool: ${sectionAOs.join(", ")}\n` : ""}${sectionKOs.length > 0 ? `  - Knowledge Outcome categories pool: ${sectionKOs.join(", ")}\n` : ""}${sectionLOs.length > 0 ? `  - Learning Outcomes pool (verbatim statements):\n${sectionLOs.slice(0, 20).map((lo) => `      • ${lo}`).join("\n")}\n` : ""}
-Across the ${section.num_questions} questions in this section, COLLECTIVELY cover every item in the pools above. Each individual question must tag the specific AOs / KOs / LOs it addresses (do not blanket-tag every objective on every question).
+Across the ${section.num_questions} questions in this section, COLLECTIVELY cover every item in the pools above.
+
+TAG INCLUSIVELY (CRITICAL — under-tagging creates false "uncovered" warnings):
+  - For EACH question, tag EVERY LO from the pool that the stem (and any sub-parts and the model answer) genuinely demonstrates — not just the single most central one. Most multi-part structured questions and source-based questions exercise 2–4 LOs at once.
+  - Tag EVERY KO category that the question demands. A question that asks the student to explain AND apply normally tags both "Understanding" and "Application". A compare/evaluate question normally tags "Skills" + "Understanding".
+  - Tag EVERY AO the stem demands. A 6-mark structured item that asks the student to describe (AO1) AND explain (AO2) tags both AO1 and AO2.
+  - LO statements MUST be copied verbatim from the pool above (so coverage matching works).
+  - Do NOT, however, blanket-tag every LO/KO/AO on every question — only those the stem ACTUALLY exercises.
+
+WORKED EXAMPLE (illustrative; adapt the principle, not the wording):
+  Stem: "Study Source A. Compare the views of the two newspapers on the 1969 racial riots. Explain your answer using details from both sources."
+  Tags: ao_codes = ["AO3"]; knowledge_outcomes = ["Understanding", "Skills"]; learning_outcomes = [the LO about analysing primary sources, the LO about communal relations / the 1969 riots] — both LOs, because the stem demands both.
 
 LO/KO USAGE RULE (CRITICAL — applies to every question stem):
   - Learning Outcomes and Knowledge Outcomes describe what the student must DEMONSTRATE through their answer. They are NOT question stems and MUST NOT be copied into a stem verbatim, even with light paraphrasing.
@@ -1000,9 +1012,9 @@ const TOOL = {
               mark_scheme: { type: "string", description: "Marking rubric showing how to award marks." },
               source_excerpt: { type: ["string", "null"], description: "Verbatim source passage used in the stem (only when a GROUNDED SOURCE was provided)." },
               source_url: { type: ["string", "null"], description: "URL of the source (only when a GROUNDED SOURCE was provided)." },
-              ao_codes: { type: ["array", "null"], items: { type: "string" }, description: "Assessment Objective codes addressed by this question (e.g. AO1, AO2)." },
-              knowledge_outcomes: { type: ["array", "null"], items: { type: "string" }, description: "Knowledge Outcome categories this question exercises (Knowledge, Understanding, Application, Skills)." },
-              learning_outcomes: { type: ["array", "null"], items: { type: "string" }, description: "Learning outcome statements this question covers, drawn verbatim from the section's LO pool when supplied." },
+              ao_codes: { type: ["array", "null"], items: { type: "string" }, description: "EVERY Assessment Objective code the stem (and any sub-parts) actually demands — not just the most central one. A 6-mark item that asks the student to describe AND explain tags both AO1 and AO2." },
+              knowledge_outcomes: { type: ["array", "null"], items: { type: "string" }, description: "EVERY Knowledge Outcome category the question demands (Knowledge / Understanding / Application / Skills). A compare/explain question typically tags both Skills and Understanding." },
+              learning_outcomes: { type: ["array", "null"], items: { type: "string" }, description: "EVERY Learning Outcome statement the stem (and sub-parts and model answer) genuinely demonstrates, copied verbatim from the section pool. Most multi-part questions tag 2–4 LOs." },
             },
             required: ["question_type", "topic", "bloom_level", "difficulty", "marks", "stem", "answer", "mark_scheme"],
             additionalProperties: false,
@@ -1572,6 +1584,28 @@ Deno.serve(async (req) => {
         const qKOs: string[] = Array.isArray(q.knowledge_outcomes) && q.knowledge_outcomes.length > 0 ? q.knowledge_outcomes : fallbackKOs;
         const qLOs: string[] = Array.isArray(q.learning_outcomes) && q.learning_outcomes.length > 0 ? q.learning_outcomes : fallbackLOs;
 
+        // Semantic post-pass: add LOs/KOs/AOs the stem demonstrably exercises
+        // even when the model under-tagged. Only ADDS, never removes.
+        const inferKind: "humanities" | "english" | "science_math" | "other" =
+          subjectKind === "humanities" ? "humanities"
+          : subjectKind === "english" ? "english"
+          : scienceMathKind ? "science_math" : "other";
+        const poolAOs = (section.ao_codes && section.ao_codes.length > 0)
+          ? section.ao_codes
+          : Array.from(new Set(section.topic_pool.flatMap((tp) => tp.ao_codes ?? [])));
+        const poolKOs = (section.knowledge_outcomes && section.knowledge_outcomes.length > 0)
+          ? section.knowledge_outcomes
+          : Array.from(new Set(section.topic_pool.flatMap((tp) => tp.outcome_categories ?? [])));
+        const poolLOs = (section.learning_outcomes && section.learning_outcomes.length > 0)
+          ? section.learning_outcomes
+          : Array.from(new Set(section.topic_pool.flatMap((tp) => tp.learning_outcomes ?? [])));
+        const expanded = expandQuestionTags(
+          { stem: q.stem ?? "", answer: q.answer ?? null, mark_scheme: q.mark_scheme ?? null, topic: q.topic ?? null, options: Array.isArray(q.options) ? q.options : null },
+          { ao_codes: qAOs, knowledge_outcomes: qKOs, learning_outcomes: qLOs },
+          { loPool: poolLOs, koPool: poolKOs, aoPool: poolAOs },
+          inferKind,
+        );
+
         allRows.push({
           assessment_id: assessmentId,
           user_id: userId,
@@ -1592,9 +1626,9 @@ Deno.serve(async (req) => {
           diagram_source: null,
           diagram_citation: null,
           diagram_caption: null,
-          ao_codes: qAOs,
-          knowledge_outcomes: qKOs,
-          learning_outcomes: qLOs,
+          ao_codes: expanded.ao_codes,
+          knowledge_outcomes: expanded.knowledge_outcomes,
+          learning_outcomes: expanded.learning_outcomes,
           // transient — used by the post-insert diagram pass, stripped before insert
           _wantDiagram: wantDiagram,
           _diagramTopic: q.topic ?? t?.topic ?? "",

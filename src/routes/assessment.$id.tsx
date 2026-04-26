@@ -21,7 +21,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ArrowLeft, Loader2, RefreshCw, Trash2, BookmarkPlus, Sparkles, ChevronUp, ChevronDown, X, Download, Image as ImageIcon, Wand2, MessageCircle, UserPlus, AlertTriangle, Info, CheckCircle2 } from "lucide-react";
 import { BLOOMS } from "@/lib/syllabus";
-import { toSectioned, sectionAtPosition, getSbqSkill, KNOWLEDGE_OUTCOMES, type Section } from "@/lib/sections";
+import { toSectioned, sectionAtPosition, getSbqSkill, KNOWLEDGE_OUTCOMES, isHumanitiesSubject, type Section } from "@/lib/sections";
+import { expandQuestionTags } from "@/lib/coverage-infer";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ChevronRight } from "lucide-react";
@@ -492,7 +493,7 @@ function EditorPage() {
 
   const totalActual = questions.reduce((s, q) => s + q.marks, 0);
   const allSelected = questions.length > 0 && selectedIds.size === questions.length;
-  const coverage = computeCoverage(questions, sectionedBlueprint.sections, aoDefs, assessment.total_marks);
+  const coverage = computeCoverage(questions, sectionedBlueprint.sections, aoDefs, assessment.total_marks, assessment.subject);
   const questionLabels: Record<string, string> = {};
   questions.forEach((q, i) => {
     const sec = sectionAtPosition(sectionedBlueprint, i);
@@ -1375,6 +1376,7 @@ function computeCoverage(
   sections: Section[],
   aoDefs: AODef[],
   totalMarks: number,
+  subject: string,
 ): Coverage {
   // Build a flat blueprint to map question position → section
   const sectionByPos: Section[] = [];
@@ -1383,17 +1385,53 @@ function computeCoverage(
     for (let i = 0; i < (s.num_questions || 0); i++) sectionByPos[cursor++] = s;
   }
 
+  // ── Expand each question's tags using semantic inference against its
+  //    section's LO/KO/AO pool. The teacher-visible tags on each question
+  //    card stay unchanged; this expansion only feeds the coverage rollup
+  //    so multi-LO questions stop being mislabelled as "uncovered".
+  const inferKind: "humanities" | "english" | "science_math" | "other" =
+    isHumanitiesSubject(subject) ? "humanities" : "science_math";
+  const expandedById = new Map<string, { ao_codes: string[]; knowledge_outcomes: string[]; learning_outcomes: string[] }>();
+  questions.forEach((q) => {
+    const sec = sectionByPos[q.position];
+    const poolAOs = sec
+      ? ((sec.ao_codes && sec.ao_codes.length > 0)
+          ? sec.ao_codes
+          : Array.from(new Set((sec.topic_pool ?? []).flatMap((t) => t.ao_codes ?? []))))
+      : [];
+    const poolKOs = sec
+      ? ((sec.knowledge_outcomes && sec.knowledge_outcomes.length > 0)
+          ? sec.knowledge_outcomes
+          : Array.from(new Set((sec.topic_pool ?? []).flatMap((t) => t.outcome_categories ?? []))))
+      : [];
+    const poolLOs = sec
+      ? ((sec.learning_outcomes && sec.learning_outcomes.length > 0)
+          ? sec.learning_outcomes
+          : Array.from(new Set((sec.topic_pool ?? []).flatMap((t) => t.learning_outcomes ?? []))))
+      : [];
+    const ex = expandQuestionTags(
+      { stem: q.stem, answer: q.answer, mark_scheme: q.mark_scheme, topic: q.topic, options: q.options ?? null },
+      { ao_codes: q.ao_codes ?? [], knowledge_outcomes: q.knowledge_outcomes ?? [], learning_outcomes: q.learning_outcomes ?? [] },
+      { loPool: poolLOs, koPool: poolKOs, aoPool: poolAOs },
+      inferKind,
+    );
+    expandedById.set(q.id, ex);
+  });
+  const aoOf = (q: Question) => expandedById.get(q.id)?.ao_codes ?? q.ao_codes ?? [];
+  const koOf = (q: Question) => expandedById.get(q.id)?.knowledge_outcomes ?? q.knowledge_outcomes ?? [];
+  const loOf = (q: Question) => expandedById.get(q.id)?.learning_outcomes ?? q.learning_outcomes ?? [];
+
   // ── Paper-wide AO targets from syllabus weightings + actuals from questions
   const aoCodeSet = new Set<string>();
   aoDefs.forEach((d) => aoCodeSet.add(d.code));
   sections.forEach((s) => (s.ao_codes ?? []).forEach((c) => aoCodeSet.add(c)));
-  questions.forEach((q) => (q.ao_codes ?? []).forEach((c) => aoCodeSet.add(c)));
+  questions.forEach((q) => aoOf(q).forEach((c) => aoCodeSet.add(c)));
 
   const paperAOs = Array.from(aoCodeSet).sort().map((code) => {
     const def = aoDefs.find((d) => d.code === code) ?? null;
     const weighting = def?.weighting_percent ?? null;
     const target = weighting != null ? Math.round((weighting / 100) * totalMarks) : 0;
-    const actual = questions.reduce((sum, q) => sum + ((q.ao_codes ?? []).includes(code) ? q.marks : 0), 0);
+    const actual = questions.reduce((sum, q) => sum + (aoOf(q).includes(code) ? q.marks : 0), 0);
     return { code, title: def?.title ?? null, target, actual, weighting };
   });
 
@@ -1401,22 +1439,22 @@ function computeCoverage(
   //    listing the KO) + actuals from question.knowledge_outcomes
   const koSet = new Set<string>(KNOWLEDGE_OUTCOMES as readonly string[]);
   sections.forEach((s) => (s.knowledge_outcomes ?? []).forEach((k) => koSet.add(k)));
-  questions.forEach((q) => (q.knowledge_outcomes ?? []).forEach((k) => koSet.add(k)));
+  questions.forEach((q) => koOf(q).forEach((k) => koSet.add(k)));
 
   const paperKOs = Array.from(koSet).map((name) => {
     const target = sections.reduce((sum, s) => sum + ((s.knowledge_outcomes ?? []).includes(name) ? s.marks : 0), 0);
-    const actual = questions.reduce((sum, q) => sum + ((q.knowledge_outcomes ?? []).includes(name) ? q.marks : 0), 0);
+    const actual = questions.reduce((sum, q) => sum + (koOf(q).includes(name) ? q.marks : 0), 0);
     return { name, target, actual };
   }).filter((k) => k.target > 0 || k.actual > 0);
 
   // ── Paper-wide LO list: union of every section's LOs + any LO seen on questions
   const loSet = new Set<string>();
   sections.forEach((s) => (s.learning_outcomes ?? []).forEach((lo) => loSet.add(lo)));
-  questions.forEach((q) => (q.learning_outcomes ?? []).forEach((lo) => loSet.add(lo)));
+  questions.forEach((q) => loOf(q).forEach((lo) => loSet.add(lo)));
 
   const paperLOs = Array.from(loSet).map((text) => {
     const target = sections.reduce((sum, s) => sum + ((s.learning_outcomes ?? []).includes(text) ? 1 : 0), 0);
-    const actual = questions.reduce((sum, q) => sum + ((q.learning_outcomes ?? []).includes(text) ? 1 : 0), 0);
+    const actual = questions.reduce((sum, q) => sum + (loOf(q).includes(text) ? 1 : 0), 0);
     return { text, target, actual, covered: actual > 0 };
   });
 
@@ -1435,11 +1473,11 @@ function computeCoverage(
   for (const s of sections) {
     const qs = questions.filter((q) => sectionByPos[q.position]?.id === s.id);
     const aoCodes = new Set<string>([...(s.ao_codes ?? [])]);
-    qs.forEach((q) => (q.ao_codes ?? []).forEach((c) => aoCodes.add(c)));
+    qs.forEach((q) => aoOf(q).forEach((c) => aoCodes.add(c)));
     const kos = new Set<string>([...(s.knowledge_outcomes ?? [])]);
-    qs.forEach((q) => (q.knowledge_outcomes ?? []).forEach((c) => kos.add(c)));
+    qs.forEach((q) => koOf(q).forEach((c) => kos.add(c)));
     const los = new Set<string>([...(s.learning_outcomes ?? [])]);
-    qs.forEach((q) => (q.learning_outcomes ?? []).forEach((c) => los.add(c)));
+    qs.forEach((q) => loOf(q).forEach((c) => los.add(c)));
 
     bySection[s.id] = {
       letter: s.letter,
@@ -1451,16 +1489,16 @@ function computeCoverage(
       aos: Array.from(aoCodes).sort().map((code) => ({
         code,
         title: aoDefs.find((d) => d.code === code)?.title ?? null,
-        actual: qs.reduce((sum, q) => sum + ((q.ao_codes ?? []).includes(code) ? q.marks : 0), 0),
+        actual: qs.reduce((sum, q) => sum + (aoOf(q).includes(code) ? q.marks : 0), 0),
       })),
       kos: Array.from(kos).map((name) => ({
         name,
-        actual: qs.reduce((sum, q) => sum + ((q.knowledge_outcomes ?? []).includes(name) ? q.marks : 0), 0),
+        actual: qs.reduce((sum, q) => sum + (koOf(q).includes(name) ? q.marks : 0), 0),
       })),
       los: Array.from(los).map((text) => ({
         text,
-        actual: qs.reduce((sum, q) => sum + ((q.learning_outcomes ?? []).includes(text) ? 1 : 0), 0),
-        covered: qs.some((q) => (q.learning_outcomes ?? []).includes(text)),
+        actual: qs.reduce((sum, q) => sum + (loOf(q).includes(text) ? 1 : 0), 0),
+        covered: qs.some((q) => loOf(q).includes(text)),
       })),
     };
   }
