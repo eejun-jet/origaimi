@@ -682,7 +682,7 @@ function buildSectionUserPrompt(opts: {
   syllabusCode?: string | null; paperCode?: string | null;
   groundedSources: (GroundedSource | null)[][]; // [questionIdx][sourceIdx]
   sharedSourcePool?: GroundedSource[]; // For humanities SBQ: ONE shared pool A–E
-  sharedImageSource?: GroundedImageSource | null; // Optional pictorial source appended to the pool
+  sharedImageSources?: GroundedImageSource[]; // Optional pictorial sources appended to the pool
   subjectKind?: "humanities" | "english" | null;
   instructions?: string;
   /** Per-question difficulty targets for THIS chunk (length === section.num_questions). */
