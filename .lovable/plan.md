@@ -1,78 +1,78 @@
-## Goal
+## What the new XLSX confirms
 
-Replace the coarse 5086 Chemistry data currently in the database with the canonical AO / KO / LO / Format dataset from `Chemistry_Dataset_mod.xlsx`, so that paper generation, coverage analysis and the coach reviewer reason against the real syllabus rather than the inferred placeholders.
+Compared the upload (`Chemistry_Dataset_mod-2.xlsx`) against what's currently in the database for 5086 Combined Science. Findings:
 
-## What the spreadsheet provides
+**Already correct (no work needed):**
+- AO definitions A1–A5, B1–B7, C1–C6 match the XLSX exactly.
+- 17 of 22 Chemistry topic rows (1.1 → 10) carry granular `A1..B7` AO tags from the previous ingestion.
 
-- **Sheet 1 – Assessment Outcomes (AOs):** 18 numbered sub‑objectives split into A1–A5 (Knowledge with Understanding), B1–B7 (Handling Information & Solving Problems), C1–C6 (Experimental Skills) — each with a description and command‑word hints.
-- **Sheet 2 – KOs / LOs (5086 Chemistry):** 64 LOs, each with an LO code (e.g. `1.1.1`), Topic (Knowledge Outcome — 10 distinct), Content / sub‑topic (e.g. "Atomic Structure"), and the LO sentence. This is more granular than what we currently hold.
-- **Sheet 3 – Format:** AO weighting (≈50% A, 50% B for theory; 100% C for practical), paper structure (P1 MCQ, P2 Physics, P3 Chemistry, P4 Biology, P5 Practical), and the rule that candidates take P1 + P5 + two of P2/3/4.
+**Wrong / stale / missing:**
 
-## Current state (5086 doc id `65010473…` already in DB)
+| # | Issue | Evidence |
+|---|---|---|
+| 1 | 5 Chemistry topic rows still on legacy `[A, B]` letters: **11.1 Fuels & Crude Oil, 11.2 Hydrocarbons, 11.3 Alcohols & Carboxylic Acids, 11.4 Polymers, 12 Maintaining Air Quality** | Not present in the XLSX, so previous ingestion skipped them |
+| 2 | DB has flat topic codes `5`, `6`, `7` but the XLSX uses `5.1`, `6.1`, `7.1`, `7.2` (Redox Concepts vs Electrolysis is one row in DB, two in XLSX) | `topic_code` mismatch — Coverage drawer can't surface "Electrolysis" as a distinct LO group |
+| 3 | **Paper 1 MCQ (0 topics linked)** and **Paper 5 Practical (0 topics linked)** | Per XLSX Format sheet, Paper 1 = Physics + Chemistry, Paper 5 = Physics + Chemistry (5086) — both should expose those topics |
+| 4 | Physics topics (16 rows) still on legacy `[A, B]` — never ingested with granular AOs | All Physics rows show `ao_codes: [A, B]` |
+| 5 | Papers 2/3/4 stored as single 65-mark blocks; XLSX format says **Section A = 55 m (last Q = 10 m), Section B = 10 m (choose 1 of 2)** | `syllabus_papers` has no section split |
+| 6 | A1 "Recall" sub-weight (20% of total marks) not encoded | Format sheet line 2 — affects MCQ blueprint targets |
+| 7 | Biology rows tagged to 5086 (12 topics, all letter-code) — actually wrong syllabus association: 5086 = Physics + Chemistry only | Format line 16: "Science (Physics, Chemistry), Syllabus 5086" |
 
-- 22 Chemistry topics already exist with topic codes (1.1, 2.1, …) but **no LO codes** and topic‑level `ao_codes={A,B}` only.
-- AOs stored only at letter level (A, B, C) — no A1…C6 granularity.
-- Paper format already correct.
+---
 
 ## Plan
 
-### 1. Build a one‑off ingestion script
-`scripts-tmp/ingest_5086_chem.mjs` (run locally against the project DB via `psql`). Idempotent: scoped to `source_doc_id = 65010473-aa3d-4566-80c9-303540a5add2`, `section = 'Chemistry'`.
+### 1. Refresh Chemistry topics 11.x and 12 with granular AOs
+These topics aren't in the XLSX (the 2025 syllabus dropped Organic Chemistry from the Combined Science scope), so confirm with you: **delete them**, or keep them but auto-tag with the inference engine. Default action in this plan: **delete** topics 11.1, 11.2, 11.3, 11.4, 12 from `syllabus_topics` for 5086 Chemistry, since the canonical XLSX is authoritative.
 
-Steps it performs:
+### 2. Restructure topic codes to match XLSX exactly
+- Rename topic_code `5` → `5.1`, `6` → `6.1`, `7` → `7.1` (Redox Concepts).
+- Insert new row `7.2 Electrolysis` with its 1 LO from the XLSX.
+- Refresh LO sentences and granular AO tags for all 18 Chemistry groups using the new XLSX (re-runs the existing `ingest_5086_chem.mjs` against the new file).
 
-a. **Replace AOs for 5086** (all three sections — chem ingest will not touch Bio/Physics rows, scoped by section in title where applicable). Insert 18 rows into `syllabus_assessment_objectives`:
-   - `code`: `A1`…`A5`, `B1`…`B7`, `C1`…`C6`
-   - `title`: short objective description (first 80 chars)
-   - `description`: full objective text + ` | Command words: …` from column 5
-   - `weighting_percent`: 50 for A* and B*, 100 for C* (group total derived from Format sheet)
-   - `position`: 1…18
+### 3. Ingest granular AOs for Physics
+Apply the same command-word inference (`coverage-infer.ts AO_VERBS_SCI`) to all 16 Physics topic rows so they carry `A1..B7` instead of `[A, B]`. This is automatic — no XLSX needed for Physics since you haven't supplied one. When you upload a Physics XLSX I'll re-run with the canonical text.
 
-   Keep the existing letter‑level rows or remove them — see Open question 1.
+### 4. Drop the orphaned Biology topics from 5086
+Delete the 12 Biology rows under doc `65010473…` (5086 is Physics+Chem only per the XLSX Format sheet). Biology stays attached to 5087/5088 syllabuses if those are added later.
 
-b. **Upsert / refresh Chemistry topics** in `syllabus_topics`:
-   - For each (Topic, Content) pair from the XLSX, ensure a row exists with:
-     - `topic_code`: derived from the LO code prefix (`1.1`, `1.2`, `2.1`, `2.2`, `3.1`, `3.2`, `3.3`, `4.1`, `4.2`, `5`, `6`, `7.1`, `7.2`, `8.1`, `8.2`, `8.3`, `9`, `10`)
-     - `title`: Content (e.g. "Atomic Structure")
-     - `strand`: Topic (e.g. "Particulate Nature")
-     - `section`: `Chemistry`
-     - `learning_outcomes`: the LO sentences for that (Topic, Content) group, in LO‑code order
-     - `ao_codes`: granular codes inferred from each LO's command word (e.g. *describe / state / define* → `A1`, *suggest / deduce / calculate* → `B*`); fallback `{A1,B1}` if none match.
-     - `outcome_categories`: `{knowledge,skills}` (or `{knowledge,skills,values}` for 11.4 Polymers and 12 Air Quality, matching today).
-     - `learning_outcome_code`: the smallest LO code in the group (e.g. `2.2.1`).
+### 5. Wire Paper 1 (MCQ) and Paper 5 (Practical) to a topic pool
+- **Paper 1**: link every 5086 Physics + Chemistry topic to Paper 1's `paper_id` via a new join table `syllabus_topic_papers (topic_id, paper_id)`. `loadPaperTopics()` reads through this table when present, otherwise falls back to `paper_id` direct match (back-compat for other syllabuses).
+- **Paper 5**: same join, plus add 6 synthetic "Practical skill" topic rows tagged C1..C6 with the canonical SEAB descriptors as LOs.
 
-   The existing 22 topics will be reconciled — the XLSX yields ~17 (Topic, Content) groups for Chemistry. Topics in DB but missing from the XLSX (e.g. 11.* Organic, 12 Air Quality) are **kept untouched**, since the upload only covers the topics in the dataset.
+### 6. Encode the section structure for Papers 2/3/4
+Update the 3 rows in `syllabus_papers`:
+- Insert child rows: `2A` (55 m, compulsory), `2B` (10 m, 1-of-2). Same for Papers 3 and 4. Use the existing `section` column.
+- Generator's `defaultSection()` already supports per-section marks/instructions, so these surface as suggested blueprint sections in `/new`.
 
-c. **Format / papers**: leave `syllabus_papers` as‑is — current rows already match. Append a "Notes" line to `syllabus_documents.notes` summarising AO weighting + the "P1 + P5 + 2 of P2/3/4" rule for downstream prompts.
+### 7. Add A1 recall sub-quota to coverage targets
+In `src/routes/assessment.$id.tsx` `computeCoverage()`, when the assessment is tagged to 5086 add a derived target: A1 ≥ 20% of total marks (separate from the A 50% block). Surfaces in the Coverage panel as "Recall (A1) target ≥ Xm".
 
-### 2. Wire granular AOs into the generator and coach
+### 8. Scope the AO list and topic pool to the chosen paper at runtime
+- `assessment.$id.tsx` `loadAll`: when `syllabus_paper_id` is set, filter `aoDefs` to the paper's relevant prefix (`A*`/`B*` for Papers 1–4, `C*` for Paper 5).
+- `supabase/functions/generate-assessment/index.ts`: restrict the `Assessment Objectives pool` and topic candidate pool the LLM sees to the chosen paper.
 
-- `supabase/functions/generate-assessment/index.ts`: when building the AO pool for a section, prefer the granular A1…C6 codes from `syllabus_assessment_objectives` (filtered by paper section) over the topic‑level `ao_codes` array.
-- `src/lib/coverage-infer.ts` and the two edge‑function copies: extend `AO_VERBS_SCI` to map command words to the new codes:
-  - A1: define, state, name; A2: vocabulary/units cues; A3: apparatus, technique; A4: quantities, determination; A5: applications/social/economic.
-  - B1: locate, select, organise; B2: translate (graph→table etc.); B3: manipulate, calculate; B4: identify pattern, trend, infer; B5: explain, account for; B6: predict, propose; B7: solve.
-  - C1–C6: practical verbs — these only fire for Paper 5 contexts, so gate by `paper_number === '5'`.
-- `src/routes/assessment.$id.tsx` already consumes `ao_codes` opaquely, so the Coverage drawer will surface the new codes automatically once they appear in the data.
+### 9. Re-run the post-generation tagger on existing 5086 mocks
+After the DB changes, `expandQuestionTags` will produce non-empty pools for MCQ + Practical. A one-shot script re-tags every existing `assessment_questions` row whose assessment is tagged to 5086.
 
-### 3. Verification
+---
 
-After ingest, run a sanity check:
-- `SELECT code, weighting_percent FROM syllabus_assessment_objectives WHERE source_doc_id='65010473…' ORDER BY position;` → 18 + (existing letter rows or 0).
-- `SELECT topic_code, title, learning_outcome_code, ao_codes FROM syllabus_topics WHERE source_doc_id='65010473…' AND section='Chemistry' ORDER BY position;` → each row carries an LO code and granular AO codes.
-- Generate a 5086 Paper 3 (Chemistry) mock and confirm the Coverage panel lists A1/B3/etc. instead of just "A, B".
+## Confirmations needed before I implement
 
-## Files touched
+I'd like to lock down 4 choices before code/migration changes:
 
-- new `scripts-tmp/ingest_5086_chem.mjs` (one‑off ingest)
-- `supabase/migrations/<timestamp>_ingest_5086_chem.sql` (the SQL the script emits, committed for reproducibility)
-- `src/lib/coverage-infer.ts` (granular AO command‑word mapping)
-- `supabase/functions/generate-assessment/coverage-infer.ts` (mirror)
-- `supabase/functions/coach-review/coverage-infer.ts` (mirror)
-- `supabase/functions/generate-assessment/index.ts` (prefer granular AO codes when building section AO pool)
+1. **Topics 11.x & 12 (Organic Chemistry, Air Quality) — delete or keep?** XLSX excludes them. Default = delete.
+2. **Biology rows under 5086 — delete?** XLSX Format says 5086 = Physics + Chem only. Default = delete.
+3. **Section A/B split for Papers 2/3/4** — store as child rows in `syllabus_papers` (default), or as a flag on the existing row?
+4. **Physics granular AOs** — auto-tag now using the inference engine (default), or wait for a Physics XLSX?
 
-No schema changes — existing columns (`code`, `description`, `learning_outcome_code`, `ao_codes`, `learning_outcomes`) are sufficient.
+I'll then run a single migration + ingestion script + edge-function redeploy to apply everything.
 
-## Open questions
+---
 
-1. **Letter‑level AO rows** (`A`, `B`, `C`) currently exist for all three sciences in 5086. Replace them with A1…C6 only, or keep both (letter rows for legacy reports, numbered rows as the new source of truth)? Default plan: **keep both** — numbered rows added at higher `position`, so existing UIs that expect `A/B/C` still work.
-2. **Scope**: this upload is Chemistry‑only. Should I also re‑label Physics and Biology topics with the same A1…C6 AO mapping, or limit the change strictly to Chemistry? Default plan: **Chemistry only** for now; apply the same treatment to Physics/Biology when those datasets arrive.
+## Technical summary (for reference)
+
+- **DB migration:** new join table `syllabus_topic_papers (topic_id uuid, paper_id uuid, primary key)`; renames + deletes on `syllabus_topics`; insert C1..C6 practical-skill topic rows; insert child paper rows for 2A/2B/3A/3B/4A/4B.
+- **Ingestion script:** rerun `scripts-tmp/ingest_5086_chem.mjs` against `Chemistry_Dataset_mod-2.xlsx`.
+- **Code changes:** `src/lib/syllabus-data.ts` (loadPaperTopics via join), `src/routes/assessment.$id.tsx` (AO scoping + A1 recall target), `supabase/functions/generate-assessment/index.ts` (paper-scoped pools), `src/lib/coverage-infer.ts` (no change — already covers A1..C6).
+- **Re-tag pass:** in-place `UPDATE assessment_questions` for every 5086 question using the new pools.
