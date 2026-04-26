@@ -1433,16 +1433,30 @@ Deno.serve(async (req) => {
             continue;
           }
           question_type = "source_based";
-          const textBlocks = sharedSourcePool
-            .map((s, i) => `Source ${String.fromCharCode(65 + i)}: ${s.excerpt}`);
+          // Defensive sanitiser: strip our marker tokens from any free-text
+          // field so they can't break the parser if a publisher / excerpt
+          // happens to contain "[PROV]" / "[URL]" / "[TEXT]" / "[IMAGE]".
+          const stripMarkers = (s: string) => (s ?? "").replace(/\[(PROV|URL|TEXT|IMAGE)\]/g, "");
+          const textBlocks = sharedSourcePool.map((s, i) => {
+            const label = String.fromCharCode(65 + i);
+            const prov = stripMarkers(s.provenance ?? `From ${s.publisher}.`);
+            const url = stripMarkers(s.source_url ?? "");
+            const excerpt = stripMarkers(s.excerpt ?? "");
+            return `Source ${label}: [PROV] ${prov} [URL] ${url} [TEXT] ${excerpt}`;
+          });
           // Append each pictorial source as a separate Source label using the
           // [IMAGE] marker the renderer recognises (parseSharedSourcePool in
-          // src/routes/assessment.$id.tsx handles multiple image markers).
+          // src/routes/assessment.$id.tsx handles multiple image markers and
+          // the [PROV]/[URL] markers we attach here).
           sharedImageSources.forEach((img, i) => {
             const imgLabel = String.fromCharCode(65 + sharedSourcePool.length + i);
+            const prov = stripMarkers(img.provenance ?? `From ${img.publisher}.`);
+            const url = stripMarkers(img.source_url ?? "");
+            const caption = stripMarkers(img.caption ?? "");
             textBlocks.push(
-              `Source ${imgLabel}: [IMAGE] ${img.caption} — ${img.image_url}`,
+              `Source ${imgLabel}: [IMAGE] ${caption} — ${img.image_url} [PROV] ${prov} [URL] ${url}`,
             );
+          });
           });
           source_excerpt = textBlocks.join("\n\n");
           source_url = sharedSourcePool[0].source_url;
