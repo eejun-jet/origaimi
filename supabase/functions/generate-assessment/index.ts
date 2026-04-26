@@ -1105,6 +1105,30 @@ THIS SECTION:
   ${section.instructions ? `- Section instructions for the rubric: ${section.instructions}` : ""}
 ${skillBlock}${difficultyBlock}${objectivesBlock}
 ${humanitiesSourceGuidance}${sbqSectionPreamble}${historyEssayBlock}
+${(() => {
+  // When the caller has narrowed topic_pool to exactly one entry per question
+  // (e.g. Combined Science Paper 1 with a planned Physics/Chemistry split), we
+  // emit a strict per-question topic+discipline assignment so each MCQ is
+  // anchored to the planned slot. This is what enforces the 50/50 split.
+  if (section.topic_pool.length !== section.num_questions || section.num_questions < 2) return "";
+  const disciplines = section.topic_pool.map((t) => (t.section ?? "").trim());
+  const distinct = new Set(disciplines.filter(Boolean));
+  if (distinct.size < 2) return "";
+  const lines = section.topic_pool.map((t, i) => {
+    const disc = (t.section ?? "Other").trim() || "Other";
+    const code = t.topic_code ? ` [${t.topic_code}]` : "";
+    const losPreview = (t.learning_outcomes ?? []).slice(0, 2).map((lo) => lo.length > 90 ? lo.slice(0, 87) + "…" : lo);
+    const losStr = losPreview.length > 0 ? ` — target LO(s): ${losPreview.join(" | ")}` : "";
+    return `  - Question ${i + 1}: discipline=${disc}; topic=${t.topic}${code}${losStr}`;
+  }).join("\n");
+  const totals = Array.from(distinct).map((d) => `${d}=${disciplines.filter((x) => x === d).length}`).join(", ");
+  return `
+PER-QUESTION TOPIC ASSIGNMENT (HARD CONSTRAINT — write each question on EXACTLY the assigned topic and discipline; do NOT swap, merge or skip any slot):
+${lines}
+
+DISCIPLINE BALANCE for this section: ${totals}. Each question's stem, options, working and tags must clearly belong to its assigned discipline. The set of learning_outcomes you tag on each question MUST be drawn from that question's target LO(s) above (verbatim copies from the syllabus pool). Across the section, COLLECTIVELY cover as many distinct learning outcomes as the slots allow — repeat an LO only if the slot count exceeds the available LO count.
+`;
+})()}
 ALLOWED TOPICS (pick from these only — DO NOT invent topics outside this pool):
 ${topicLines}
 ${sourceBlocks}
