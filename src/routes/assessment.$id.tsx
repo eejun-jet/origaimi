@@ -874,14 +874,25 @@ function EditorPage() {
                   coverage={coverage}
                   totalMarks={assessment.total_marks}
                   totalActual={totalActual}
+                  questions={questions}
+                  comments={comments}
+                  identity={identity}
+                  onAddComment={addComment}
+                  onSetCommentStatus={setCommentStatus}
+                  onDeleteComment={deleteComment}
+                  onScrollToQuestion={scrollToQuestion}
                 />
 
                 <CoachPanel
                   assessmentId={id}
                   onScrollToQuestion={scrollToQuestion}
                   onApplied={loadAll}
+                  comments={comments}
+                  identity={identity}
+                  onAddComment={addComment}
+                  onSetCommentStatus={setCommentStatus}
+                  onDeleteComment={deleteComment}
                 />
-
                 <div className="rounded-xl border border-border bg-card p-5">
                   <h3 className="font-medium">Total marks</h3>
                   <div className="mt-2 flex items-baseline gap-1">
