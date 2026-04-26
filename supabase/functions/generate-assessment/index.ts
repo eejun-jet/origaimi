@@ -1456,33 +1456,43 @@ Deno.serve(async (req) => {
             }
           }
 
-          // Pictorial primary sources: fetch up to 2 distinct visuals
-          // (cartoons, posters, photographs, graphs, charts, maps, statistical
-          // tables) for this SBQ pool. Per teacher requirement: each SBQ
-          // section should give students at least 2 visual primary sources to
-          // interpret. Non-fatal — if Tavily is unavailable or filters reject
-          // everything, the section still ships with its text sources.
+          // Pictorial primary sources: fetch up to MAX_IMAGE_SOURCES distinct
+          // visuals (cartoons, posters, photographs, graphs, charts, maps).
+          // Per teacher requirement: pictorial sources are clearly distinct
+          // from documentary text sources, and the total source count never
+          // exceeds MAX_TOTAL_SOURCES.
           try {
             const imgs = await fetchGroundedImageSources(
               sectionTopic.topic,
               sectionTopic.learning_outcomes ?? [],
-              2,
+              MAX_IMAGE_SOURCES,
               usedHosts,
             );
-            for (const img of imgs) {
+            for (const img of imgs.slice(0, MAX_IMAGE_SOURCES)) {
               sharedImageSources.push(img);
               console.log(`[generate] section ${section.letter}: pictorial source ${img.image_url} from ${img.publisher}`);
             }
             if (imgs.length === 0) {
               console.log(`[generate] section ${section.letter}: no pictorial source found`);
-            } else if (imgs.length < 2) {
-              console.warn(`[generate] section ${section.letter}: only ${imgs.length} pictorial source(s) found (target 2)`);
+            } else if (imgs.length < MAX_IMAGE_SOURCES) {
+              console.warn(`[generate] section ${section.letter}: only ${imgs.length} pictorial source(s) found (target ${MAX_IMAGE_SOURCES})`);
             }
           } catch (e) {
             console.warn(`[generate] section ${section.letter}: image source fetch failed`, (e as Error).message);
           }
         }
-        console.log(`[generate] section ${section.letter} SBQ pool: ${sharedSourcePool.length} text sources + ${sharedImageSources.length} image(s) (target 5 text, 2 images)`);
+        // Hard cap: text sources never exceed (MAX_TOTAL_SOURCES - imagesFound)
+        // so the section ships with ≤ MAX_TOTAL_SOURCES (= 6) sources total.
+        const imagesCount = Math.min(sharedImageSources.length, MAX_IMAGE_SOURCES);
+        const textCap = Math.max(0, MAX_TOTAL_SOURCES - imagesCount);
+        if (sharedSourcePool.length > textCap) {
+          sharedSourcePool.length = textCap;
+        }
+        // Also trim images defensively.
+        if (sharedImageSources.length > MAX_IMAGE_SOURCES) {
+          sharedImageSources.length = MAX_IMAGE_SOURCES;
+        }
+        console.log(`[generate] section ${section.letter} SBQ pool: ${sharedSourcePool.length} text sources + ${sharedImageSources.length} image(s) (cap ${MAX_TOTAL_SOURCES} total, ${MAX_IMAGE_SOURCES} pictorial)`);
 
         // Hard floor: an SBQ section needs at least 2 distinct sources to be
         // worth presenting (anything less and the labels collapse to "Source
