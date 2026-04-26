@@ -4,8 +4,10 @@
 //   - supabase/functions/generate-assessment (post-pass before insert)
 //
 // The matcher only ADDS tags. It never removes a tag the LLM or teacher set.
-// Goal: stop labelling LOs/KOs as "uncovered" when the question stem
-// genuinely demonstrates them but the LLM only tagged the most central one.
+// Now that every SBQ part and every essay carries a substantial L4 sample
+// answer, content the student would have to DEPLOY to write that answer is
+// treated as first-class evidence the LO/KO/AO is being tested — not just
+// what the bare stem mentions.
 //
 // IMPORTANT: a near-duplicate of this file lives at
 // supabase/functions/generate-assessment/coverage-infer.ts and at
@@ -52,12 +54,20 @@ function stemSet(tokens: string[]): Set<string> {
 }
 
 /**
- * Decide whether the question text demonstrates a given LO statement.
+ * Decide whether the question text (stem + sample answer + mark scheme)
+ * demonstrates a given LO statement.
  *
- * Rule: at least 60% of the LO's content tokens (stemmed) appear in the
- * question text, AND any clearly proper-noun token (capitalised in the
- * original LO) appears verbatim. We default to inclusive: if an LO is short
- * (<= 3 content tokens), we require ALL of them to match.
+ * Inclusive by design — under-tagging produces false "uncovered" warnings:
+ *   - Threshold scales with the richness of the supporting text. A question
+ *     that carries a substantial sample answer / mark scheme (≥60 content
+ *     tokens) drops from 60% → 40% LO-token coverage, because the answer
+ *     text proves the student WOULD deploy the LO to respond.
+ *   - Short LOs (≤3 content tokens): require all 3, OR (when answer is
+ *     rich) at least 2 of 3.
+ *   - Proper-noun gate is softened: require AT LEAST half of the named
+ *     entities in the LO to appear, not every single one. This stops
+ *     multi-name LOs (e.g. "Hitler, Stalin and the Allies") from being
+ *     blocked when only one named actor is referenced.
  */
 export function questionMatchesLO(
   questionText: string,
@@ -67,12 +77,17 @@ export function questionMatchesLO(
   const loTokens = contentTokens(loStatement);
   if (loTokens.length === 0) return false;
 
-  const qStems = stemSet(contentTokens(questionText));
+  const qContentTokens = contentTokens(questionText);
+  const qStems = stemSet(qContentTokens);
   const loStems = Array.from(stemSet(loTokens));
 
-  // Proper nouns / rare named entities: tokens starting capitalised in the LO
-  // AND not the very first word. These are usually "Hitler", "Berlin",
-  // "Maluku", "Newton", etc. We require those to appear.
+  // "Rich support" = stem + sample answer + mark scheme add up to a meaty
+  // body the student must actually engage with.
+  const richSupport = qContentTokens.length >= 60;
+
+  // Proper nouns / rare named entities: tokens starting capitalised in the
+  // LO AND not the very first word. Usually "Hitler", "Berlin", "Maluku",
+  // "Newton", etc.
   const properNouns: string[] = [];
   const words = loStatement.split(/\s+/);
   for (let i = 0; i < words.length; i++) {
@@ -81,8 +96,16 @@ export function questionMatchesLO(
     if (i === 0) continue; // first word may just be sentence-cased
     if (/^[A-Z][a-z]{2,}/.test(w)) properNouns.push(w.toLowerCase());
   }
-  for (const pn of properNouns) {
-    if (!qStems.has(stem(pn))) return false;
+  if (properNouns.length > 0) {
+    let pnHits = 0;
+    for (const pn of properNouns) {
+      if (qStems.has(stem(pn))) pnHits++;
+    }
+    // Single named entity: must appear (otherwise the question really is
+    // about a different named topic). Multiple named entities: at least
+    // half must appear.
+    const requiredPnHits = properNouns.length === 1 ? 1 : Math.ceil(properNouns.length / 2);
+    if (pnHits < requiredPnHits) return false;
   }
 
   let hits = 0;
@@ -90,8 +113,18 @@ export function questionMatchesLO(
     if (qStems.has(ls)) hits++;
   }
 
-  if (loStems.length <= 3) return hits === loStems.length;
-  return hits / loStems.length >= 0.6;
+  if (loStems.length <= 3) {
+    // Short LOs: full match, or 2-of-3 when the question carries a rich
+    // sample answer / mark scheme.
+    if (hits === loStems.length) return true;
+    if (richSupport && loStems.length === 3 && hits >= 2) return true;
+    return false;
+  }
+
+  const ratio = hits / loStems.length;
+  // Stem-only questions: keep the original 60% bar so we don't tag wildly.
+  // Questions with a rich answer / mark scheme: drop to 40%.
+  return ratio >= (richSupport ? 0.4 : 0.6);
 }
 
 // ───────────────────────── KO inference ─────────────────────────
@@ -103,18 +136,22 @@ const KO_VERBS: Record<string, string[]> = {
   ],
   Understanding: [
     "describe", "explain", "summarise", "summarize", "outline", "discuss",
-    "interpret", "illustrate", "classify", "distinguish",
+    "interpret", "illustrate", "classify", "distinguish", "account for",
+    "suggest", "imply", "reveal", "indicate",
   ],
   Application: [
     "apply", "calculate", "compute", "use", "solve", "determine",
     "predict", "estimate", "construct", "complete", "infer", "deduce",
-    "show that", "find",
+    "show that", "find", "draw on contextual", "draw on your contextual",
   ],
   Skills: [
     "compare", "contrast", "evaluate", "assess", "analyse", "analyze",
     "judge", "justify", "comment on", "to what extent", "how far",
     "how useful", "how reliable", "how similar", "how different",
-    "weigh", "examine the", "critically",
+    "weigh", "weighing", "examine the", "critically",
+    "cross-reference", "cross reference",
+    "balanced judgement", "reasoned judgement",
+    "provenance", "bias", "motive", "limitations",
   ],
 };
 
@@ -125,34 +162,59 @@ export function inferKOs(questionText: string, koPool: string[]): string[] {
   for (const ko of koPool) {
     const verbs = KO_VERBS[ko] ?? [];
     for (const v of verbs) {
-      if (t.includes(` ${v} `) || t.includes(` ${v}.`) || t.includes(` ${v},`) || t.includes(` ${v}:`) || t.includes(` ${v}?`)) {
-        out.add(ko);
-        break;
+      // Multi-word verbs / phrases: substring match. Single-word verbs:
+      // word-boundary match (so "use" doesn't fire on "useful").
+      const isPhrase = v.includes(" ") || v.includes("-");
+      if (isPhrase) {
+        if (t.includes(v)) { out.add(ko); break; }
+      } else {
+        if (
+          t.includes(` ${v} `) || t.includes(` ${v}.`) || t.includes(` ${v},`) ||
+          t.includes(` ${v}:`) || t.includes(` ${v}?`) || t.includes(` ${v};`)
+        ) {
+          out.add(ko);
+          break;
+        }
       }
     }
   }
-  // A multi-mark structured / source-based question almost always involves
-  // Understanding once any explanation is required. If the stem already
-  // matched Application or Skills, fold in Understanding too.
+  // A multi-mark structured / source-based / essay question almost always
+  // involves Understanding once any explanation is required. If the stem +
+  // answer matched Application or Skills, fold in Understanding too.
   if (out.has("Application") || out.has("Skills")) {
     if (koPool.includes("Understanding")) out.add("Understanding");
+  }
+  // Long-form prose (essays, SBQ sample answers) that names specific dates,
+  // people, treaties or events implies Knowledge recall is being deployed.
+  // Heuristic: ≥2 four-digit year tokens (1500–2099) OR ≥6 capitalised
+  // proper-noun tokens → Knowledge engaged.
+  if (koPool.includes("Knowledge") && !out.has("Knowledge")) {
+    const yearHits = (questionText.match(/\b(1[5-9]\d{2}|20\d{2})\b/g) ?? []).length;
+    const capHits = (questionText.match(/\b[A-Z][a-z]{2,}\b/g) ?? []).length;
+    if (yearHits >= 2 || capHits >= 6) out.add("Knowledge");
   }
   return Array.from(out);
 }
 
 // ───────────────────────── AO inference ─────────────────────────
 
-// Bloom-verb / command-word → AO. Matches the heuristics already used by
-// coach-review/index.ts (sciences vs humanities split).
+// Bloom-verb / command-word → AO. Now expanded to catch verbs that surface
+// in the L4 sample answer / mark scheme even when the stem itself is terse.
 const AO_VERBS_SCI: Record<string, string[]> = {
   AO1: ["state", "name", "list", "identify", "recall", "define", "label", "give"],
-  AO2: ["calculate", "explain", "describe", "predict", "apply", "use", "determine", "show that", "estimate"],
-  AO3: ["analyse", "analyze", "evaluate", "assess", "compare", "design", "investigate", "plan", "justify"],
+  AO2: ["calculate", "explain", "describe", "predict", "apply", "use", "determine", "show that", "estimate", "interpret", "account for"],
+  AO3: ["analyse", "analyze", "evaluate", "assess", "compare", "design", "investigate", "plan", "justify", "weigh", "critique"],
 };
 const AO_VERBS_HUM: Record<string, string[]> = {
-  AO1: ["describe", "identify", "state", "list", "name"],
-  AO2: ["explain", "account for", "why did", "why was"],
-  AO3: ["infer", "compare", "how similar", "how different", "how far", "to what extent", "how useful", "how reliable", "what is the message", "what can you infer", "are you surprised"],
+  AO1: ["describe", "identify", "state", "list", "name", "outline", "recount"],
+  AO2: ["explain", "account for", "why did", "why was", "suggest", "imply", "reveal"],
+  AO3: [
+    "infer", "compare", "how similar", "how different", "how far",
+    "to what extent", "how useful", "how reliable", "what is the message",
+    "what can you infer", "are you surprised", "evaluate", "assess",
+    "judgement", "judgment", "provenance", "bias", "motive", "limitation",
+    "cross-reference", "cross reference", "weighing", "weigh",
+  ],
 };
 
 export function inferAOs(
@@ -169,6 +231,20 @@ export function inferAOs(
     for (const v of verbs) {
       if (t.includes(v)) { out.add(ao); break; }
     }
+  }
+  // For humanities, an answer that visibly performs evaluation (provenance /
+  // bias / weighing) almost always engages AO2 (explanation) too — the
+  // student cannot evaluate without first explaining.
+  if (subjectKind === "humanities" && out.has("AO3") && aoPool.includes("AO2")) {
+    out.add("AO2");
+  }
+  // A long substantive answer that names specific factual content (years,
+  // proper nouns) demonstrates AO1 knowledge recall, even when the stem is
+  // a pure AO3 evaluation prompt.
+  if (aoPool.includes("AO1") && !out.has("AO1")) {
+    const yearHits = (questionText.match(/\b(1[5-9]\d{2}|20\d{2})\b/g) ?? []).length;
+    const capHits = (questionText.match(/\b[A-Z][a-z]{2,}\b/g) ?? []).length;
+    if (yearHits >= 2 || capHits >= 6) out.add("AO1");
   }
   return Array.from(out);
 }
@@ -201,6 +277,11 @@ export function expandQuestionTags(
   pools: Pools,
   subjectKind: "humanities" | "english" | "science_math" | "other",
 ): ExpandedTags {
+  // The supporting text the matcher reads is the FULL response surface the
+  // student would have to construct: stem + sample answer + mark scheme +
+  // topic + (MCQ) options. The L4 sample answer is treated as first-class
+  // evidence — if the answer engages an LO, the question tests that LO
+  // regardless of whether the stem mentions it explicitly.
   const text = [
     q.stem ?? "",
     q.answer ?? "",
