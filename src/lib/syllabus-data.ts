@@ -87,6 +87,24 @@ export type PaperTopic = {
 };
 
 export async function loadPaperTopics(paperId: string): Promise<PaperTopic[]> {
+  // Prefer the syllabus_topic_papers join table (multi-track papers like
+  // 5086 Paper 1 (MCQ) draw from Physics + Chemistry pools at once).
+  const { data: links, error: linkErr } = await supabase
+    .from("syllabus_topic_papers")
+    .select("topic_id")
+    .eq("paper_id", paperId);
+  if (linkErr) throw linkErr;
+  const linkedIds = (links ?? []).map((l) => l.topic_id as string);
+  if (linkedIds.length > 0) {
+    const { data, error } = await supabase
+      .from("syllabus_topics")
+      .select("id, topic_code, parent_code, title, depth, position, strand, sub_strand, learning_outcomes, suggested_blooms, outcome_categories, ao_codes, section")
+      .in("id", linkedIds)
+      .order("position", { ascending: true });
+    if (error) throw error;
+    return (data ?? []).map(mapTopicRow);
+  }
+  // Fallback: legacy single-paper ownership.
   const { data, error } = await supabase
     .from("syllabus_topics")
     .select("id, topic_code, parent_code, title, depth, position, strand, sub_strand, learning_outcomes, suggested_blooms, outcome_categories, ao_codes, section")
