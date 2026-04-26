@@ -717,7 +717,11 @@ function buildSectionUserPrompt(opts: {
     const pool = opts.sharedSourcePool;
     const sectionTopic = section.topic_pool[0]?.topic ?? "the topic";
     const labels = pool.map((_, i) => String.fromCharCode(65 + i));
-    const labelList = labels.join(", ");
+    const imageLabel = opts.sharedImageSource
+      ? String.fromCharCode(65 + pool.length)
+      : null;
+    const allLabels = imageLabel ? [...labels, imageLabel] : labels;
+    const labelList = allLabels.join(", ");
     const blocks = pool.map((src, i) => {
       const label = labels[i];
       return `  [Source ${label}] (use VERBATIM, do not modify):
@@ -726,6 +730,15 @@ function buildSectionUserPrompt(opts: {
   ---
   Citation: Source: ${src.publisher} — ${src.source_url}`;
     }).join("\n\n");
+    const imageBlock = opts.sharedImageSource && imageLabel
+      ? `\n\n  [Source ${imageLabel}] PICTORIAL PRIMARY SOURCE (cartoon / poster / photograph):
+  ---
+  Caption: ${opts.sharedImageSource.caption}
+  Image URL: ${opts.sharedImageSource.image_url}
+  ---
+  Citation: Source: ${opts.sharedImageSource.publisher} — ${opts.sharedImageSource.source_url}
+  NOTE: Source ${imageLabel} is an IMAGE, not text. The student will SEE the picture. Do NOT quote text from it. When you write a sub-part anchored on Source ${imageLabel}, ask students to INTERPRET the image — e.g. "Study Source ${imageLabel}. What is the message of the cartoonist?", "Study Source ${imageLabel}. What does this poster suggest about [issue]?". Reference the caption only as context.`
+      : "";
     const concatenatedExcerpt = pool
       .map((s, i) => `Source ${labels[i]}: ${s.excerpt}`)
       .join("\\n\\n");
@@ -743,14 +756,14 @@ SOURCE-BINDING RULES (CRITICAL):
   - Each sub-part is built on ONE specific source from Sources ${labelList} below — NOT a free choice.
   - The ONLY exceptions:
       • COMPARISON sub-parts may reference EXACTLY TWO sources (e.g. "Compare Sources A and B").
-      • ASSERTION (hypothesis) sub-parts must use ALL ${labels.length} sources (Sources ${labelList}).
+      • ASSERTION (hypothesis) sub-parts must use ALL ${allLabels.length} sources (Sources ${labelList}).
   - Every sub-part's stem MUST begin with an explicit instruction naming the source(s) it uses, e.g. "Study Source A.", "Study Sources A and B.", "Study Sources ${labelList}."
-  - Across the section, DIFFERENT sub-parts should be anchored on DIFFERENT sources where possible (e.g. (a) → Source A, (b) → Source B, (c) → Source C, comparison → A & B, assertion → all). Do NOT bind two different sub-parts to the same single source.
+  - Across the section, DIFFERENT sub-parts should be anchored on DIFFERENT sources where possible (e.g. (a) → Source A, (b) → Source B, (c) → Source C, comparison → A & B, assertion → all). Do NOT bind two different sub-parts to the same single source.${imageLabel ? `\n  - If you anchor a sub-part on Source ${imageLabel} (the pictorial source), the stem MUST ask the student to INTERPRET the image — message, perspective, audience, intent — NEVER to quote text from it.` : ""}
   - DO NOT invent new sources. DO NOT paraphrase or modify the source text.
   - For EVERY part in this section, set source_excerpt to the FULL concatenated pool below (so the editor shows all sources to the student). Set source_url to Source A's URL.
 
 SHARED SOURCES FOR THIS SECTION (Sources ${labelList}):
-${blocks}
+${blocks}${imageBlock}
 
   source_excerpt value to use for EVERY part in this section:
   "${concatenatedExcerpt}"
