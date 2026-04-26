@@ -725,34 +725,44 @@ export async function fetchGroundedImageSources(
   ];
 
   const topicVocab = syllabusKeywordsFor(topic, learningOutcomes);
-  const deadline = Date.now() + 12000;
-  const localUsedHosts = new Set<string>(usedHosts ? [...usedHosts] : []);
+  const deadline = Date.now() + 18000;
+  // We track image-host usage SEPARATELY from text-source hosts. A pictorial
+  // and a text source from the same publisher (e.g. BBC, Britannica) is
+  // perfectly fine and should NOT block the image. We still de-dupe images
+  // amongst themselves so a section gets variety.
+  const localImageHosts = new Set<string>();
   const picked: GroundedImageSource[] = [];
   const pickedCategories = new Set<VisualCategory>();
+  // Cross-pass relaxation: pass 1 strict (allow-list + score>0 + diverse host),
+  // pass 2 relaxed (score>=0, ignore host overlap with text), pass 3 final
+  // (drop allow-list — any non-deny host with a real image URL).
+  const passes: Array<"strict" | "relaxed" | "final"> = ["strict", "relaxed", "final"];
 
-  for (const query of queries) {
+  for (const pass of passes) {
     if (picked.length >= count) break;
-    if (Date.now() > deadline) break;
-    let response;
-    try {
-      response = await tavilySearch(query, {
-        excludeDomains: DENY_DOMAINS,
-        maxResults: 12,
-        includeImages: true,
-        includeImageDescriptions: true,
-      });
-    } catch (e) {
-      console.warn("[sources] image search exception", (e as Error).message);
-      continue;
-    }
-    const { images, results } = response;
-    if (!images || images.length === 0) continue;
+    for (const query of queries) {
+      if (picked.length >= count) break;
+      if (Date.now() > deadline) break;
+      let response;
+      try {
+        response = await tavilySearch(query, {
+          excludeDomains: DENY_DOMAINS,
+          maxResults: 12,
+          includeImages: true,
+          includeImageDescriptions: true,
+        });
+      } catch (e) {
+        console.warn("[sources] image search exception", (e as Error).message);
+        continue;
+      }
+      const { images, results } = response;
+      if (!images || images.length === 0) continue;
 
-    // Filter: real image URL, allow-listed host, not already used, not denied.
-    const candidates = images
-      .filter((im) => im.url && IMAGE_URL_RE.test(im.url))
-      .filter((im) => isAllowed(im.url, ALLOW_DOMAINS_HUMANITIES, true))
-      .filter((im) => !localUsedHosts.has(hostnameOf(im.url)));
+      // Filter: real image URL; allow-list applied only on strict pass.
+      const candidates = images
+        .filter((im) => im.url && IMAGE_URL_RE.test(im.url))
+        .filter((im) => pass === "final" ? true : isAllowed(im.url, ALLOW_DOMAINS_HUMANITIES, true))
+        .filter((im) => !localImageHosts.has(hostnameOf(im.url)));
 
     if (candidates.length === 0) continue;
 
