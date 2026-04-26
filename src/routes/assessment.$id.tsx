@@ -1254,7 +1254,17 @@ function QuestionCard({
             {(q.answer || q.mark_scheme) && (
               <details className="mt-4 rounded-lg bg-muted/40 p-3 text-sm">
                 <summary className="cursor-pointer text-xs font-medium uppercase tracking-wide text-muted-foreground">Mark scheme</summary>
-                {q.answer && <p className="mt-2"><span className="font-medium">Answer:</span> {q.answer}</p>}
+                {q.answer && (
+                  <div className="mt-2">
+                    <span className="font-medium">Answer:</span>
+                    {/* Render as discrete paragraphs so essay model answers aren't a wall of text. */}
+                    <div className="mt-1 space-y-2 font-paper leading-relaxed">
+                      {q.answer.split(/\n\s*\n/).map((para, i) => (
+                        <p key={i} className="whitespace-pre-wrap">{para.trim()}</p>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {q.mark_scheme && <p className="mt-2 whitespace-pre-wrap text-muted-foreground">{q.mark_scheme}</p>}
               </details>
             )}
