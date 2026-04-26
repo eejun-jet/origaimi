@@ -1579,7 +1579,7 @@ function computeCoverage(
 
 function MeterRow({
   label, sublabel, actual, target, showTarget = true,
-}: { label: string; sublabel?: string | null; actual: number; target: number; showTarget?: boolean }) {
+}: { label: React.ReactNode; sublabel?: string | null; actual: number; target: number; showTarget?: boolean }) {
   const pct = target ? Math.min(100, (actual / target) * 100) : actual > 0 ? 100 : 0;
   const ok = target > 0 && actual >= target;
   const over = target > 0 && actual > target;
