@@ -1649,7 +1649,7 @@ Deno.serve(async (req) => {
       } else if (needsSourcePerQ && subjectKind) {
         // Non-SBQ humanities or English comprehension: per-question source.
         for (let qi = 0; qi < section.num_questions; qi++) {
-          const t = pickTopic(section, qi);
+          const t = pickTopic(section, qi, si);
           const qSkill = perQSkillsForFetch[qi];
           const sourcesPerQ = qSkill ? Math.max(1, qSkill.minSources) : 1;
           const slot: (GroundedSource | null)[] = [];
