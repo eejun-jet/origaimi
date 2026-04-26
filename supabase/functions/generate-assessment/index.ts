@@ -1325,7 +1325,7 @@ Deno.serve(async (req) => {
               section: chunkSection, sectionIndex: si, totalSections: sections.length,
               syllabusCode, paperCode, groundedSources: chunkSources,
               sharedSourcePool: isHumanitiesSBQ ? sharedSourcePool : undefined,
-              sharedImageSource: isHumanitiesSBQ ? sharedImageSource : null,
+              sharedImageSources: isHumanitiesSBQ ? sharedImageSources : [],
               subjectKind, instructions,
               difficultyTargets: chunkDifficultyTargets,
             }),
