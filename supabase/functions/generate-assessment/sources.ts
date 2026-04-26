@@ -295,10 +295,23 @@ function hostnameOf(url: string): string {
   try { return new URL(url).hostname.toLowerCase(); } catch { return ""; }
 }
 
+// Reject obvious data/API/feed URLs that can never produce a usable
+// historical-source excerpt (CSV exports, JSON feeds, RSS, sitemaps,
+// analytics endpoints). These previously wasted scrape budget and pushed
+// the generator over the CPU limit.
+const DATA_PATH_RE = /\.(csv|json|xml|tsv|rss|atom)(\?|#|$)/i;
+const DATA_HOST_RE = /^(analytics|api|data|feeds?|raw)\./i;
+
 function isAllowed(url: string, allowList: string[], allowGenericTlds = false): boolean {
   const h = hostnameOf(url);
   if (!h) return false;
   if (DENY_DOMAINS.some((d) => h.endsWith(d) || h.includes(d))) return false;
+  // Reject data endpoints early so they never enter the candidate pool.
+  if (DATA_HOST_RE.test(h)) return false;
+  try {
+    const path = new URL(url).pathname;
+    if (DATA_PATH_RE.test(path)) return false;
+  } catch { /* ignore */ }
   if (allowList.some((d) => h === d || h.endsWith("." + d) || h.endsWith(d))) return true;
   // For humanities, also allow any .gov, .edu, .ac.uk, .mil, or .org host as
   // a Tier-1 primary publisher (gated by DENY_DOMAINS + downstream
