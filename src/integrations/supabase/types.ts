@@ -822,7 +822,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      __exec_sql_raw: { Args: { p_sql: string }; Returns: undefined }
+      [_ in never]: never
     }
     Enums: {
       [_ in never]: never
