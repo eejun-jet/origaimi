@@ -1515,7 +1515,13 @@ Deno.serve(async (req) => {
         if (sharedImageSources.length > MAX_IMAGE_SOURCES) {
           sharedImageSources.length = MAX_IMAGE_SOURCES;
         }
-        console.log(`[generate] section ${section.letter} SBQ pool: ${sharedSourcePool.length} text sources + ${sharedImageSources.length} image(s) (cap ${MAX_TOTAL_SOURCES} total, ${MAX_IMAGE_SOURCES} pictorial)`);
+        const finalHosts = new Set(
+          sharedSourcePool.map((s) => { try { return new URL(s.source_url).hostname.toLowerCase(); } catch { return ""; } }).filter(Boolean),
+        );
+        console.log(`[generate] section ${section.letter} SBQ pool: ${sharedSourcePool.length} text sources across ${finalHosts.size} distinct host(s) + ${sharedImageSources.length} image(s) (cap ${MAX_TOTAL_SOURCES} total, ${MAX_IMAGE_SOURCES} pictorial)`);
+        if (subjectKind === "humanities" && sharedSourcePool.length >= 3 && finalHosts.size < 3) {
+          console.warn(`[generate] section ${section.letter}: LOW source diversity — ${sharedSourcePool.length} excerpts but only ${finalHosts.size} distinct host(s): ${[...finalHosts].join(", ")}`);
+        }
 
         // Hard floor: an SBQ section needs at least 2 distinct sources.
         if (sharedSourcePool.length < 2) {
