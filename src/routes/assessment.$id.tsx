@@ -2260,7 +2260,21 @@ function CoachReviewBody({
           const key = `ao:${i}`;
           if (dismissed.has(key)) return null;
           return (
-            <FindingCard key={key} severity={d.severity} onDismiss={() => onDismiss(key)}>
+            <FindingCard
+              key={key}
+              severity={d.severity}
+              onDismiss={() => onDismiss(key)}
+              remarkCount={remarkCountFor(key)}
+              onDiscuss={() => onDiscuss({
+                key,
+                title: `AO drift · ${d.ao_code}`,
+                subtitle: typeof d.observed_pct === "number"
+                  ? `Observed ${d.observed_pct}%${typeof d.declared_pct === "number" ? ` · target ${d.declared_pct}%` : ""}`
+                  : undefined,
+                severity: d.severity,
+                body: d.note,
+              })}
+            >
               <div className="font-medium">{d.ao_code}{typeof d.observed_pct === "number" && <> · {d.observed_pct}%{typeof d.declared_pct === "number" && <span className="text-muted-foreground"> (target {d.declared_pct}%)</span>}</>}</div>
               <p className="mt-0.5 text-muted-foreground">{d.note}</p>
             </FindingCard>
@@ -2276,8 +2290,30 @@ function CoachReviewBody({
           const key = `cw:${i}`;
           if (dismissed.has(key)) return null;
           return (
-            <FindingCard key={key} severity={d.severity} onDismiss={() => onDismiss(key)}
-              onJump={d.question_id ? () => onScrollToQuestion(d.question_id) : undefined}>
+            <FindingCard
+              key={key}
+              severity={d.severity}
+              onDismiss={() => onDismiss(key)}
+              onJump={d.question_id ? () => onScrollToQuestion(d.question_id) : undefined}
+              remarkCount={remarkCountFor(key)}
+              onDiscuss={() => onDiscuss({
+                key,
+                title: `Command word · Q${d.position + 1}`,
+                subtitle: d.detected_verb ? `"${d.detected_verb}"` : undefined,
+                severity: d.severity,
+                body: (
+                  <>
+                    <p>{d.note}</p>
+                    {d.expected_aos && d.expected_aos.length > 0 && (
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        Expected: {d.expected_aos.join(", ")}{d.declared_ao && <> · declared {d.declared_ao}</>}
+                      </p>
+                    )}
+                  </>
+                ),
+                questionId: d.question_id,
+              })}
+            >
               <div className="font-medium">Q{d.position + 1}{d.detected_verb && <> · "{d.detected_verb}"</>}</div>
               <p className="mt-0.5 text-muted-foreground">{d.note}</p>
               {d.expected_aos && d.expected_aos.length > 0 && (
@@ -2293,7 +2329,27 @@ function CoachReviewBody({
         count={dismissed.has("uo:0") ? 0 : ((findings.unrealised_outcomes?.kos?.length ?? 0) + (findings.unrealised_outcomes?.los?.length ?? 0) > 0 ? 1 : 0)}
       >
         {!dismissed.has("uo:0") && findings.unrealised_outcomes && (findings.unrealised_outcomes.kos?.length || findings.unrealised_outcomes.los?.length) ? (
-          <FindingCard severity="warn" onDismiss={() => onDismiss("uo:0")}>
+          <FindingCard
+            severity="warn"
+            onDismiss={() => onDismiss("uo:0")}
+            remarkCount={remarkCountFor("uo:0")}
+            onDiscuss={() => onDiscuss({
+              key: "uo:0",
+              title: "Unrealised KO/LO",
+              severity: "warn",
+              body: (
+                <>
+                  {findings.unrealised_outcomes.note && <p>{findings.unrealised_outcomes.note}</p>}
+                  {findings.unrealised_outcomes.kos?.length > 0 && (
+                    <p className="mt-1"><span className="font-medium">KOs:</span> {findings.unrealised_outcomes.kos.join("; ")}</p>
+                  )}
+                  {findings.unrealised_outcomes.los?.length > 0 && (
+                    <p className="mt-1"><span className="font-medium">LOs:</span> {findings.unrealised_outcomes.los.join("; ")}</p>
+                  )}
+                </>
+              ),
+            })}
+          >
             {findings.unrealised_outcomes.note && <p className="text-muted-foreground">{findings.unrealised_outcomes.note}</p>}
             {findings.unrealised_outcomes.kos?.length > 0 && (
               <div className="mt-1">
@@ -2319,7 +2375,29 @@ function CoachReviewBody({
           const key = `bc:${i}`;
           if (dismissed.has(key)) return null;
           return (
-            <FindingCard key={key} severity={d.severity} onDismiss={() => onDismiss(key)}>
+            <FindingCard
+              key={key}
+              severity={d.severity}
+              onDismiss={() => onDismiss(key)}
+              remarkCount={remarkCountFor(key)}
+              onDiscuss={() => onDiscuss({
+                key,
+                title: `Bloom & difficulty · Section ${d.section_letter}`,
+                severity: d.severity,
+                body: (
+                  <>
+                    <p>{d.note}</p>
+                    {(d.expected_progression || d.observed_progression) && (
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        {d.expected_progression && <>Expected: {d.expected_progression}</>}
+                        {d.expected_progression && d.observed_progression && " · "}
+                        {d.observed_progression && <>Observed: {d.observed_progression}</>}
+                      </p>
+                    )}
+                  </>
+                ),
+              })}
+            >
               <div className="font-medium">Section {d.section_letter}</div>
               <p className="mt-0.5 text-muted-foreground">{d.note}</p>
               {(d.expected_progression || d.observed_progression) && (
@@ -2342,8 +2420,21 @@ function CoachReviewBody({
           const key = `sf:${i}`;
           if (dismissed.has(key)) return null;
           return (
-            <FindingCard key={key} severity={d.severity} onDismiss={() => onDismiss(key)}
-              onJump={d.question_id ? () => onScrollToQuestion(d.question_id) : undefined}>
+            <FindingCard
+              key={key}
+              severity={d.severity}
+              onDismiss={() => onDismiss(key)}
+              onJump={d.question_id ? () => onScrollToQuestion(d.question_id) : undefined}
+              remarkCount={remarkCountFor(key)}
+              onDiscuss={() => onDiscuss({
+                key,
+                title: `Source fit · Q${d.position + 1}`,
+                subtitle: d.required_skill,
+                severity: d.severity,
+                body: d.note,
+                questionId: d.question_id,
+              })}
+            >
               <div className="font-medium">Q{d.position + 1}{d.required_skill && <> · {d.required_skill}</>}</div>
               <p className="mt-0.5 text-muted-foreground">{d.note}</p>
             </FindingCard>
@@ -2359,8 +2450,23 @@ function CoachReviewBody({
           const key = `ms:${i}`;
           if (dismissed.has(key)) return null;
           return (
-            <FindingCard key={key} severity={d.severity} onDismiss={() => onDismiss(key)}
-              onJump={d.question_id ? () => onScrollToQuestion(d.question_id) : undefined}>
+            <FindingCard
+              key={key}
+              severity={d.severity}
+              onDismiss={() => onDismiss(key)}
+              onJump={d.question_id ? () => onScrollToQuestion(d.question_id) : undefined}
+              remarkCount={remarkCountFor(key)}
+              onDiscuss={() => onDiscuss({
+                key,
+                title: `Mark scheme · Q${d.position + 1}`,
+                subtitle: typeof d.marks_suggested === "number" && d.marks_suggested !== d.marks_declared
+                  ? `${d.marks_declared}m → suggest ${d.marks_suggested}m`
+                  : `${d.marks_declared}m`,
+                severity: d.severity,
+                body: d.note,
+                questionId: d.question_id,
+              })}
+            >
               <div className="font-medium">
                 Q{d.position + 1} · {d.marks_declared}m
                 {typeof d.marks_suggested === "number" && d.marks_suggested !== d.marks_declared && (
