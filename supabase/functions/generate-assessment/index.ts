@@ -1457,7 +1457,6 @@ Deno.serve(async (req) => {
               `Source ${imgLabel}: [IMAGE] ${caption} — ${img.image_url} [PROV] ${prov} [URL] ${url}`,
             );
           });
-          });
           source_excerpt = textBlocks.join("\n\n");
           source_url = sharedSourcePool[0].source_url;
           groundedCount++;
