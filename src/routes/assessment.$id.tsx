@@ -2452,11 +2452,15 @@ function FindingCard({
   children,
   onDismiss,
   onJump,
+  onDiscuss,
+  remarkCount = 0,
 }: {
   severity: Severity;
   children: React.ReactNode;
   onDismiss?: () => void;
   onJump?: () => void;
+  onDiscuss?: () => void;
+  remarkCount?: number;
 }) {
   const tone =
     severity === "fail"
@@ -2469,9 +2473,16 @@ function FindingCard({
       <div className="flex items-start gap-2">
         <SeverityIcon severity={severity} />
         <div className="flex-1 text-[11px] leading-relaxed">{children}</div>
+        {remarkCount > 0 && <RemarkPill count={remarkCount} />}
       </div>
-      {(onDismiss || onJump) && (
+      {(onDismiss || onJump || onDiscuss) && (
         <div className="mt-1.5 flex items-center justify-end gap-1">
+          {onDiscuss && (
+            <Button size="sm" variant="ghost" className="h-5 gap-1 px-1.5 text-[10px]" onClick={onDiscuss}>
+              <MessageCircle className="h-3 w-3" />
+              Discuss
+            </Button>
+          )}
           {onJump && (
             <Button size="sm" variant="ghost" className="h-5 px-1.5 text-[10px]" onClick={onJump}>
               Jump →
