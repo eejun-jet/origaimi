@@ -1251,6 +1251,24 @@ Deno.serve(async (req) => {
           continue;
         }
 
+        // Generate a one-sentence provenance for every source in the pool
+        // (text + images) so SBQ sources are introduced in proper SEAB style.
+        // Non-blocking: failure falls back to "From <publisher>: <title>." per
+        // source.
+        try {
+          const sectionTopicForProv = section.topic_pool[0]?.topic ?? "this topic";
+          const { textProv, imageProv } = await generateProvenances(
+            sharedSourcePool,
+            sharedImageSources,
+            sectionTopicForProv,
+          );
+          textProv.forEach((p, i) => { if (sharedSourcePool[i]) sharedSourcePool[i].provenance = p; });
+          imageProv.forEach((p, i) => { if (sharedImageSources[i]) sharedImageSources[i].provenance = p; });
+          console.log(`[generate] section ${section.letter}: provenance assigned to ${textProv.length + imageProv.length} sources`);
+        } catch (e) {
+          console.warn(`[generate] section ${section.letter}: provenance step failed`, (e as Error).message);
+        }
+
         // Every question slot references the SAME shared pool.
         for (let qi = 0; qi < section.num_questions; qi++) {
           sourcesForSection.push(sharedSourcePool.slice());
