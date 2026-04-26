@@ -4,6 +4,7 @@ import { fetchGroundedSource, fetchGroundedImageSource, fetchGroundedImageSource
 import { generateProvenances } from "./provenance.ts";
 import { fetchDiagram, classifyScienceMath, questionWantsDiagram } from "./diagrams.ts";
 import { fetchExemplars } from "./exemplars.ts";
+import { expandQuestionTags } from "./coverage-infer.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
