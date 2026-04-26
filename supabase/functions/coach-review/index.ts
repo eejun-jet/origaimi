@@ -265,7 +265,7 @@ Run all 7 checks and submit your findings via the submit_coach_review tool:
         : "For Sciences: AO1=recall (state, define, list); AO2=apply (calculate, explain, predict); AO3=analyse/evaluate."
     }
 
-3. KO/LO realisation — list every KO and LO ticked on the paper or its sections that no question actually exercises. Skip outcomes that are adequately covered.
+3. KO/LO realisation — list every KO and LO ticked on the paper or its sections that no question actually exercises. The ao_codes / knowledge_outcomes / learning_outcomes arrays you receive on each question already include both the teacher-confirmed tags AND outcomes that the stem text demonstrably exercises (a multi-part question normally covers 2–4 LOs). Treat any LO/KO present on those arrays as covered. Only flag an LO/KO as unrealised when NO question's stem, sub-parts or model answer demonstrates it. Skip outcomes that are adequately covered.
 
 4. Bloom & difficulty curve — per section, check the question-by-question Bloom and difficulty ramp. Flag clustering (e.g. 4 recall items in a row) or anti-progression (hard before easy).
 
