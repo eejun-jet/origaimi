@@ -1107,7 +1107,7 @@ Deno.serve(async (req) => {
       // ONE key inquiry question for ONE topic, mirroring SEAB SBQ paper format.
       const isHumanitiesSBQ = subjectKind === "humanities" && section.question_type === "source_based";
       const sharedSourcePool: GroundedSource[] = [];
-      let sharedImageSource: GroundedImageSource | null = null;
+      const sharedImageSources: GroundedImageSource[] = [];
       const sourcesForSection: (GroundedSource | null)[][] = [];
 
       if (isHumanitiesSBQ) {
