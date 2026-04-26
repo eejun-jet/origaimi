@@ -1354,13 +1354,44 @@ Deno.serve(async (req) => {
           // History SBQ generation under the CPU budget.
           const CURATED_SEED_CAP = 4;
           const SKIP_LIVE_THRESHOLD = 4;
-          const curatedSeed = curatedHumanitiesSourcePool(sectionTopic.topic, sectionTopic.learning_outcomes ?? []).slice(0, CURATED_SEED_CAP);
+          const hostOf = (u: string): string => {
+            try { return new URL(u).hostname.toLowerCase(); } catch { return ""; }
+          };
+          // CRITICAL: enforce DISTINCT hosts when seeding from curated bundles.
+          // Several bundles contain multiple excerpts from the same publisher
+          // (e.g. 3× nationalarchives.gov.uk, 3× ushmm.org). Without this guard
+          // the SBQ pool shipped with all sources from one or two domains —
+          // teachers complained that source diversity was missing.
+          const curatedAll = curatedHumanitiesSourcePool(sectionTopic.topic, sectionTopic.learning_outcomes ?? []);
+          const curatedSeed: typeof curatedAll = [];
+          const seenSeedHosts = new Set<string>();
+          // Pass 1: take one source per distinct host, in bundle order.
+          for (const src of curatedAll) {
+            if (curatedSeed.length >= CURATED_SEED_CAP) break;
+            const h = hostOf(src.source_url);
+            if (!h || seenSeedHosts.has(h)) continue;
+            seenSeedHosts.add(h);
+            curatedSeed.push(src);
+          }
+          // Pass 2: only if we still don't have enough distinct-host options
+          // (small bundle), top up from remaining curated sources allowing
+          // host repeats — but log the dup so we can spot weak bundles.
+          if (curatedSeed.length < CURATED_SEED_CAP) {
+            for (const src of curatedAll) {
+              if (curatedSeed.length >= CURATED_SEED_CAP) break;
+              if (curatedSeed.some((s) => s.source_url === src.source_url)) continue;
+              curatedSeed.push(src);
+              console.warn(`[generate] section ${section.letter}: curated bundle thin — reusing host ${hostOf(src.source_url)} for second excerpt`);
+            }
+          }
           sharedSourcePool.push(...curatedSeed);
           for (const src of curatedSeed) {
             usedUrls.add(src.source_url);
-            try { usedHosts.add(new URL(src.source_url).hostname.toLowerCase()); } catch { /* ignore */ }
+            const h = hostOf(src.source_url);
+            if (h) usedHosts.add(h);
           }
-          console.log(`[generate] section ${section.letter}: seeded ${curatedSeed.length} curated source(s); ${sharedSourcePool.length >= SKIP_LIVE_THRESHOLD ? "SKIPPING live text fetch" : "will run live text fetch"}`);
+          const distinctSeedHosts = new Set(curatedSeed.map((s) => hostOf(s.source_url)).filter(Boolean));
+          console.log(`[generate] section ${section.letter}: seeded ${curatedSeed.length} curated source(s) across ${distinctSeedHosts.size} distinct host(s); ${sharedSourcePool.length >= SKIP_LIVE_THRESHOLD ? "SKIPPING live text fetch" : "will run live text fetch"}`);
 
           // Per-pool budget: at most ONE Tier-2 (historian) source, shared
           // across parallel fetches.
