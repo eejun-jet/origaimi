@@ -733,6 +733,11 @@ function EditorPage() {
                                     Source {src.label}
                                     {src.kind === "image" ? " · pictorial" : ""}
                                   </div>
+                                  {src.provenance && (
+                                    <p className="mt-1 font-paper text-xs italic leading-relaxed text-muted-foreground">
+                                      {src.provenance}
+                                    </p>
+                                  )}
                                   {src.kind === "image" ? (
                                     <div className="mt-2 space-y-2">
                                       <img
@@ -750,9 +755,25 @@ function EditorPage() {
                                       {src.text}
                                     </p>
                                   )}
+                                  {src.sourceUrl && (
+                                    <p className="mt-2 text-[11px] text-muted-foreground">
+                                      <a
+                                        href={src.sourceUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="break-all font-medium text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary"
+                                      >
+                                        View source
+                                        <span aria-hidden="true"> ↗</span>
+                                      </a>
+                                      <span className="ml-2 text-muted-foreground/70">
+                                        {(() => { try { return new URL(src.sourceUrl).hostname.replace(/^www\./, ""); } catch { return src.sourceUrl; } })()}
+                                      </span>
+                                    </p>
+                                  )}
                                 </div>
                               ))}
-                              {q.source_url && (
+                              {q.source_url && !sectionSources.some((s) => s.sourceUrl) && (
                                 <p className="text-xs text-muted-foreground">
                                   Primary citation:{" "}
                                   <a
