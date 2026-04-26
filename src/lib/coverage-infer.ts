@@ -269,12 +269,13 @@ export function inferAOs(
     out.add("AO2");
   }
   // A long substantive answer that names specific factual content (years,
-  // proper nouns) demonstrates AO1 knowledge recall, even when the stem is
-  // a pure AO3 evaluation prompt.
-  if (aoPool.includes("AO1") && !out.has("AO1")) {
-    const yearHits = (questionText.match(/\b(1[5-9]\d{2}|20\d{2})\b/g) ?? []).length;
-    const capHits = (questionText.match(/\b[A-Z][a-z]{2,}\b/g) ?? []).length;
-    if (yearHits >= 2 || capHits >= 6) out.add("AO1");
+  // proper nouns) demonstrates AO1 / A1 knowledge recall, even when the
+  // stem is a pure evaluation prompt.
+  const yearHits = (questionText.match(/\b(1[5-9]\d{2}|20\d{2})\b/g) ?? []).length;
+  const capHits = (questionText.match(/\b[A-Z][a-z]{2,}\b/g) ?? []).length;
+  if (yearHits >= 2 || capHits >= 6) {
+    if (aoPool.includes("AO1") && !out.has("AO1")) out.add("AO1");
+    if (aoPool.includes("A1") && !out.has("A1")) out.add("A1");
   }
   return Array.from(out);
 }
