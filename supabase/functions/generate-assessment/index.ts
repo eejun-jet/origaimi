@@ -1409,14 +1409,15 @@ Deno.serve(async (req) => {
           question_type = "source_based";
           const textBlocks = sharedSourcePool
             .map((s, i) => `Source ${String.fromCharCode(65 + i)}: ${s.excerpt}`);
-          // If a pictorial source was found for this section, append it as the
-          // final Source label using a [IMAGE] marker the renderer recognises.
-          if (sharedImageSource) {
-            const imgLabel = String.fromCharCode(65 + sharedSourcePool.length);
+          // Append each pictorial source as a separate Source label using the
+          // [IMAGE] marker the renderer recognises (parseSharedSourcePool in
+          // src/routes/assessment.$id.tsx handles multiple image markers).
+          sharedImageSources.forEach((img, i) => {
+            const imgLabel = String.fromCharCode(65 + sharedSourcePool.length + i);
             textBlocks.push(
-              `Source ${imgLabel}: [IMAGE] ${sharedImageSource.caption} — ${sharedImageSource.image_url}`,
+              `Source ${imgLabel}: [IMAGE] ${img.caption} — ${img.image_url}`,
             );
-          }
+          });
           source_excerpt = textBlocks.join("\n\n");
           source_url = sharedSourcePool[0].source_url;
           groundedCount++;
