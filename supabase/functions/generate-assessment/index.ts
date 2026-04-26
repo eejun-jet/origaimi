@@ -1590,10 +1590,19 @@ Deno.serve(async (req) => {
           subjectKind === "humanities" ? "humanities"
           : subjectKind === "english" ? "english"
           : scienceMathKind ? "science_math" : "other";
+        const poolAOs = (section.ao_codes && section.ao_codes.length > 0)
+          ? section.ao_codes
+          : Array.from(new Set(section.topic_pool.flatMap((tp) => tp.ao_codes ?? [])));
+        const poolKOs = (section.knowledge_outcomes && section.knowledge_outcomes.length > 0)
+          ? section.knowledge_outcomes
+          : Array.from(new Set(section.topic_pool.flatMap((tp) => tp.outcome_categories ?? [])));
+        const poolLOs = (section.learning_outcomes && section.learning_outcomes.length > 0)
+          ? section.learning_outcomes
+          : Array.from(new Set(section.topic_pool.flatMap((tp) => tp.learning_outcomes ?? [])));
         const expanded = expandQuestionTags(
           { stem: q.stem ?? "", answer: q.answer ?? null, mark_scheme: q.mark_scheme ?? null, topic: q.topic ?? null, options: Array.isArray(q.options) ? q.options : null },
           { ao_codes: qAOs, knowledge_outcomes: qKOs, learning_outcomes: qLOs },
-          { loPool: sectionLOs, koPool: sectionKOs, aoPool: sectionAOs },
+          { loPool: poolLOs, koPool: poolKOs, aoPool: poolAOs },
           inferKind,
         );
 
