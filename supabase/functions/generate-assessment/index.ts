@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.0";
-import { fetchGroundedSource, classifySubject, humanitiesTier, type GroundedSource, type TierBudget } from "./sources.ts";
+import { fetchGroundedSource, fetchGroundedImageSource, classifySubject, humanitiesTier, type GroundedSource, type GroundedImageSource, type TierBudget } from "./sources.ts";
 import { fetchDiagram, classifyScienceMath, questionWantsDiagram } from "./diagrams.ts";
 import { fetchExemplars } from "./exemplars.ts";
 
@@ -682,6 +682,7 @@ function buildSectionUserPrompt(opts: {
   syllabusCode?: string | null; paperCode?: string | null;
   groundedSources: (GroundedSource | null)[][]; // [questionIdx][sourceIdx]
   sharedSourcePool?: GroundedSource[]; // For humanities SBQ: ONE shared pool A–E
+  sharedImageSource?: GroundedImageSource | null; // Optional pictorial source appended to the pool
   subjectKind?: "humanities" | "english" | null;
   instructions?: string;
   /** Per-question difficulty targets for THIS chunk (length === section.num_questions). */
@@ -716,7 +717,11 @@ function buildSectionUserPrompt(opts: {
     const pool = opts.sharedSourcePool;
     const sectionTopic = section.topic_pool[0]?.topic ?? "the topic";
     const labels = pool.map((_, i) => String.fromCharCode(65 + i));
-    const labelList = labels.join(", ");
+    const imageLabel = opts.sharedImageSource
+      ? String.fromCharCode(65 + pool.length)
+      : null;
+    const allLabels = imageLabel ? [...labels, imageLabel] : labels;
+    const labelList = allLabels.join(", ");
     const blocks = pool.map((src, i) => {
       const label = labels[i];
       return `  [Source ${label}] (use VERBATIM, do not modify):
@@ -725,6 +730,15 @@ function buildSectionUserPrompt(opts: {
   ---
   Citation: Source: ${src.publisher} — ${src.source_url}`;
     }).join("\n\n");
+    const imageBlock = opts.sharedImageSource && imageLabel
+      ? `\n\n  [Source ${imageLabel}] PICTORIAL PRIMARY SOURCE (cartoon / poster / photograph):
+  ---
+  Caption: ${opts.sharedImageSource.caption}
+  Image URL: ${opts.sharedImageSource.image_url}
+  ---
+  Citation: Source: ${opts.sharedImageSource.publisher} — ${opts.sharedImageSource.source_url}
+  NOTE: Source ${imageLabel} is an IMAGE, not text. The student will SEE the picture. Do NOT quote text from it. When you write a sub-part anchored on Source ${imageLabel}, ask students to INTERPRET the image — e.g. "Study Source ${imageLabel}. What is the message of the cartoonist?", "Study Source ${imageLabel}. What does this poster suggest about [issue]?". Reference the caption only as context.`
+      : "";
     const concatenatedExcerpt = pool
       .map((s, i) => `Source ${labels[i]}: ${s.excerpt}`)
       .join("\\n\\n");
@@ -742,14 +756,14 @@ SOURCE-BINDING RULES (CRITICAL):
   - Each sub-part is built on ONE specific source from Sources ${labelList} below — NOT a free choice.
   - The ONLY exceptions:
       • COMPARISON sub-parts may reference EXACTLY TWO sources (e.g. "Compare Sources A and B").
-      • ASSERTION (hypothesis) sub-parts must use ALL ${labels.length} sources (Sources ${labelList}).
+      • ASSERTION (hypothesis) sub-parts must use ALL ${allLabels.length} sources (Sources ${labelList}).
   - Every sub-part's stem MUST begin with an explicit instruction naming the source(s) it uses, e.g. "Study Source A.", "Study Sources A and B.", "Study Sources ${labelList}."
-  - Across the section, DIFFERENT sub-parts should be anchored on DIFFERENT sources where possible (e.g. (a) → Source A, (b) → Source B, (c) → Source C, comparison → A & B, assertion → all). Do NOT bind two different sub-parts to the same single source.
+  - Across the section, DIFFERENT sub-parts should be anchored on DIFFERENT sources where possible (e.g. (a) → Source A, (b) → Source B, (c) → Source C, comparison → A & B, assertion → all). Do NOT bind two different sub-parts to the same single source.${imageLabel ? `\n  - If you anchor a sub-part on Source ${imageLabel} (the pictorial source), the stem MUST ask the student to INTERPRET the image — message, perspective, audience, intent — NEVER to quote text from it.` : ""}
   - DO NOT invent new sources. DO NOT paraphrase or modify the source text.
   - For EVERY part in this section, set source_excerpt to the FULL concatenated pool below (so the editor shows all sources to the student). Set source_url to Source A's URL.
 
 SHARED SOURCES FOR THIS SECTION (Sources ${labelList}):
-${blocks}
+${blocks}${imageBlock}
 
   source_excerpt value to use for EVERY part in this section:
   "${concatenatedExcerpt}"
@@ -1092,6 +1106,7 @@ Deno.serve(async (req) => {
       // ONE key inquiry question for ONE topic, mirroring SEAB SBQ paper format.
       const isHumanitiesSBQ = subjectKind === "humanities" && section.question_type === "source_based";
       const sharedSourcePool: GroundedSource[] = [];
+      let sharedImageSource: GroundedImageSource | null = null;
       const sourcesForSection: (GroundedSource | null)[][] = [];
 
       if (isHumanitiesSBQ) {
@@ -1186,8 +1201,29 @@ Deno.serve(async (req) => {
               try { usedHosts.add(new URL(src.source_url).hostname.toLowerCase()); } catch { /* ignore */ }
             }
           }
+
+          // Pictorial primary source: try to fetch ONE cartoon / poster /
+          // photograph for this SBQ pool. Non-fatal — if no good image is
+          // found within the timeout, the section still has its 5 text
+          // sources. Per teacher request: a History SBQ paper should give
+          // students at least one visual primary source to interpret.
+          try {
+            const img = await fetchGroundedImageSource(
+              sectionTopic.topic,
+              sectionTopic.learning_outcomes ?? [],
+              usedHosts,
+            );
+            if (img) {
+              sharedImageSource = img;
+              console.log(`[generate] section ${section.letter}: pictorial source ${img.image_url} from ${img.publisher}`);
+            } else {
+              console.log(`[generate] section ${section.letter}: no pictorial source found`);
+            }
+          } catch (e) {
+            console.warn(`[generate] section ${section.letter}: image source fetch failed`, (e as Error).message);
+          }
         }
-        console.log(`[generate] section ${section.letter} SBQ pool: ${sharedSourcePool.length} sources (target ${Math.min(poolSize, 5)} min, max ${poolSize})`);
+        console.log(`[generate] section ${section.letter} SBQ pool: ${sharedSourcePool.length} text sources + ${sharedImageSource ? 1 : 0} image (target ${Math.min(poolSize, 5)} min, max ${poolSize})`);
 
         // Hard floor: an SBQ section needs at least 2 distinct sources to be
         // worth presenting (anything less and the labels collapse to "Source
@@ -1288,6 +1324,7 @@ Deno.serve(async (req) => {
               section: chunkSection, sectionIndex: si, totalSections: sections.length,
               syllabusCode, paperCode, groundedSources: chunkSources,
               sharedSourcePool: isHumanitiesSBQ ? sharedSourcePool : undefined,
+              sharedImageSource: isHumanitiesSBQ ? sharedImageSource : null,
               subjectKind, instructions,
               difficultyTargets: chunkDifficultyTargets,
             }),
@@ -1362,9 +1399,17 @@ Deno.serve(async (req) => {
             continue;
           }
           question_type = "source_based";
-          source_excerpt = sharedSourcePool
-            .map((s, i) => `Source ${String.fromCharCode(65 + i)}: ${s.excerpt}`)
-            .join("\n\n");
+          const textBlocks = sharedSourcePool
+            .map((s, i) => `Source ${String.fromCharCode(65 + i)}: ${s.excerpt}`);
+          // If a pictorial source was found for this section, append it as the
+          // final Source label using a [IMAGE] marker the renderer recognises.
+          if (sharedImageSource) {
+            const imgLabel = String.fromCharCode(65 + sharedSourcePool.length);
+            textBlocks.push(
+              `Source ${imgLabel}: [IMAGE] ${sharedImageSource.caption} — ${sharedImageSource.image_url}`,
+            );
+          }
+          source_excerpt = textBlocks.join("\n\n");
           source_url = sharedSourcePool[0].source_url;
           groundedCount++;
         } else if (needsSourcePerQ) {

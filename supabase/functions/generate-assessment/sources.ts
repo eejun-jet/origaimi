@@ -51,10 +51,12 @@ const ALLOW_DOMAINS_HUMANITIES = [
 ];
 
 // Generic TLD allow rule for humanities: any .gov, .edu, .ac.uk, .gov.* (e.g.
-// .gov.au, .gov.sg) host is treated as primary/official by default. .org is
-// also broadly allowed but only as Tier 3 unless explicitly listed above.
-const HUMANITIES_TLD_TIER_1 = [".gov", ".edu", ".ac.uk", ".mil"];
-const HUMANITIES_TLD_TIER_3 = [".org"];
+// .gov.au, .gov.sg), .mil, .org, .ac.* host is treated as primary/official by
+// default. Per teacher request, .org and .edu hosts are now first-class
+// publishers (subject to DENY_DOMAINS + relevance/richness gates).
+const HUMANITIES_TLD_TIER_1 = [".gov", ".edu", ".ac.uk", ".mil", ".org"];
+// (Tier-3 list kept empty — promoted to Tier-1.)
+const HUMANITIES_TLD_TIER_3: string[] = [];
 
 // Allow-list for English (literary / journalistic / public-domain prose & non-fiction).
 // Bias toward sources whose passages teachers can legitimately use as comprehension
@@ -74,9 +76,17 @@ const ALLOW_DOMAINS_ENGLISH = [
 ];
 
 const DENY_DOMAINS = [
+  // User-generated, unreliable, or aggregator content
   "wikipedia.org", "wikiwand.com", "quora.com", "reddit.com",
   "medium.com", "blogspot.com", "wordpress.com", "substack.com",
   "tumblr.com", "pinterest.com",
+  // Low-quality .org / .com aggregators that polluted earlier pools.
+  // These often surface in .org/.edu searches but are essay mills, slide
+  // sharing, or note-swap sites — never legitimate primary publishers.
+  "slideshare.net", "scribd.com", "studocu.com", "coursehero.com",
+  "chegg.com", "prezi.com", "weebly.com", "academia.edu",
+  "sparknotes.com", "cliffsnotes.com", "shmoop.com", "schmoop.com",
+  "studymode.com", "bartleby.com", "enotes.com",
 ];
 
 // Tiered preference for humanities domains. Tier 1 = primary sources;
@@ -100,17 +110,28 @@ const HUMANITIES_TIER_2_HISTORIAN = new Set([
   "jstor.org", "historytoday.com", "historyextra.com", "oxfordre.com",
 ]);
 
+// Additional academic / government TLD suffixes that should count as Tier-1
+// even though they don't appear verbatim in HUMANITIES_TLD_TIER_1 (which uses
+// short TLDs only). E.g. ".ac.au" (Australian universities), ".edu.sg".
+const HUMANITIES_TLD_TIER_1_SUFFIXES = [
+  ".ac.au", ".ac.nz", ".ac.jp", ".ac.kr", ".ac.in", ".ac.id", ".ac.za",
+  ".edu.au", ".edu.sg", ".edu.my", ".edu.hk", ".edu.cn", ".edu.tw",
+  ".gov.uk", ".gov.au", ".gov.nz", ".gov.sg", ".gov.ca", ".gov.in",
+];
+
 export function humanitiesTier(host: string): 1 | 2 | 3 {
-  // Walk parent domains for subdomain matches (e.g. www.nas.gov.sg → nas.gov.sg).
+  // Tier-2 (historian/historiography) takes precedence over the generic .org
+  // rule so jstor.org / historyextra.com keep their scholarly classification.
   const parts = host.split(".");
   for (let i = 0; i < parts.length; i++) {
     const d = parts.slice(i).join(".");
-    if (HUMANITIES_TIER_1_PRIMARY.has(d)) return 1;
     if (HUMANITIES_TIER_2_HISTORIAN.has(d)) return 2;
+    if (HUMANITIES_TIER_1_PRIMARY.has(d)) return 1;
   }
-  // Generic TLD heuristic: official government / academic / military hosts are
-  // treated as primary by default.
+  // Generic TLD heuristic: official government / academic / military / .org
+  // hosts are treated as primary by default (subject to DENY_DOMAINS).
   if (HUMANITIES_TLD_TIER_1.some((tld) => host.endsWith(tld) || host.includes(tld + "."))) return 1;
+  if (HUMANITIES_TLD_TIER_1_SUFFIXES.some((sfx) => host.endsWith(sfx))) return 1;
   return 3;
 }
 
@@ -123,6 +144,19 @@ export type SubjectKind = "humanities" | "english" | null;
 
 export type GroundedSource = {
   excerpt: string;
+  source_url: string;
+  source_title: string;
+  publisher: string;
+};
+
+/** A pictorial primary source — cartoon, propaganda poster, photograph, etc.
+ *  Discovered via Tavily image search and gated against the same allow-list /
+ *  deny-list as text sources. The renderer turns this into "Source X" with
+ *  an embedded image and the same publisher citation. */
+export type GroundedImageSource = {
+  kind: "image";
+  image_url: string;
+  caption: string;
   source_url: string;
   source_title: string;
   publisher: string;
@@ -259,12 +293,14 @@ function isAllowed(url: string, allowList: string[], allowGenericTlds = false): 
   if (!h) return false;
   if (DENY_DOMAINS.some((d) => h.endsWith(d) || h.includes(d))) return false;
   if (allowList.some((d) => h === d || h.endsWith("." + d) || h.endsWith(d))) return true;
-  // For humanities, also allow any .gov, .edu, .ac.uk, .mil, or .org host
-  // (the latter as a last-resort tertiary-tier fallback). Generic TLD rule is
-  // off for English (which targets a curated literary/journalistic allow-list).
+  // For humanities, also allow any .gov, .edu, .ac.uk, .mil, or .org host as
+  // a Tier-1 primary publisher (gated by DENY_DOMAINS + downstream
+  // relevance/richness checks). Generic TLD rule is off for English.
   if (allowGenericTlds) {
-    const generic = [...HUMANITIES_TLD_TIER_1, ...HUMANITIES_TLD_TIER_3];
-    if (generic.some((tld) => h.endsWith(tld) || h.endsWith(tld + ".sg") || h.endsWith(tld + ".au") || h.endsWith(tld + ".uk") || h.endsWith(tld + ".nz") || h.endsWith(tld + ".ca"))) {
+    if (HUMANITIES_TLD_TIER_1.some((tld) => h.endsWith(tld) || h.endsWith(tld + ".sg") || h.endsWith(tld + ".au") || h.endsWith(tld + ".uk") || h.endsWith(tld + ".nz") || h.endsWith(tld + ".ca"))) {
+      return true;
+    }
+    if (HUMANITIES_TLD_TIER_1_SUFFIXES.some((sfx) => h.endsWith(sfx))) {
       return true;
     }
   }
@@ -622,5 +658,106 @@ export async function fetchGroundedSource(
     }
     console.warn("[sources] no usable excerpt extracted for query:", query);
   }
+  return null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pictorial primary-source fetcher (Humanities only).
+// Uses Tavily image search restricted to the humanities allow-list +
+// .gov/.edu/.org/.mil/.ac.* TLDs. Returns a single best image with a caption,
+// or null on miss. Designed to be called ONCE per SBQ section, after the
+// textual pool has been assembled.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const IMAGE_URL_RE = /\.(png|jpe?g|gif|svg|webp)(\?|#|$)/i;
+
+export async function fetchGroundedImageSource(
+  topic: string,
+  learningOutcomes: string[] = [],
+  usedHosts?: Set<string>,
+): Promise<GroundedImageSource | null> {
+  if (!hasTavily()) return null;
+  const topicKw = extractKeywords(topic, 5);
+  const loKw = extractKeywords(learningOutcomes.join(" "), 4);
+  if (topicKw.length === 0) return null;
+
+  // Try a few angles — propaganda poster, cartoon, photograph — so we surface
+  // a real pictorial primary source rather than an article hero image.
+  const baseTerms = [...topicKw, ...loKw].slice(0, 8).join(" ");
+  const queries = [
+    `${baseTerms} political cartoon`,
+    `${baseTerms} propaganda poster`,
+    `${baseTerms} historical photograph`,
+    `${baseTerms} primary source image archive`,
+  ];
+
+  const topicVocab = syllabusKeywordsFor(topic, learningOutcomes);
+  const deadline = Date.now() + 8000;
+
+  for (const query of queries) {
+    if (Date.now() > deadline) break;
+    let response;
+    try {
+      response = await tavilySearch(query, {
+        excludeDomains: DENY_DOMAINS,
+        maxResults: 12,
+        includeImages: true,
+        includeImageDescriptions: true,
+      });
+    } catch (e) {
+      console.warn("[sources] image search exception", (e as Error).message);
+      continue;
+    }
+    const { images, results } = response;
+    if (!images || images.length === 0) continue;
+
+    // Filter: real image URL, allow-listed host, not already used, not denied.
+    const candidates = images
+      .filter((im) => im.url && IMAGE_URL_RE.test(im.url))
+      .filter((im) => isAllowed(im.url, ALLOW_DOMAINS_HUMANITIES, true))
+      .filter((im) => !(usedHosts && usedHosts.has(hostnameOf(im.url))));
+
+    if (candidates.length === 0) continue;
+
+    // Rank: Tier-1 host + topic-keyword overlap in description boosts score.
+    const ranked = candidates
+      .map((im) => {
+        const host = hostnameOf(im.url);
+        const tier = humanitiesTier(host);
+        const desc = (im.description ?? "").toLowerCase();
+        let score = 0;
+        if (tier === 1) score += 6;
+        else if (tier === 2) score += 2;
+        for (const kw of topicVocab) {
+          if (kw.length >= 4 && desc.includes(kw)) score += 2;
+        }
+        if (/cartoon|poster|propaganda|photograph|portrait|engraving|painting/.test(desc)) score += 3;
+        if (/logo|icon|avatar|sprite|banner|advert/.test(desc)) score -= 6;
+        return { im, score, host };
+      })
+      .sort((a, b) => b.score - a.score)
+      .filter((r) => r.score > 0);
+
+    if (ranked.length === 0) continue;
+    const best = ranked[0];
+
+    // Find the page that contained the image, for a clean citation.
+    const sourcePage = results.find((r) => hostnameOf(r.url) === best.host)?.url ?? best.im.url;
+    const sourceTitle = results.find((r) => hostnameOf(r.url) === best.host)?.title
+      ?? best.im.description?.slice(0, 120)
+      ?? `${topic} — pictorial primary source`;
+
+    if (usedHosts) usedHosts.add(best.host);
+
+    return {
+      kind: "image",
+      image_url: best.im.url,
+      caption: (best.im.description ?? "").trim().slice(0, 220) || `Pictorial source: ${topic}`,
+      source_url: sourcePage,
+      source_title: sourceTitle,
+      publisher: publisherOf(sourcePage),
+    };
+  }
+
   return null;
 }
