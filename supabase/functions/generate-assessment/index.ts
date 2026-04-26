@@ -717,10 +717,9 @@ function buildSectionUserPrompt(opts: {
     const pool = opts.sharedSourcePool;
     const sectionTopic = section.topic_pool[0]?.topic ?? "the topic";
     const labels = pool.map((_, i) => String.fromCharCode(65 + i));
-    const imageLabel = opts.sharedImageSource
-      ? String.fromCharCode(65 + pool.length)
-      : null;
-    const allLabels = imageLabel ? [...labels, imageLabel] : labels;
+    const images = opts.sharedImageSources ?? [];
+    const imageLabels = images.map((_, i) => String.fromCharCode(65 + pool.length + i));
+    const allLabels = [...labels, ...imageLabels];
     const labelList = allLabels.join(", ");
     const blocks = pool.map((src, i) => {
       const label = labels[i];
@@ -730,15 +729,17 @@ function buildSectionUserPrompt(opts: {
   ---
   Citation: Source: ${src.publisher} — ${src.source_url}`;
     }).join("\n\n");
-    const imageBlock = opts.sharedImageSource && imageLabel
-      ? `\n\n  [Source ${imageLabel}] PICTORIAL PRIMARY SOURCE (cartoon / poster / photograph):
+    const imageBlocks = images.map((img, i) => {
+      const label = imageLabels[i];
+      return `  [Source ${label}] PICTORIAL PRIMARY SOURCE (cartoon / poster / photograph / graph / chart / map / table):
   ---
-  Caption: ${opts.sharedImageSource.caption}
-  Image URL: ${opts.sharedImageSource.image_url}
+  Caption: ${img.caption}
+  Image URL: ${img.image_url}
   ---
-  Citation: Source: ${opts.sharedImageSource.publisher} — ${opts.sharedImageSource.source_url}
-  NOTE: Source ${imageLabel} is an IMAGE, not text. The student will SEE the picture. Do NOT quote text from it. When you write a sub-part anchored on Source ${imageLabel}, ask students to INTERPRET the image — e.g. "Study Source ${imageLabel}. What is the message of the cartoonist?", "Study Source ${imageLabel}. What does this poster suggest about [issue]?". Reference the caption only as context.`
-      : "";
+  Citation: Source: ${img.publisher} — ${img.source_url}
+  NOTE: Source ${label} is an IMAGE, not text. The student will SEE the picture. Do NOT quote text from it. When you write a sub-part anchored on Source ${label}, ask students to INTERPRET the image — for cartoons/posters: message, perspective, audience, intent ("Study Source ${label}. What is the message of the cartoonist?"); for photographs: what it shows and what it implies; for graphs/charts/tables: trends, comparisons, scale, what the data suggests ("Study Source ${label}. What does the chart suggest about [issue]?"); for maps: territory, change, projection, what is emphasised. Reference the caption only as context.`;
+    }).join("\n\n");
+    const imageBlock = imageBlocks ? `\n\n${imageBlocks}` : "";
     const concatenatedExcerpt = pool
       .map((s, i) => `Source ${labels[i]}: ${s.excerpt}`)
       .join("\\n\\n");
@@ -758,7 +759,7 @@ SOURCE-BINDING RULES (CRITICAL):
       • COMPARISON sub-parts may reference EXACTLY TWO sources (e.g. "Compare Sources A and B").
       • ASSERTION (hypothesis) sub-parts must use ALL ${allLabels.length} sources (Sources ${labelList}).
   - Every sub-part's stem MUST begin with an explicit instruction naming the source(s) it uses, e.g. "Study Source A.", "Study Sources A and B.", "Study Sources ${labelList}."
-  - Across the section, DIFFERENT sub-parts should be anchored on DIFFERENT sources where possible (e.g. (a) → Source A, (b) → Source B, (c) → Source C, comparison → A & B, assertion → all). Do NOT bind two different sub-parts to the same single source.${imageLabel ? `\n  - If you anchor a sub-part on Source ${imageLabel} (the pictorial source), the stem MUST ask the student to INTERPRET the image — message, perspective, audience, intent — NEVER to quote text from it.` : ""}
+  - Across the section, DIFFERENT sub-parts should be anchored on DIFFERENT sources where possible (e.g. (a) → Source A, (b) → Source B, (c) → Source C, comparison → A & B, assertion → all). Do NOT bind two different sub-parts to the same single source.${imageLabels.length > 0 ? `\n  - At least ONE sub-part SHOULD be anchored on a pictorial source (Sources ${imageLabels.join(", ")}). If you anchor a sub-part on a pictorial source, the stem MUST ask the student to INTERPRET the image — message, perspective, trend, data, scale, territory — NEVER to quote text from it.` : ""}
   - DO NOT invent new sources. DO NOT paraphrase or modify the source text.
   - For EVERY part in this section, set source_excerpt to the FULL concatenated pool below (so the editor shows all sources to the student). Set source_url to Source A's URL.
 
