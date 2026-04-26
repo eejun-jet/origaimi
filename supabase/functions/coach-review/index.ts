@@ -319,6 +319,7 @@ Return STRICTLY through the tool. Do not include prose outside the tool call. If
         title: assessment.title,
         subject: assessment.subject,
         level: assessment.level,
+        syllabus_code: assessment.syllabus_code ?? null,
         total_marks: assessment.total_marks,
         total_actual_marks: totalActual,
         instructions: assessment.instructions ?? null,
