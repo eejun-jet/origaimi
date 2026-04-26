@@ -147,6 +147,11 @@ export type GroundedSource = {
   source_url: string;
   source_title: string;
   publisher: string;
+  /** One-sentence provenance describing what the source is, when, and from whom
+   *  (e.g. "An editorial published in The Straits Times in August 1965").
+   *  Generated post-fetch by `provenance.ts`; falls back to a deterministic
+   *  "From <publisher>: <title>." */
+  provenance?: string;
 };
 
 /** A pictorial primary source — cartoon, propaganda poster, photograph, etc.
@@ -160,6 +165,8 @@ export type GroundedImageSource = {
   source_url: string;
   source_title: string;
   publisher: string;
+  /** One-sentence provenance — see GroundedSource.provenance. */
+  provenance?: string;
 };
 
 export function classifySubject(subject: string | null | undefined): SubjectKind {
