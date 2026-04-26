@@ -1384,9 +1384,17 @@ Deno.serve(async (req) => {
             continue;
           }
           question_type = "source_based";
-          source_excerpt = sharedSourcePool
-            .map((s, i) => `Source ${String.fromCharCode(65 + i)}: ${s.excerpt}`)
-            .join("\n\n");
+          const textBlocks = sharedSourcePool
+            .map((s, i) => `Source ${String.fromCharCode(65 + i)}: ${s.excerpt}`);
+          // If a pictorial source was found for this section, append it as the
+          // final Source label using a [IMAGE] marker the renderer recognises.
+          if (sharedImageSource) {
+            const imgLabel = String.fromCharCode(65 + sharedSourcePool.length);
+            textBlocks.push(
+              `Source ${imgLabel}: [IMAGE] ${sharedImageSource.caption} — ${sharedImageSource.image_url}`,
+            );
+          }
+          source_excerpt = textBlocks.join("\n\n");
           source_url = sharedSourcePool[0].source_url;
           groundedCount++;
         } else if (needsSourcePerQ) {
