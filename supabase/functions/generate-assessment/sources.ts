@@ -51,10 +51,12 @@ const ALLOW_DOMAINS_HUMANITIES = [
 ];
 
 // Generic TLD allow rule for humanities: any .gov, .edu, .ac.uk, .gov.* (e.g.
-// .gov.au, .gov.sg) host is treated as primary/official by default. .org is
-// also broadly allowed but only as Tier 3 unless explicitly listed above.
-const HUMANITIES_TLD_TIER_1 = [".gov", ".edu", ".ac.uk", ".mil"];
-const HUMANITIES_TLD_TIER_3 = [".org"];
+// .gov.au, .gov.sg), .mil, .org, .ac.* host is treated as primary/official by
+// default. Per teacher request, .org and .edu hosts are now first-class
+// publishers (subject to DENY_DOMAINS + relevance/richness gates).
+const HUMANITIES_TLD_TIER_1 = [".gov", ".edu", ".ac.uk", ".mil", ".org"];
+// (Tier-3 list kept empty — promoted to Tier-1.)
+const HUMANITIES_TLD_TIER_3: string[] = [];
 
 // Allow-list for English (literary / journalistic / public-domain prose & non-fiction).
 // Bias toward sources whose passages teachers can legitimately use as comprehension
