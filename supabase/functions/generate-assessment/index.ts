@@ -1863,7 +1863,7 @@ Deno.serve(async (req) => {
         }
 
         // Decide whether this question wants a diagram (resolved later, in parallel).
-        const t = pickTopic(section, qi);
+        const t = pickTopic(section, qi, si);
         const wantDiagram = !!scienceMathKind && questionWantsDiagram(
           scienceMathKind,
           [question_type],
