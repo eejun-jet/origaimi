@@ -444,12 +444,55 @@ const CURATED_HUMANITIES_BUNDLES: CuratedBundle[] = [
   },
 ];
 
+/** Mutually-exclusive topic groups: if the SECTION TOPIC matches one of these
+ *  groups, bundles whose triggers belong to a different group are excluded
+ *  even if some LO text happens to mention them. This stops "origins of the
+ *  Cold War" from picking up WWII appeasement sources just because LOs say
+ *  "after the Second World War", and similar cross-topic leakage. */
+const TOPIC_GROUPS: { name: string; pattern: RegExp }[] = [
+  { name: "cold_war", pattern: /(cold war|truman doctrine|marshall plan|long telegram|iron curtain|berlin blockade|berlin airlift|nato|warsaw pact|containment|ideological polari|superpower rivalry|origins of the cold war)/i },
+  { name: "end_cold_war", pattern: /(end of the cold war|gorbachev|perestroika|glasnost|tear down this wall|fall of the berlin wall|collapse of the (ussr|soviet union)|inf treaty)/i },
+  { name: "wwii", pattern: /(world war ii|wwii|second world war|outbreak of war|appeasement|munich|league of nations|abyssinia|rhineland|anschluss|non-aggression pact|invasion of poland)/i },
+  { name: "nazi", pattern: /(nazi|nazism|hitler|weimar|reichstag|enabling act|third reich|nuremberg laws|authoritarian.*germany|rise of authoritarian.*german|fascis)/i },
+  { name: "stalin", pattern: /(stalin|soviet union|ussr|five-year plan|collectivisation|collectivization|gulag|great purge|show trial|authoritarian.*soviet|authoritarian.*russia|bolshevik)/i },
+  { name: "decolonisation_sea", pattern: /(decolonisation|decolonization|singapore|merger|separation|lee kuan yew|malaysia|self-government|british withdrawal|konfrontasi|federation of malaya)/i },
+];
+
+function topicGroupOf(text: string): string | null {
+  for (const g of TOPIC_GROUPS) if (g.pattern.test(text)) return g.name;
+  return null;
+}
+
 function curatedHumanitiesSourcePool(topic: string, learningOutcomes: string[] = []): GroundedSource[] {
-  const haystack = `${topic} ${learningOutcomes.join(" ")}`;
+  // Topic-anchored matching: the SECTION TOPIC dictates the bundle. LOs are
+  // only consulted when the topic alone fails to match anything (e.g. terse
+  // topic strings like "Inquiry: Singapore"). Even then, an LO match is
+  // rejected if it falls into a DIFFERENT topic group from the section topic
+  // — this prevents "origins of the Cold War" from pulling in WWII sources
+  // because LOs reference earlier context.
+  const topicGroup = topicGroupOf(topic);
   const matched: GroundedSource[] = [];
   const seenUrls = new Set<string>();
+
+  // Pass 1: TOPIC ONLY.
   for (const bundle of CURATED_HUMANITIES_BUNDLES) {
-    if (!bundle.trigger.test(haystack)) continue;
+    if (!bundle.trigger.test(topic)) continue;
+    for (const src of bundle.sources) {
+      if (seenUrls.has(src.source_url)) continue;
+      seenUrls.add(src.source_url);
+      matched.push(src);
+    }
+  }
+  if (matched.length > 0) return matched;
+
+  // Pass 2: LO fallback — only bundles whose group matches the section topic
+  // group (or whose group is not in conflict if topic group is null).
+  const loBlob = learningOutcomes.join(" ");
+  for (const bundle of CURATED_HUMANITIES_BUNDLES) {
+    if (!bundle.trigger.test(loBlob)) continue;
+    const bundleSampleText = bundle.sources.map((s) => s.source_title).join(" ");
+    const bundleGroup = topicGroupOf(bundleSampleText) ?? topicGroupOf(bundle.trigger.source);
+    if (topicGroup && bundleGroup && bundleGroup !== topicGroup) continue;
     for (const src of bundle.sources) {
       if (seenUrls.has(src.source_url)) continue;
       seenUrls.add(src.source_url);
