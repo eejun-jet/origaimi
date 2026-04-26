@@ -151,6 +151,16 @@ const HUMANITIES_KEYWORDS = ["history", "humanit", "social studies", "geograph"]
 const isHumanities = (subject: string | null | undefined) =>
   !!subject && HUMANITIES_KEYWORDS.some((k) => subject.toLowerCase().includes(k));
 
+const SCIENCE_KEYWORDS = ["science", "physics", "chemistry", "biology"];
+const isScience = (subject: string | null | undefined) =>
+  !!subject && SCIENCE_KEYWORDS.some((k) => subject.toLowerCase().includes(k));
+
+const isCombinedScience = (subject: string | null | undefined, code: string | null | undefined) => {
+  const s = (subject ?? "").toLowerCase();
+  const c = (code ?? "").trim();
+  return /combined\s*science/.test(s) || c === "5086";
+};
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
