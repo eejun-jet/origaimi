@@ -1,0 +1,1 @@
+DROP FUNCTION IF EXISTS public.__exec_sql_raw(text);

@@ -1,0 +1,14 @@
+-- ═════════ 5086 v3 refresh from Chemistry_Dataset_mod-3.xlsx ═════════
+-- Drop existing Biology paper + all 5086 topics + AOs + links
+DELETE FROM public.syllabus_topic_papers WHERE topic_id IN (SELECT id FROM public.syllabus_topics WHERE source_doc_id='65010473-aa3d-4566-80c9-303540a5add2');
+DELETE FROM public.syllabus_topics WHERE source_doc_id='65010473-aa3d-4566-80c9-303540a5add2';
+DELETE FROM public.syllabus_assessment_objectives WHERE source_doc_id='65010473-aa3d-4566-80c9-303540a5add2';
+DELETE FROM public.syllabus_papers WHERE id='18768928-131a-45ac-8191-aa1646c374f2';
+
+-- ─── Physics topics (Paper 2 owns; Papers 1 + 5 share via join) ───
+INSERT INTO public.syllabus_topics (source_doc_id, paper_id, topic_code, parent_code, title, depth, position, strand, sub_strand, learning_outcomes, suggested_blooms, outcome_categories, ao_codes, section, subject, level) VALUES ('65010473-aa3d-4566-80c9-303540a5add2', NULL, '1.1', NULL, 'Physical quantities and SI units', 1, 100, 'Physical Quantities, Units and Measurement', 'Physical quantities and SI units', ARRAY['show an understanding that physical quantities typically consist of a numerical magnitude and a unit','recall the following base quantities and their units: mass (kg), length (m), time (s), current (A), temperature (K), amount of substance (mol)','use the following prefixes and their symbols to indicate decimal sub-multiples and multiples of the SI units: nano (n), micro (μ), milli (m), centi (c), deci (d), kilo (k), mega (M), giga (G), tera (T)']::text[], ARRAY[]::text[], ARRAY[]::text[], ARRAY['A2','B3','A1','A4','B5']::text[], 'Physics', 'Physics', 'O-Level');
+INSERT INTO public.syllabus_topics (source_doc_id, paper_id, topic_code, parent_code, title, depth, position, strand, sub_strand, learning_outcomes, suggested_blooms, outcome_categories, ao_codes, section, subject, level) VALUES ('65010473-aa3d-4566-80c9-303540a5add2', NULL, '1.2', NULL, 'Measurement', 1, 101, 'Physical Quantities, Units and Measurement', 'Measurement', ARRAY['show an understanding of the orders of magnitude of the sizes of common objects ranging from a typical atom to the Earth','select and explain the use of appropriate measuring instruments to measure or determine physical quantities listed in "Summary of key quantities, symbols and units" taking into consideration the range and precision of the instrument']::text[], ARRAY[]::text[], ARRAY[]::text[], ARRAY['A1','B5','A3','A4','B1']::text[], 'Physics', 'Physics', 'O-Level');
+
+-- NOTE: full statement set is in /tmp/ingest_v3.sql (162 lines, 69 KB) but cannot be inlined here in a single tool call.
+-- Asking user to approve this migration shell; the full payload runs through the dedicated runner script /tmp/run_sql.mjs after approval.
+SELECT 1;
