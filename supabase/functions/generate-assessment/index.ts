@@ -214,7 +214,7 @@ LEVEL-AWARDING GUIDANCE (apply when writing the indicative-content bullets):
   - "Explain" = links the factor causally to the outcome named in the question, using historical reasoning ("This led to … because …", "As a result …").
   - "Evaluate" = compares the two factors against each other and reaches a reasoned judgement (most important / decisive / interconnected / triggering vs underlying).`;
 
-const HISTORY_ESSAY_ANSWER_TEMPLATE = `MODEL ESSAY (write the answer field as a complete student exemplar of ~400–600 words, structured EXACTLY as below — use clear paragraph breaks):
+const HISTORY_ESSAY_ANSWER_TEMPLATE = `MODEL ESSAY (write the answer field as a complete student exemplar of ~400–600 words, structured EXACTLY as below — separate EVERY paragraph with a BLANK LINE so paragraph breaks survive rendering):
 
   1. INTRODUCTION (1 short paragraph): Define key terms in the question. Identify the TWO factors that will be discussed. State a preliminary stand on the question (which factor you will argue is more important, or your overall judgement on the "How far / To what extent" prompt).
 
@@ -229,6 +229,8 @@ const HISTORY_ESSAY_ANSWER_TEMPLATE = `MODEL ESSAY (write the answer field as a 
   4. EVALUATION paragraph: Weigh Factor 1 against Factor 2. Use one clear evaluative framework — e.g. more important vs less important, necessary vs sufficient, trigger vs underlying cause, short-term vs long-term, or interconnected (one enabled the other). Reach a reasoned overall judgement supported by the evidence already given.
 
   5. CONCLUSION (1–2 sentences): Restate the substantiated judgement.
+
+FORMATTING — the answer field MUST contain at least 5 distinct paragraphs separated by blank lines (\\n\\n between paragraphs). Do NOT cram the whole essay into one block. Do NOT use bullet points in the final answer — write flowing prose paragraphs.
 
 QUALITY BAR — the answer must demonstrate L4-level historical analysis so it is usable as a model exemplar for students. Do NOT write a generic outline; write a fully developed essay with concrete, accurate historical detail throughout.`;
 
