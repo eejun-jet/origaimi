@@ -21,7 +21,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ArrowLeft, Loader2, RefreshCw, Trash2, BookmarkPlus, Sparkles, ChevronUp, ChevronDown, X, Download, Image as ImageIcon, Wand2, MessageCircle, UserPlus, AlertTriangle, Info, CheckCircle2 } from "lucide-react";
 import { BLOOMS } from "@/lib/syllabus";
-import { toSectioned, sectionAtPosition, getSbqSkill, KNOWLEDGE_OUTCOMES, type Section } from "@/lib/sections";
+import { toSectioned, sectionAtPosition, getSbqSkill, KNOWLEDGE_OUTCOMES, isHumanitiesSubject, type Section } from "@/lib/sections";
+import { expandQuestionTags } from "@/lib/coverage-infer";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ChevronRight } from "lucide-react";
