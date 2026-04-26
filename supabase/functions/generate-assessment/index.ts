@@ -922,6 +922,27 @@ LO/KO USAGE RULE (CRITICAL — applies to every question stem):
   - Question stems MUST NOT start with directive verbs taken from the LO statements: NO "Examine …", "Evaluate …", "Analyse …", "Assess …", "Discuss …", "Explain …", "Describe …" as the opening of an SBQ sub-part. Those verbs belong in the rubric the STUDENT performs, not the question.
   - The TOPIC field on a question is a short noun-phrase tag (e.g. "Nazi rise to power", "Berlin Blockade") — never a full sentence directive copied from the syllabus title.` : "";
 
+  const historyEssayBlock = isHistoryEssay ? `
+
+HISTORY SECTION B ESSAY FORMAT (mandatory for every question in this section):
+
+QUESTION STEM REQUIREMENTS:
+  - Each stem MUST be a TWO-FACTOR analytical question using one of these SEAB command-word openings: "How far …", "To what extent …", "Which was more important in …, X or Y?", "Was X the most important reason for …?".
+  - The stem MUST explicitly NAME the two factors the student will weigh (e.g. "How far was Hitler's leadership, rather than the weakness of the Weimar Republic, responsible for the Nazi rise to power?"). Do NOT leave the second factor implied.
+  - The stem MUST require both DESCRIPTION + EXPLANATION + EVALUATION to access full marks — pure recall stems are not acceptable.
+
+MARK SCHEME (write into the mark_scheme field):
+${HISTORY_ESSAY_MARK_SCHEME}
+
+ANSWER (write into the answer field):
+${HISTORY_ESSAY_ANSWER_TEMPLATE}
+
+HARD REQUIREMENTS:
+  - The mark_scheme field MUST contain the four L1–L4 lines VERBATIM (exact wording, exact mark ranges) followed by 1–2 indicative-content bullets per level tailored to the specific question.
+  - The answer field MUST be a fully written model essay (~400–600 words) following the 5-part structure (Introduction → Factor 1 PEEL → Factor 2 PEEL → Evaluation → Conclusion), with at least 4 specific historical references (dates, named individuals, named events, organisations, statistics, treaty/policy names) per factor paragraph. The model essay must demonstrate L4 historical analysis and evaluation.
+  - Do NOT shorten the answer to a bullet outline. Write full prose paragraphs.
+` : "";
+
   return `${grounding}You are drafting ${sectionLabel} of "${opts.title}" (${opts.level} ${opts.subject}, ${opts.assessmentType}, ${opts.durationMinutes} min, ${opts.totalMarks} total marks across ${opts.totalSections} sections).
 
 THIS SECTION:
@@ -933,7 +954,7 @@ THIS SECTION:
   - Bloom's level focus: ${section.bloom ?? "Apply"} (use other levels only if the topic clearly demands it)
   ${section.instructions ? `- Section instructions for the rubric: ${section.instructions}` : ""}
 ${skillBlock}${difficultyBlock}${objectivesBlock}
-${humanitiesSourceGuidance}${sbqSectionPreamble}
+${humanitiesSourceGuidance}${sbqSectionPreamble}${historyEssayBlock}
 ALLOWED TOPICS (pick from these only — DO NOT invent topics outside this pool):
 ${topicLines}
 ${sourceBlocks}
