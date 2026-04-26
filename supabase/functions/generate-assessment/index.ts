@@ -724,7 +724,11 @@ function buildSectionUserPrompt(opts: {
     const labelList = allLabels.join(", ");
     const blocks = pool.map((src, i) => {
       const label = labels[i];
-      return `  [Source ${label}] (use VERBATIM, do not modify):
+      const prov = src.provenance ?? `From ${src.publisher}.`;
+      return `  [Source ${label}]
+  Provenance: ${prov}
+  Link: ${src.source_url}
+  Excerpt (use VERBATIM, do not modify):
   ---
   ${src.excerpt}
   ---
@@ -732,7 +736,10 @@ function buildSectionUserPrompt(opts: {
     }).join("\n\n");
     const imageBlocks = images.map((img, i) => {
       const label = imageLabels[i];
+      const prov = img.provenance ?? `From ${img.publisher}.`;
       return `  [Source ${label}] PICTORIAL PRIMARY SOURCE (cartoon / poster / photograph / graph / chart / map / table):
+  Provenance: ${prov}
+  Link: ${img.source_url}
   ---
   Caption: ${img.caption}
   Image URL: ${img.image_url}
