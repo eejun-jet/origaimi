@@ -43,6 +43,10 @@ export type SectionTopic = {
   learning_outcomes?: string[];
   ao_codes?: string[];
   outcome_categories?: string[];
+  /** Discipline label from syllabus_topics.section (e.g. "Physics", "Chemistry",
+   *  "Practical"). Used by the generator to enforce 50/50 splits on multi-track
+   *  papers like Combined Science 5086 Paper 1 (MCQ). */
+  section?: string | null;
 };
 
 export type DifficultyMix = { easy: number; medium: number; hard: number };
