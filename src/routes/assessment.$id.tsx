@@ -2061,6 +2061,32 @@ function CoachPanel({
 
   const activeRun = runs.find((r) => r.id === activeRunId) ?? null;
 
+  // Drawer state: which finding the user clicked to discuss
+  const [coachTarget, setCoachTarget] = useState<{
+    key: string;
+    title: string;
+    subtitle?: string;
+    severity: Severity;
+    body: React.ReactNode;
+    questionId?: string;
+  } | null>(null);
+
+  const buildTargetKey = (findingKey: string) =>
+    activeRunId ? `${activeRunId}:${findingKey}` : findingKey;
+
+  const remarkCountFor = (findingKey: string) => {
+    const key = buildTargetKey(findingKey);
+    return comments.filter(
+      (c) => c.scope === "coach" && c.target_kind === "coach" && c.target_key === key && !c.parent_id,
+    ).length;
+  };
+
+  const drawerComments = coachTarget
+    ? comments.filter(
+        (c) => c.scope === "coach" && c.target_kind === "coach" && c.target_key === buildTargetKey(coachTarget.key),
+      )
+    : [];
+
   return (
     <div className="rounded-xl border border-border bg-card p-5">
       <div className="flex items-center justify-between gap-2">
@@ -2110,9 +2136,46 @@ function CoachPanel({
               onScrollToQuestion={onScrollToQuestion}
               onApply={applySuggestion}
               applyingId={applyingId}
+              onDiscuss={(t) => setCoachTarget(t)}
+              remarkCountFor={remarkCountFor}
             />
           )}
         </>
+      )}
+
+      {coachTarget && (
+        <DetailDrawer
+          open={!!coachTarget}
+          onOpenChange={(o) => { if (!o) setCoachTarget(null); }}
+          title={coachTarget.title}
+          subtitle={coachTarget.subtitle}
+          badges={[{
+            label: coachTarget.severity === "fail" ? "Fail" : coachTarget.severity === "warn" ? "Warning" : "Info",
+            tone: coachTarget.severity === "fail" ? "destructive" : coachTarget.severity === "warn" ? "warn" : "default",
+          }]}
+          scope="coach"
+          targetKind="coach"
+          targetKey={buildTargetKey(coachTarget.key)}
+          comments={drawerComments}
+          identity={identity}
+          onAddComment={onAddComment}
+          onSetCommentStatus={onSetCommentStatus}
+          onDeleteComment={onDeleteComment}
+        >
+          <div className="rounded-md bg-muted/50 p-2 text-xs leading-relaxed">
+            {coachTarget.body}
+          </div>
+          {coachTarget.questionId && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="mt-2 h-7 gap-1.5 text-xs"
+              onClick={() => { const id = coachTarget.questionId!; setCoachTarget(null); onScrollToQuestion(id); }}
+            >
+              Jump to question →
+            </Button>
+          )}
+        </DetailDrawer>
       )}
     </div>
   );
