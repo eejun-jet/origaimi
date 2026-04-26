@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 
 export type CommentRole = "author" | "peer_setter" | "vetter" | "clearance" | "other";
 export type CommentStatus = "open" | "addressed" | "resolved";
-export type CommentScope = "paper" | "section" | "question";
+export type CommentScope = "paper" | "section" | "question" | "coverage" | "coach";
+export type CommentTargetKind = "ao" | "ko" | "lo" | "coach" | null;
 
 export type AssessmentComment = {
   id: string;
@@ -20,7 +21,25 @@ export type AssessmentComment = {
   resolved_at: string | null;
   created_at: string;
   updated_at: string;
+  target_kind?: CommentTargetKind;
+  target_key?: string | null;
 };
+
+/** Build a stable, short hash for free-text targets like LO statements. */
+export function shortHash(input: string): string {
+  let h = 5381;
+  for (let i = 0; i < input.length; i++) {
+    h = ((h << 5) + h) ^ input.charCodeAt(i);
+  }
+  // unsigned 32-bit hex
+  return (h >>> 0).toString(36);
+}
+
+/** Build a stable target_key for a coverage row. */
+export function coverageKey(kind: "ao" | "ko" | "lo", value: string, sectionLetter?: string | null): string {
+  const base = kind === "lo" ? shortHash(value) : value;
+  return sectionLetter ? `${sectionLetter}:${base}` : base;
+}
 
 export const ROLE_LABEL: Record<CommentRole, string> = {
   author: "Author",

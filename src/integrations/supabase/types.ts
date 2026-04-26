@@ -30,6 +30,8 @@ export type Database = {
           scope: string
           section_letter: string | null
           status: string
+          target_key: string | null
+          target_kind: string | null
           updated_at: string
         }
         Insert: {
@@ -47,6 +49,8 @@ export type Database = {
           scope: string
           section_letter?: string | null
           status?: string
+          target_key?: string | null
+          target_kind?: string | null
           updated_at?: string
         }
         Update: {
@@ -64,6 +68,8 @@ export type Database = {
           scope?: string
           section_letter?: string | null
           status?: string
+          target_key?: string | null
+          target_kind?: string | null
           updated_at?: string
         }
         Relationships: []

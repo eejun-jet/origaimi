@@ -35,8 +35,10 @@ import {
   type CommentScope,
   type CommentStatus,
   type ReviewerIdentity,
+  coverageKey,
   useReviewerIdentity,
 } from "@/lib/comments";
+import { DetailDrawer } from "@/components/DetailDrawer";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/assessment/$id")({
@@ -304,6 +306,8 @@ function EditorPage() {
     parentId: string | null;
     sectionLetter: string | null;
     questionId: string | null;
+    targetKind?: "ao" | "ko" | "lo" | "coach" | null;
+    targetKey?: string | null;
   }) => {
     const { error } = await supabase.from("assessment_comments").insert({
       assessment_id: id,
@@ -316,6 +320,8 @@ function EditorPage() {
       author_role: identity.role,
       body: input.body,
       status: "open",
+      target_kind: input.targetKind ?? null,
+      target_key: input.targetKey ?? null,
     });
     if (error) toast.error("Could not post comment");
   };
@@ -868,14 +874,25 @@ function EditorPage() {
                   coverage={coverage}
                   totalMarks={assessment.total_marks}
                   totalActual={totalActual}
+                  questions={questions}
+                  comments={comments}
+                  identity={identity}
+                  onAddComment={addComment}
+                  onSetCommentStatus={setCommentStatus}
+                  onDeleteComment={deleteComment}
+                  onScrollToQuestion={scrollToQuestion}
                 />
 
                 <CoachPanel
                   assessmentId={id}
                   onScrollToQuestion={scrollToQuestion}
                   onApplied={loadAll}
+                  comments={comments}
+                  identity={identity}
+                  onAddComment={addComment}
+                  onSetCommentStatus={setCommentStatus}
+                  onDeleteComment={deleteComment}
                 />
-
                 <div className="rounded-xl border border-border bg-card p-5">
                   <h3 className="font-medium">Total marks</h3>
                   <div className="mt-2 flex items-baseline gap-1">
@@ -1562,7 +1579,7 @@ function computeCoverage(
 
 function MeterRow({
   label, sublabel, actual, target, showTarget = true,
-}: { label: string; sublabel?: string | null; actual: number; target: number; showTarget?: boolean }) {
+}: { label: React.ReactNode; sublabel?: string | null; actual: number; target: number; showTarget?: boolean }) {
   const pct = target ? Math.min(100, (actual / target) * 100) : actual > 0 ? 100 : 0;
   const ok = target > 0 && actual >= target;
   const over = target > 0 && actual > target;
@@ -1592,11 +1609,93 @@ function scrollToSection(letter: string) {
   if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+type CoverageCommentHandlers = {
+  comments: AssessmentComment[];
+  identity: ReviewerIdentity;
+  onAddComment: (input: {
+    body: string;
+    scope: CommentScope;
+    parentId: string | null;
+    sectionLetter: string | null;
+    questionId: string | null;
+    targetKind?: "ao" | "ko" | "lo" | "coach" | null;
+    targetKey?: string | null;
+  }) => Promise<void> | void;
+  onSetCommentStatus: (commentId: string, status: CommentStatus) => Promise<void> | void;
+  onDeleteComment: (commentId: string) => Promise<void> | void;
+};
+
+type CoverageTarget =
+  | { kind: "ao"; code: string; title: string | null; actual: number; target: number; weighting: number | null }
+  | { kind: "ko"; name: string; actual: number; target: number }
+  | { kind: "lo"; text: string; actual: number; target: number; covered: boolean };
+
+function RemarkPill({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-primary-soft px-1.5 py-0.5 text-[9px] font-medium text-primary">
+      <MessageCircle className="h-2.5 w-2.5" />
+      {count}
+    </span>
+  );
+}
+
 function CoveragePanel({
-  coverage, totalMarks, totalActual,
-}: { coverage: Coverage; totalMarks: number; totalActual: number }) {
+  coverage, totalMarks, totalActual, questions, comments, identity,
+  onAddComment, onSetCommentStatus, onDeleteComment, onScrollToQuestion,
+}: {
+  coverage: Coverage;
+  totalMarks: number;
+  totalActual: number;
+  questions: Question[];
+  onScrollToQuestion: (questionId: string) => void;
+} & CoverageCommentHandlers) {
   const { paper, bySection } = coverage;
   const uncoveredLOs = paper.los.filter((l) => !l.covered);
+  const [target, setTarget] = useState<CoverageTarget | null>(null);
+
+  // Map coverage comments by target_key for fast lookup
+  const remarkCount = (kind: "ao" | "ko" | "lo", value: string) => {
+    const key = coverageKey(kind, value);
+    return comments.filter(
+      (c) => c.scope === "coverage" && c.target_kind === kind && c.target_key === key && !c.parent_id,
+    ).length;
+  };
+
+  // Find evidence questions for a target (per-paper rollup)
+  const evidenceFor = (t: CoverageTarget): Question[] => {
+    if (t.kind === "ao") return questions.filter((q) => (q.ao_codes ?? []).includes(t.code));
+    if (t.kind === "ko") return questions.filter((q) => (q.knowledge_outcomes ?? []).includes(t.name));
+    return questions.filter((q) => (q.learning_outcomes ?? []).includes(t.text));
+  };
+
+  const drawerProps = (() => {
+    if (!target) return null;
+    const kind = target.kind;
+    const value = kind === "ao" ? target.code : kind === "ko" ? target.name : target.text;
+    const key = coverageKey(kind, value);
+    const targetComments = comments.filter(
+      (c) => c.scope === "coverage" && c.target_kind === kind && c.target_key === key,
+    );
+    const evidence = evidenceFor(target);
+    const titleLabel =
+      kind === "ao" ? `${target.code}${target.title ? ` — ${target.title}` : ""}` :
+      kind === "ko" ? target.name :
+      target.text;
+    const subtitle =
+      kind === "lo"
+        ? `${target.actual > 0 ? `Covered by ${target.actual} question${target.actual > 1 ? "s" : ""}` : "Not yet covered"}`
+        : `${target.actual} / ${target.target || "—"} marks`;
+    const badges: { label: string; tone?: "default" | "success" | "warn" | "destructive" }[] = [];
+    if (kind === "ao" && target.weighting != null) badges.push({ label: `Target ${target.weighting}%` });
+    if (kind === "lo") badges.push({ label: target.covered ? "Covered" : "Uncovered", tone: target.covered ? "success" : "destructive" });
+    if (kind !== "lo") {
+      const ok = target.target > 0 && target.actual >= target.target;
+      const over = target.target > 0 && target.actual > target.target;
+      badges.push({ label: ok && !over ? "On target" : over ? "Over target" : "Below target", tone: ok && !over ? "success" : over ? "warn" : "warn" });
+    }
+    return { kind, key, titleLabel, subtitle, badges, evidence, targetComments };
+  })();
 
   return (
     <>
@@ -1635,18 +1734,30 @@ function CoveragePanel({
         <p className="mt-1 text-xs text-muted-foreground">
           Marks per Assessment Objective {paper.aos.some((a) => a.weighting != null) ? "(targets from syllabus weightings)" : ""}
         </p>
+        <p className="mt-1 text-[10px] text-muted-foreground">Click any row for detail and to leave a remark.</p>
         <div className="mt-3 space-y-2.5">
           {paper.aos.length === 0 && (
             <p className="text-xs text-muted-foreground">No AOs tagged on this paper yet.</p>
           )}
           {paper.aos.map((a) => (
-            <MeterRow
+            <button
               key={a.code}
-              label={a.code}
-              sublabel={a.title ? `· ${a.title}${a.weighting != null ? ` (${a.weighting}%)` : ""}` : a.weighting != null ? `(${a.weighting}%)` : null}
-              actual={a.actual}
-              target={a.target}
-            />
+              type="button"
+              onClick={() => setTarget({ kind: "ao", ...a })}
+              className="block w-full rounded-md p-1 text-left transition hover:bg-muted/50"
+            >
+              <MeterRow
+                label={
+                  <>
+                    {a.code}
+                    <RemarkPill count={remarkCount("ao", a.code)} />
+                  </>
+                }
+                sublabel={a.title ? `· ${a.title}${a.weighting != null ? ` (${a.weighting}%)` : ""}` : a.weighting != null ? `(${a.weighting}%)` : null}
+                actual={a.actual}
+                target={a.target}
+              />
+            </button>
           ))}
         </div>
       </div>
@@ -1660,7 +1771,23 @@ function CoveragePanel({
             <p className="text-xs text-muted-foreground">No Knowledge Outcomes targeted.</p>
           )}
           {paper.kos.map((k) => (
-            <MeterRow key={k.name} label={k.name} actual={k.actual} target={k.target} />
+            <button
+              key={k.name}
+              type="button"
+              onClick={() => setTarget({ kind: "ko", ...k })}
+              className="block w-full rounded-md p-1 text-left transition hover:bg-muted/50"
+            >
+              <MeterRow
+                label={
+                  <>
+                    {k.name}
+                    <RemarkPill count={remarkCount("ko", k.name)} />
+                  </>
+                }
+                actual={k.actual}
+                target={k.target}
+              />
+            </button>
           ))}
         </div>
       </div>
@@ -1674,20 +1801,27 @@ function CoveragePanel({
         {paper.los.length === 0 && (
           <p className="mt-3 text-xs text-muted-foreground">No Learning Outcomes targeted.</p>
         )}
-        {uncoveredLOs.length > 0 && (
-          <Collapsible defaultOpen className="mt-3">
-            <CollapsibleTrigger className="flex w-full items-center gap-1 text-xs font-medium text-destructive hover:underline">
-              <ChevronRight className="h-3.5 w-3.5 transition-transform data-[state=open]:rotate-90" />
-              {uncoveredLOs.length} uncovered
-            </CollapsibleTrigger>
-            <CollapsibleContent className="mt-2 space-y-1">
-              {uncoveredLOs.map((lo) => (
-                <p key={lo.text} className="rounded bg-muted/50 px-2 py-1 text-[11px] leading-snug text-muted-foreground">
-                  · {lo.text}
-                </p>
-              ))}
-            </CollapsibleContent>
-          </Collapsible>
+        {paper.los.length > 0 && (
+          <ul className="mt-3 space-y-1">
+            {paper.los.map((lo) => {
+              const count = remarkCount("lo", lo.text);
+              return (
+                <li key={lo.text}>
+                  <button
+                    type="button"
+                    onClick={() => setTarget({ kind: "lo", ...lo })}
+                    className={`flex w-full items-start gap-1.5 rounded px-2 py-1 text-left text-[11px] leading-snug transition hover:bg-muted/50 ${
+                      lo.covered ? "text-foreground" : "text-destructive"
+                    }`}
+                  >
+                    <span className="mt-0.5">{lo.covered ? "✓" : "○"}</span>
+                    <span className="flex-1">{lo.text}</span>
+                    {count > 0 && <RemarkPill count={count} />}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </div>
 
@@ -1759,6 +1893,49 @@ function CoveragePanel({
           </div>
         </div>
       )}
+
+      {drawerProps && (
+        <DetailDrawer
+          open={!!target}
+          onOpenChange={(o) => { if (!o) setTarget(null); }}
+          title={drawerProps.titleLabel}
+          subtitle={drawerProps.subtitle}
+          badges={drawerProps.badges}
+          scope="coverage"
+          targetKind={drawerProps.kind}
+          targetKey={drawerProps.key}
+          comments={drawerProps.targetComments}
+          identity={identity}
+          onAddComment={onAddComment}
+          onSetCommentStatus={onSetCommentStatus}
+          onDeleteComment={onDeleteComment}
+        >
+          <div>
+            <h5 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Evidence</h5>
+            {drawerProps.evidence.length === 0 ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                No questions on this paper currently address this item.
+              </p>
+            ) : (
+              <ul className="mt-1.5 space-y-1">
+                {drawerProps.evidence.map((q, i) => (
+                  <li key={q.id}>
+                    <button
+                      type="button"
+                      onClick={() => { setTarget(null); onScrollToQuestion(q.id); }}
+                      className="flex w-full items-start gap-2 rounded-md border border-border bg-card p-2 text-left text-xs hover:bg-muted/50"
+                    >
+                      <span className="font-medium text-primary">Q{q.position + 1}</span>
+                      <span className="flex-1 text-muted-foreground line-clamp-2">{q.stem}</span>
+                      <span className="shrink-0 text-[10px] text-muted-foreground">{q.marks}m</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </DetailDrawer>
+      )}
     </>
   );
 }
@@ -1791,11 +1968,16 @@ function CoachPanel({
   assessmentId,
   onScrollToQuestion,
   onApplied,
+  comments,
+  identity,
+  onAddComment,
+  onSetCommentStatus,
+  onDeleteComment,
 }: {
   assessmentId: string;
   onScrollToQuestion: (questionId: string) => void;
   onApplied: () => void;
-}) {
+} & CoverageCommentHandlers) {
   const [runs, setRuns] = useState<CoachRun[]>([]);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1879,6 +2061,32 @@ function CoachPanel({
 
   const activeRun = runs.find((r) => r.id === activeRunId) ?? null;
 
+  // Drawer state: which finding the user clicked to discuss
+  const [coachTarget, setCoachTarget] = useState<{
+    key: string;
+    title: string;
+    subtitle?: string;
+    severity: Severity;
+    body: React.ReactNode;
+    questionId?: string;
+  } | null>(null);
+
+  const buildTargetKey = (findingKey: string) =>
+    activeRunId ? `${activeRunId}:${findingKey}` : findingKey;
+
+  const remarkCountFor = (findingKey: string) => {
+    const key = buildTargetKey(findingKey);
+    return comments.filter(
+      (c) => c.scope === "coach" && c.target_kind === "coach" && c.target_key === key && !c.parent_id,
+    ).length;
+  };
+
+  const drawerComments = coachTarget
+    ? comments.filter(
+        (c) => c.scope === "coach" && c.target_kind === "coach" && c.target_key === buildTargetKey(coachTarget.key),
+      )
+    : [];
+
   return (
     <div className="rounded-xl border border-border bg-card p-5">
       <div className="flex items-center justify-between gap-2">
@@ -1928,9 +2136,46 @@ function CoachPanel({
               onScrollToQuestion={onScrollToQuestion}
               onApply={applySuggestion}
               applyingId={applyingId}
+              onDiscuss={(t) => setCoachTarget(t)}
+              remarkCountFor={remarkCountFor}
             />
           )}
         </>
+      )}
+
+      {coachTarget && (
+        <DetailDrawer
+          open={!!coachTarget}
+          onOpenChange={(o) => { if (!o) setCoachTarget(null); }}
+          title={coachTarget.title}
+          subtitle={coachTarget.subtitle}
+          badges={[{
+            label: coachTarget.severity === "fail" ? "Fail" : coachTarget.severity === "warn" ? "Warning" : "Info",
+            tone: coachTarget.severity === "fail" ? "destructive" : coachTarget.severity === "warn" ? "warn" : "default",
+          }]}
+          scope="coach"
+          targetKind="coach"
+          targetKey={buildTargetKey(coachTarget.key)}
+          comments={drawerComments}
+          identity={identity}
+          onAddComment={onAddComment}
+          onSetCommentStatus={onSetCommentStatus}
+          onDeleteComment={onDeleteComment}
+        >
+          <div className="rounded-md bg-muted/50 p-2 text-xs leading-relaxed">
+            {coachTarget.body}
+          </div>
+          {coachTarget.questionId && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="mt-2 h-7 gap-1.5 text-xs"
+              onClick={() => { const id = coachTarget.questionId!; setCoachTarget(null); onScrollToQuestion(id); }}
+            >
+              Jump to question →
+            </Button>
+          )}
+        </DetailDrawer>
       )}
     </div>
   );
@@ -1971,6 +2216,15 @@ function SeverityIcon({ severity }: { severity: Severity }) {
   return <Info className="h-3.5 w-3.5 text-muted-foreground" />;
 }
 
+type CoachDiscussTarget = {
+  key: string;
+  title: string;
+  subtitle?: string;
+  severity: Severity;
+  body: React.ReactNode;
+  questionId?: string;
+};
+
 function CoachReviewBody({
   findings,
   dismissed,
@@ -1978,6 +2232,8 @@ function CoachReviewBody({
   onScrollToQuestion,
   onApply,
   applyingId,
+  onDiscuss,
+  remarkCountFor,
 }: {
   findings: CoachFindings;
   dismissed: Set<string>;
@@ -1985,6 +2241,8 @@ function CoachReviewBody({
   onScrollToQuestion: (id: string) => void;
   onApply: (s: CoachFindings["suggestions"][number], key: string) => void;
   applyingId: string | null;
+  onDiscuss: (t: CoachDiscussTarget) => void;
+  remarkCountFor: (key: string) => number;
 }) {
   return (
     <div className="mt-3 space-y-2 text-xs">
@@ -2002,7 +2260,21 @@ function CoachReviewBody({
           const key = `ao:${i}`;
           if (dismissed.has(key)) return null;
           return (
-            <FindingCard key={key} severity={d.severity} onDismiss={() => onDismiss(key)}>
+            <FindingCard
+              key={key}
+              severity={d.severity}
+              onDismiss={() => onDismiss(key)}
+              remarkCount={remarkCountFor(key)}
+              onDiscuss={() => onDiscuss({
+                key,
+                title: `AO drift · ${d.ao_code}`,
+                subtitle: typeof d.observed_pct === "number"
+                  ? `Observed ${d.observed_pct}%${typeof d.declared_pct === "number" ? ` · target ${d.declared_pct}%` : ""}`
+                  : undefined,
+                severity: d.severity,
+                body: d.note,
+              })}
+            >
               <div className="font-medium">{d.ao_code}{typeof d.observed_pct === "number" && <> · {d.observed_pct}%{typeof d.declared_pct === "number" && <span className="text-muted-foreground"> (target {d.declared_pct}%)</span>}</>}</div>
               <p className="mt-0.5 text-muted-foreground">{d.note}</p>
             </FindingCard>
@@ -2018,8 +2290,30 @@ function CoachReviewBody({
           const key = `cw:${i}`;
           if (dismissed.has(key)) return null;
           return (
-            <FindingCard key={key} severity={d.severity} onDismiss={() => onDismiss(key)}
-              onJump={d.question_id ? () => onScrollToQuestion(d.question_id) : undefined}>
+            <FindingCard
+              key={key}
+              severity={d.severity}
+              onDismiss={() => onDismiss(key)}
+              onJump={d.question_id ? () => onScrollToQuestion(d.question_id) : undefined}
+              remarkCount={remarkCountFor(key)}
+              onDiscuss={() => onDiscuss({
+                key,
+                title: `Command word · Q${d.position + 1}`,
+                subtitle: d.detected_verb ? `"${d.detected_verb}"` : undefined,
+                severity: d.severity,
+                body: (
+                  <>
+                    <p>{d.note}</p>
+                    {d.expected_aos && d.expected_aos.length > 0 && (
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        Expected: {d.expected_aos.join(", ")}{d.declared_ao && <> · declared {d.declared_ao}</>}
+                      </p>
+                    )}
+                  </>
+                ),
+                questionId: d.question_id,
+              })}
+            >
               <div className="font-medium">Q{d.position + 1}{d.detected_verb && <> · "{d.detected_verb}"</>}</div>
               <p className="mt-0.5 text-muted-foreground">{d.note}</p>
               {d.expected_aos && d.expected_aos.length > 0 && (
@@ -2035,7 +2329,27 @@ function CoachReviewBody({
         count={dismissed.has("uo:0") ? 0 : ((findings.unrealised_outcomes?.kos?.length ?? 0) + (findings.unrealised_outcomes?.los?.length ?? 0) > 0 ? 1 : 0)}
       >
         {!dismissed.has("uo:0") && findings.unrealised_outcomes && (findings.unrealised_outcomes.kos?.length || findings.unrealised_outcomes.los?.length) ? (
-          <FindingCard severity="warn" onDismiss={() => onDismiss("uo:0")}>
+          <FindingCard
+            severity="warn"
+            onDismiss={() => onDismiss("uo:0")}
+            remarkCount={remarkCountFor("uo:0")}
+            onDiscuss={() => onDiscuss({
+              key: "uo:0",
+              title: "Unrealised KO/LO",
+              severity: "warn",
+              body: (
+                <>
+                  {findings.unrealised_outcomes.note && <p>{findings.unrealised_outcomes.note}</p>}
+                  {findings.unrealised_outcomes.kos?.length > 0 && (
+                    <p className="mt-1"><span className="font-medium">KOs:</span> {findings.unrealised_outcomes.kos.join("; ")}</p>
+                  )}
+                  {findings.unrealised_outcomes.los?.length > 0 && (
+                    <p className="mt-1"><span className="font-medium">LOs:</span> {findings.unrealised_outcomes.los.join("; ")}</p>
+                  )}
+                </>
+              ),
+            })}
+          >
             {findings.unrealised_outcomes.note && <p className="text-muted-foreground">{findings.unrealised_outcomes.note}</p>}
             {findings.unrealised_outcomes.kos?.length > 0 && (
               <div className="mt-1">
@@ -2061,7 +2375,29 @@ function CoachReviewBody({
           const key = `bc:${i}`;
           if (dismissed.has(key)) return null;
           return (
-            <FindingCard key={key} severity={d.severity} onDismiss={() => onDismiss(key)}>
+            <FindingCard
+              key={key}
+              severity={d.severity}
+              onDismiss={() => onDismiss(key)}
+              remarkCount={remarkCountFor(key)}
+              onDiscuss={() => onDiscuss({
+                key,
+                title: `Bloom & difficulty · Section ${d.section_letter}`,
+                severity: d.severity,
+                body: (
+                  <>
+                    <p>{d.note}</p>
+                    {(d.expected_progression || d.observed_progression) && (
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        {d.expected_progression && <>Expected: {d.expected_progression}</>}
+                        {d.expected_progression && d.observed_progression && " · "}
+                        {d.observed_progression && <>Observed: {d.observed_progression}</>}
+                      </p>
+                    )}
+                  </>
+                ),
+              })}
+            >
               <div className="font-medium">Section {d.section_letter}</div>
               <p className="mt-0.5 text-muted-foreground">{d.note}</p>
               {(d.expected_progression || d.observed_progression) && (
@@ -2084,8 +2420,21 @@ function CoachReviewBody({
           const key = `sf:${i}`;
           if (dismissed.has(key)) return null;
           return (
-            <FindingCard key={key} severity={d.severity} onDismiss={() => onDismiss(key)}
-              onJump={d.question_id ? () => onScrollToQuestion(d.question_id) : undefined}>
+            <FindingCard
+              key={key}
+              severity={d.severity}
+              onDismiss={() => onDismiss(key)}
+              onJump={d.question_id ? () => onScrollToQuestion(d.question_id) : undefined}
+              remarkCount={remarkCountFor(key)}
+              onDiscuss={() => onDiscuss({
+                key,
+                title: `Source fit · Q${d.position + 1}`,
+                subtitle: d.required_skill,
+                severity: d.severity,
+                body: d.note,
+                questionId: d.question_id,
+              })}
+            >
               <div className="font-medium">Q{d.position + 1}{d.required_skill && <> · {d.required_skill}</>}</div>
               <p className="mt-0.5 text-muted-foreground">{d.note}</p>
             </FindingCard>
@@ -2101,8 +2450,23 @@ function CoachReviewBody({
           const key = `ms:${i}`;
           if (dismissed.has(key)) return null;
           return (
-            <FindingCard key={key} severity={d.severity} onDismiss={() => onDismiss(key)}
-              onJump={d.question_id ? () => onScrollToQuestion(d.question_id) : undefined}>
+            <FindingCard
+              key={key}
+              severity={d.severity}
+              onDismiss={() => onDismiss(key)}
+              onJump={d.question_id ? () => onScrollToQuestion(d.question_id) : undefined}
+              remarkCount={remarkCountFor(key)}
+              onDiscuss={() => onDiscuss({
+                key,
+                title: `Mark scheme · Q${d.position + 1}`,
+                subtitle: typeof d.marks_suggested === "number" && d.marks_suggested !== d.marks_declared
+                  ? `${d.marks_declared}m → suggest ${d.marks_suggested}m`
+                  : `${d.marks_declared}m`,
+                severity: d.severity,
+                body: d.note,
+                questionId: d.question_id,
+              })}
+            >
               <div className="font-medium">
                 Q{d.position + 1} · {d.marks_declared}m
                 {typeof d.marks_suggested === "number" && d.marks_suggested !== d.marks_declared && (
@@ -2194,11 +2558,15 @@ function FindingCard({
   children,
   onDismiss,
   onJump,
+  onDiscuss,
+  remarkCount = 0,
 }: {
   severity: Severity;
   children: React.ReactNode;
   onDismiss?: () => void;
   onJump?: () => void;
+  onDiscuss?: () => void;
+  remarkCount?: number;
 }) {
   const tone =
     severity === "fail"
@@ -2211,9 +2579,16 @@ function FindingCard({
       <div className="flex items-start gap-2">
         <SeverityIcon severity={severity} />
         <div className="flex-1 text-[11px] leading-relaxed">{children}</div>
+        {remarkCount > 0 && <RemarkPill count={remarkCount} />}
       </div>
-      {(onDismiss || onJump) && (
+      {(onDismiss || onJump || onDiscuss) && (
         <div className="mt-1.5 flex items-center justify-end gap-1">
+          {onDiscuss && (
+            <Button size="sm" variant="ghost" className="h-5 gap-1 px-1.5 text-[10px]" onClick={onDiscuss}>
+              <MessageCircle className="h-3 w-3" />
+              Discuss
+            </Button>
+          )}
           {onJump && (
             <Button size="sm" variant="ghost" className="h-5 px-1.5 text-[10px]" onClick={onJump}>
               Jump →
