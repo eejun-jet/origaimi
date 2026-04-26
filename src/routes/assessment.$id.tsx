@@ -35,8 +35,10 @@ import {
   type CommentScope,
   type CommentStatus,
   type ReviewerIdentity,
+  coverageKey,
   useReviewerIdentity,
 } from "@/lib/comments";
+import { DetailDrawer } from "@/components/DetailDrawer";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/assessment/$id")({
