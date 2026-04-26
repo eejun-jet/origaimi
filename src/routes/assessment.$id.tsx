@@ -19,7 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Loader2, RefreshCw, Trash2, BookmarkPlus, Sparkles, ChevronUp, ChevronDown, X, Download, Image as ImageIcon, Wand2, MessageCircle, UserPlus, AlertTriangle, Info, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Loader2, RefreshCw, Trash2, BookmarkPlus, Sparkles, ChevronUp, ChevronDown, X, Download, Image as ImageIcon, Wand2, MessageCircle, UserPlus, AlertTriangle, Info, CheckCircle2, Pencil } from "lucide-react";
 import { BLOOMS } from "@/lib/syllabus";
 import { toSectioned, sectionAtPosition, getSbqSkill, KNOWLEDGE_OUTCOMES, isHumanitiesSubject, type Section } from "@/lib/sections";
 import { expandQuestionTags } from "@/lib/coverage-infer";
@@ -1069,7 +1069,33 @@ function QuestionCard({
           )}
           <Badge variant="secondary">[{q.marks}]</Badge>
         </div>
-        <div className="flex gap-1">
+        <div className="flex flex-wrap items-center justify-end gap-1">
+          {!editing && (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setEditing(true)}
+                className="gap-1"
+                title="Edit this question"
+                aria-label="Edit question"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Edit</span>
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowRegen((v) => !v)}
+                className="gap-1"
+                title="Regenerate this question with an optional prompt"
+                aria-label="Regenerate question"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Regenerate</span>
+              </Button>
+            </>
+          )}
           <Button size="icon" variant="ghost" disabled={isFirst} onClick={() => onMove(-1)}>
             <ChevronUp className="h-4 w-4" />
           </Button>
