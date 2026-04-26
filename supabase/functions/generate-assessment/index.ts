@@ -1082,7 +1082,7 @@ const TOOL = {
               marks: { type: "integer", minimum: 1 },
               stem: { type: "string", description: "The question text. For structured questions include sub-parts (a), (b), etc. For source-based questions include the verbatim Source A block + citation, then the sub-parts." },
               options: { type: ["array", "null"], items: { type: "string" }, description: "MCQ options or null." },
-              answer: { type: "string", description: "The correct answer (for MCQ, the letter and option text)." },
+              answer: { type: "string", description: "The correct answer. For MCQ: the letter and option text. For source_based: a fully-written L4 candidate exemplar in the candidate's voice (NOT a meta-description) that performs the L4 moves of the assigned LORMS skill (e.g. quoted source evidence + provenance + bias + reasoned judgement, where appropriate). For long/essay: a full model essay." },
               mark_scheme: { type: "string", description: "Marking rubric showing how to award marks." },
               source_excerpt: { type: ["string", "null"], description: "Verbatim source passage used in the stem (only when a GROUNDED SOURCE was provided)." },
               source_url: { type: ["string", "null"], description: "URL of the source (only when a GROUNDED SOURCE was provided)." },
