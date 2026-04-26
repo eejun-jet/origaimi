@@ -745,49 +745,75 @@ export async function fetchGroundedImageSources(
     const candidates = images
       .filter((im) => im.url && IMAGE_URL_RE.test(im.url))
       .filter((im) => isAllowed(im.url, ALLOW_DOMAINS_HUMANITIES, true))
-      .filter((im) => !(usedHosts && usedHosts.has(hostnameOf(im.url))));
+      .filter((im) => !localUsedHosts.has(hostnameOf(im.url)));
 
     if (candidates.length === 0) continue;
 
     // Rank: Tier-1 host + topic-keyword overlap in description boosts score.
+    // Visual-category bonus rewards cartoons, posters, photos, graphs, charts,
+    // maps, and statistical tables alike.
     const ranked = candidates
       .map((im) => {
         const host = hostnameOf(im.url);
         const tier = humanitiesTier(host);
         const desc = (im.description ?? "").toLowerCase();
+        const category = classifyVisualCategory(desc);
         let score = 0;
         if (tier === 1) score += 6;
         else if (tier === 2) score += 2;
         for (const kw of topicVocab) {
           if (kw.length >= 4 && desc.includes(kw)) score += 2;
         }
-        if (/cartoon|poster|propaganda|photograph|portrait|engraving|painting/.test(desc)) score += 3;
+        if (/cartoon|poster|propaganda|photograph|portrait|engraving|painting|graph|chart|map|diagram|figure|table|statistic|infographic/.test(desc)) score += 3;
         if (/logo|icon|avatar|sprite|banner|advert/.test(desc)) score -= 6;
-        return { im, score, host };
+        // Diversity bonus: prefer a category we haven't picked yet.
+        if (category !== "other" && !pickedCategories.has(category)) score += 4;
+        return { im, score, host, category };
       })
       .sort((a, b) => b.score - a.score)
       .filter((r) => r.score > 0);
 
     if (ranked.length === 0) continue;
-    const best = ranked[0];
 
-    // Find the page that contained the image, for a clean citation.
-    const sourcePage = results.find((r) => hostnameOf(r.url) === best.host)?.url ?? best.im.url;
-    const sourceTitle = results.find((r) => hostnameOf(r.url) === best.host)?.title
-      ?? best.im.description?.slice(0, 120)
-      ?? `${topic} — pictorial primary source`;
+    for (const cand of ranked) {
+      if (picked.length >= count) break;
+      if (localUsedHosts.has(cand.host)) continue;
+      // Find the page that contained the image, for a clean citation.
+      const sourcePage = results.find((r) => hostnameOf(r.url) === cand.host)?.url ?? cand.im.url;
+      const sourceTitle = results.find((r) => hostnameOf(r.url) === cand.host)?.title
+        ?? cand.im.description?.slice(0, 120)
+        ?? `${topic} — pictorial primary source`;
 
-    if (usedHosts) usedHosts.add(best.host);
+      localUsedHosts.add(cand.host);
+      if (usedHosts) usedHosts.add(cand.host);
+      pickedCategories.add(cand.category);
 
-    return {
-      kind: "image",
-      image_url: best.im.url,
-      caption: (best.im.description ?? "").trim().slice(0, 220) || `Pictorial source: ${topic}`,
-      source_url: sourcePage,
-      source_title: sourceTitle,
-      publisher: publisherOf(sourcePage),
-    };
+      picked.push({
+        kind: "image",
+        image_url: cand.im.url,
+        caption: (cand.im.description ?? "").trim().slice(0, 220) || `Pictorial source: ${topic}`,
+        source_url: sourcePage,
+        source_title: sourceTitle,
+        publisher: publisherOf(sourcePage),
+      });
+      // Only take ONE image per query angle, so the next query has a chance
+      // to contribute a DIFFERENT category.
+      break;
+    }
   }
 
-  return null;
+  return picked;
+}
+
+/**
+ * Backward-compatible single-image helper. Returns the first image picked by
+ * `fetchGroundedImageSources` or null if none were available.
+ */
+export async function fetchGroundedImageSource(
+  topic: string,
+  learningOutcomes: string[] = [],
+  usedHosts?: Set<string>,
+): Promise<GroundedImageSource | null> {
+  const results = await fetchGroundedImageSources(topic, learningOutcomes, 1, usedHosts);
+  return results[0] ?? null;
 }
