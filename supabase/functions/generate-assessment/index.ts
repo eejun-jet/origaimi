@@ -932,6 +932,15 @@ ${blocks}${imageBlock}
       return `  - Question ${i + 1} (part ${String.fromCharCode(97 + i)}): ${s.label}${lockedNote}${srcNote}`;
     }).join("\n");
 
+    // Per-skill L4 sample-answer guidance — one block per UNIQUE skill used
+    // in this section, so the model knows what an L4 candidate response looks
+    // like for each assigned skill.
+    const usedSkillIds = Array.from(new Set(perQuestionSkills.filter((s): s is SbqSkillDef => !!s).map((s) => s.id)));
+    const sampleAnswerBlock = usedSkillIds
+      .map((id) => SBQ_SAMPLE_ANSWER_GUIDANCE[id])
+      .filter(Boolean)
+      .join("\n\n");
+
     skillBlock = `
 
 SBQ SKILL ASSIGNMENTS (apply each skill's format and mark scheme to the assigned part):
@@ -940,7 +949,16 @@ ${skillSummaries}
 PER-PART SKILL & SOURCE-BINDING MAPPING (you MUST follow this exact mapping — DO NOT swap sources between parts):
 ${assignments}
 
-IMPORTANT: For Assertion parts, the hypothesis MUST be testable against ALL sources (each should plausibly support OR challenge it). For single-source parts, the bound source is FIXED above — name it explicitly in the stem. Do NOT mix skill formats across parts. Do NOT bind two different single-source parts to the same source.`;
+IMPORTANT: For Assertion parts, the hypothesis MUST be testable against ALL sources (each should plausibly support OR challenge it). For single-source parts, the bound source is FIXED above — name it explicitly in the stem. Do NOT mix skill formats across parts. Do NOT bind two different single-source parts to the same source.
+
+SAMPLE ANSWER REQUIREMENTS (CRITICAL — the answer field for EVERY SBQ part MUST be a fully-written L4 candidate exemplar, NOT a meta-description):
+  - Write the answer as if YOU were the candidate sitting the paper, in continuous prose paragraphs.
+  - The answer MUST hit the L4 descriptors of the part's assigned LORMS skill — explicitly performing the L4 moves listed below.
+  - The answer MUST quote SHORT verbatim phrases (in quotation marks) from the actual provided source(s) the part is anchored on — pull them from the SHARED SOURCES block above. For pictorial sources, refer to specific visible elements / data / symbols instead of quoting text.
+  - FORBIDDEN openings for the answer field: "A strong answer would…", "A model response would…", "The candidate should…", "Students should…". Write the answer DIRECTLY (e.g. "Source A suggests that…", "I am more surprised than not, because…").
+
+Per-skill L4 expectations for the answer field:
+${sampleAnswerBlock}`;
   }
 
   let difficultyBlock = "";
