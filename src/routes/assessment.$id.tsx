@@ -814,9 +814,6 @@ function EditorPage() {
                             </div>
                           );
                         })()}
-                            </div>
-                          </div>
-                        )}
                       </div>
                     )}
                     <QuestionCard
