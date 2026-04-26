@@ -444,12 +444,55 @@ const CURATED_HUMANITIES_BUNDLES: CuratedBundle[] = [
   },
 ];
 
+/** Mutually-exclusive topic groups: if the SECTION TOPIC matches one of these
+ *  groups, bundles whose triggers belong to a different group are excluded
+ *  even if some LO text happens to mention them. This stops "origins of the
+ *  Cold War" from picking up WWII appeasement sources just because LOs say
+ *  "after the Second World War", and similar cross-topic leakage. */
+const TOPIC_GROUPS: { name: string; pattern: RegExp }[] = [
+  { name: "cold_war", pattern: /(cold war|truman doctrine|marshall plan|long telegram|iron curtain|berlin blockade|berlin airlift|nato|warsaw pact|containment|ideological polari|superpower rivalry|origins of the cold war)/i },
+  { name: "end_cold_war", pattern: /(end of the cold war|gorbachev|perestroika|glasnost|tear down this wall|fall of the berlin wall|collapse of the (ussr|soviet union)|inf treaty)/i },
+  { name: "wwii", pattern: /(world war ii|wwii|second world war|outbreak of war|appeasement|munich|league of nations|abyssinia|rhineland|anschluss|non-aggression pact|invasion of poland)/i },
+  { name: "nazi", pattern: /(nazi|nazism|hitler|weimar|reichstag|enabling act|third reich|nuremberg laws|authoritarian.*germany|rise of authoritarian.*german|fascis)/i },
+  { name: "stalin", pattern: /(stalin|soviet union|ussr|five-year plan|collectivisation|collectivization|gulag|great purge|show trial|authoritarian.*soviet|authoritarian.*russia|bolshevik)/i },
+  { name: "decolonisation_sea", pattern: /(decolonisation|decolonization|singapore|merger|separation|lee kuan yew|malaysia|self-government|british withdrawal|konfrontasi|federation of malaya)/i },
+];
+
+function topicGroupOf(text: string): string | null {
+  for (const g of TOPIC_GROUPS) if (g.pattern.test(text)) return g.name;
+  return null;
+}
+
 function curatedHumanitiesSourcePool(topic: string, learningOutcomes: string[] = []): GroundedSource[] {
-  const haystack = `${topic} ${learningOutcomes.join(" ")}`;
+  // Topic-anchored matching: the SECTION TOPIC dictates the bundle. LOs are
+  // only consulted when the topic alone fails to match anything (e.g. terse
+  // topic strings like "Inquiry: Singapore"). Even then, an LO match is
+  // rejected if it falls into a DIFFERENT topic group from the section topic
+  // — this prevents "origins of the Cold War" from pulling in WWII sources
+  // because LOs reference earlier context.
+  const topicGroup = topicGroupOf(topic);
   const matched: GroundedSource[] = [];
   const seenUrls = new Set<string>();
+
+  // Pass 1: TOPIC ONLY.
   for (const bundle of CURATED_HUMANITIES_BUNDLES) {
-    if (!bundle.trigger.test(haystack)) continue;
+    if (!bundle.trigger.test(topic)) continue;
+    for (const src of bundle.sources) {
+      if (seenUrls.has(src.source_url)) continue;
+      seenUrls.add(src.source_url);
+      matched.push(src);
+    }
+  }
+  if (matched.length > 0) return matched;
+
+  // Pass 2: LO fallback — only bundles whose group matches the section topic
+  // group (or whose group is not in conflict if topic group is null).
+  const loBlob = learningOutcomes.join(" ");
+  for (const bundle of CURATED_HUMANITIES_BUNDLES) {
+    if (!bundle.trigger.test(loBlob)) continue;
+    const bundleSampleText = bundle.sources.map((s) => s.source_title).join(" ");
+    const bundleGroup = topicGroupOf(bundleSampleText) ?? topicGroupOf(bundle.trigger.source);
+    if (topicGroup && bundleGroup && bundleGroup !== topicGroup) continue;
     for (const src of bundle.sources) {
       if (seenUrls.has(src.source_url)) continue;
       seenUrls.add(src.source_url);
@@ -1280,12 +1323,13 @@ Deno.serve(async (req) => {
       const sourcesForSection: (GroundedSource | null)[][] = [];
 
       if (isHumanitiesSBQ) {
-        // Pool size = max minSources across selected skills, clamped to [5, 6].
-        // SEAB History SBQs typically present 5 sources; we allow up to 6 so an
-        // Assertion sub-part can draw on the full set without crowding out
-        // single-source skills like Inference.
+        // SEAB History SBQ papers cap at ~6 sources total. We reserve up to 2
+        // slots for pictorial primary sources (cartoons, posters, photographs)
+        // and up to 4 slots for documentary text sources — hard ceiling of 6.
+        const MAX_TOTAL_SOURCES = 6;
+        const MAX_IMAGE_SOURCES = 2;
         const maxMinSources = effectiveSkillDefs.reduce((m, s) => Math.max(m, s.minSources), 0);
-        const poolSize = Math.min(6, Math.max(5, maxMinSources));
+        const poolSize = Math.min(MAX_TOTAL_SOURCES, Math.max(4, maxMinSources));
         const sectionTopic = section.topic_pool[0] ?? null;
         // Vary the query angle for each fetch so we get DIFFERENT perspectives
         // on the SAME inquiry question (rather than near-duplicate articles).
@@ -1300,16 +1344,20 @@ Deno.serve(async (req) => {
           "political cartoon poster propaganda",
         ];
         if (sectionTopic) {
-          sharedSourcePool.push(...curatedHumanitiesSourcePool(sectionTopic.topic, sectionTopic.learning_outcomes ?? []));
+          // Seed from the curated bundle, but cap so live fetches still get
+          // slots — the curated bundle for a topic can have 5–6 entries which
+          // would otherwise saturate the pool before live primary sources run.
+          const CURATED_SEED_CAP = 2;
+          const curatedSeed = curatedHumanitiesSourcePool(sectionTopic.topic, sectionTopic.learning_outcomes ?? []).slice(0, CURATED_SEED_CAP);
+          sharedSourcePool.push(...curatedSeed);
           // Per-pool budget: allow at most ONE Tier-2 (historian/historiography)
           // source so the SBQ pool stays primary-source heavy. This is shared
           // across all parallel fetches in the pool.
           const tierBudget: TierBudget = { tier2Used: 0, maxTier2: 1 };
-          // Fetch a fuller SBQ pool: target 5 text sources so that, with 2
-          // pictorial sources, every History/Social Studies SBQ section ships
-          // with 5–6 distinct sources (per teacher requirement). Pool is hard
-          // capped at `poolSize` (≤6) so labels don't run past Source F.
-          const FETCH_TARGET = 5;
+          // Target up to 4 text sources so that, with up to 2 pictorial sources,
+          // every History/Social Studies SBQ section ships with ≤6 sources
+          // total (SEAB SBQ format / teacher requirement).
+          const FETCH_TARGET = Math.max(0, MAX_TOTAL_SOURCES - MAX_IMAGE_SOURCES);
           const PER_FETCH_TIMEOUT_MS = 14000;
           const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T | null> =>
             new Promise((resolve) => {
@@ -1408,33 +1456,43 @@ Deno.serve(async (req) => {
             }
           }
 
-          // Pictorial primary sources: fetch up to 2 distinct visuals
-          // (cartoons, posters, photographs, graphs, charts, maps, statistical
-          // tables) for this SBQ pool. Per teacher requirement: each SBQ
-          // section should give students at least 2 visual primary sources to
-          // interpret. Non-fatal — if Tavily is unavailable or filters reject
-          // everything, the section still ships with its text sources.
+          // Pictorial primary sources: fetch up to MAX_IMAGE_SOURCES distinct
+          // visuals (cartoons, posters, photographs, graphs, charts, maps).
+          // Per teacher requirement: pictorial sources are clearly distinct
+          // from documentary text sources, and the total source count never
+          // exceeds MAX_TOTAL_SOURCES.
           try {
             const imgs = await fetchGroundedImageSources(
               sectionTopic.topic,
               sectionTopic.learning_outcomes ?? [],
-              2,
+              MAX_IMAGE_SOURCES,
               usedHosts,
             );
-            for (const img of imgs) {
+            for (const img of imgs.slice(0, MAX_IMAGE_SOURCES)) {
               sharedImageSources.push(img);
               console.log(`[generate] section ${section.letter}: pictorial source ${img.image_url} from ${img.publisher}`);
             }
             if (imgs.length === 0) {
               console.log(`[generate] section ${section.letter}: no pictorial source found`);
-            } else if (imgs.length < 2) {
-              console.warn(`[generate] section ${section.letter}: only ${imgs.length} pictorial source(s) found (target 2)`);
+            } else if (imgs.length < MAX_IMAGE_SOURCES) {
+              console.warn(`[generate] section ${section.letter}: only ${imgs.length} pictorial source(s) found (target ${MAX_IMAGE_SOURCES})`);
             }
           } catch (e) {
             console.warn(`[generate] section ${section.letter}: image source fetch failed`, (e as Error).message);
           }
         }
-        console.log(`[generate] section ${section.letter} SBQ pool: ${sharedSourcePool.length} text sources + ${sharedImageSources.length} image(s) (target 5 text, 2 images)`);
+        // Hard cap: text sources never exceed (MAX_TOTAL_SOURCES - imagesFound)
+        // so the section ships with ≤ MAX_TOTAL_SOURCES (= 6) sources total.
+        const imagesCount = Math.min(sharedImageSources.length, MAX_IMAGE_SOURCES);
+        const textCap = Math.max(0, MAX_TOTAL_SOURCES - imagesCount);
+        if (sharedSourcePool.length > textCap) {
+          sharedSourcePool.length = textCap;
+        }
+        // Also trim images defensively.
+        if (sharedImageSources.length > MAX_IMAGE_SOURCES) {
+          sharedImageSources.length = MAX_IMAGE_SOURCES;
+        }
+        console.log(`[generate] section ${section.letter} SBQ pool: ${sharedSourcePool.length} text sources + ${sharedImageSources.length} image(s) (cap ${MAX_TOTAL_SOURCES} total, ${MAX_IMAGE_SOURCES} pictorial)`);
 
         // Hard floor: an SBQ section needs at least 2 distinct sources to be
         // worth presenting (anything less and the labels collapse to "Source

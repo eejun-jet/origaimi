@@ -716,66 +716,89 @@ function EditorPage() {
                             {sec.num_questions} question{sec.num_questions === 1 ? "" : "s"} · {sec.marks} marks
                           </p>
                         </div>
-                        {sectionSources && sectionSources.length > 0 && (
-                          <div className="rounded-xl border border-border bg-card p-5">
-                            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                              Sources for this section
-                            </p>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              Refer to these sources when answering Section {sec.letter}.
-                            </p>
-                            <div className="mt-4 space-y-4">
-                              {sectionSources.map((src) => (
-                                <div
-                                  key={src.label}
-                                  className="rounded-lg border-l-4 border-primary bg-muted/40 p-4"
-                                >
-                                  <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">
-                                    Source {src.label}
-                                    {src.kind === "image" ? " · pictorial" : ""}
-                                  </div>
-                                  {src.provenance && (
-                                    <p className="mt-1 font-paper text-xs italic leading-relaxed text-muted-foreground">
-                                      {src.provenance}
-                                    </p>
-                                  )}
-                                  {src.kind === "image" ? (
-                                    <div className="mt-2 space-y-2">
-                                      <img
-                                        src={src.imageUrl}
-                                        alt={src.caption}
-                                        loading="lazy"
-                                        className="max-h-80 w-auto rounded border border-border bg-background object-contain"
-                                      />
-                                      <p className="font-paper text-xs italic leading-relaxed text-muted-foreground">
-                                        {src.caption}
-                                      </p>
-                                    </div>
-                                  ) : (
-                                    <p className="mt-2 font-paper text-sm italic leading-relaxed text-foreground whitespace-pre-wrap">
-                                      {src.text}
-                                    </p>
-                                  )}
-                                  {src.sourceUrl && (
-                                    <p className="mt-2 text-[11px] text-muted-foreground">
-                                      <a
-                                        href={src.sourceUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="break-all font-medium text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary"
-                                      >
-                                        View source
-                                        <span aria-hidden="true"> ↗</span>
-                                      </a>
-                                      <span className="ml-2 text-muted-foreground/70">
-                                        {(() => { try { return new URL(src.sourceUrl).hostname.replace(/^www\./, ""); } catch { return src.sourceUrl; } })()}
-                                      </span>
-                                    </p>
-                                  )}
+                        {sectionSources && sectionSources.length > 0 && (() => {
+                          const textSources = sectionSources.filter((s) => s.kind === "text");
+                          const imageSources = sectionSources.filter((s) => s.kind === "image");
+                          const renderSource = (src: ParsedSource) => (
+                            <div
+                              key={src.label}
+                              className="rounded-lg border-l-4 border-primary bg-muted/40 p-4"
+                            >
+                              <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">
+                                Source {src.label}
+                                {src.kind === "image" ? " · pictorial" : ""}
+                              </div>
+                              {src.provenance && (
+                                <p className="mt-1 font-paper text-xs italic leading-relaxed text-muted-foreground">
+                                  {src.provenance}
+                                </p>
+                              )}
+                              {src.kind === "image" ? (
+                                <div className="mt-2 space-y-2">
+                                  <img
+                                    src={src.imageUrl}
+                                    alt={src.caption}
+                                    loading="lazy"
+                                    className="max-h-80 w-auto rounded border border-border bg-background object-contain"
+                                  />
+                                  <p className="font-paper text-xs italic leading-relaxed text-muted-foreground">
+                                    {src.caption}
+                                  </p>
                                 </div>
-                              ))}
+                              ) : (
+                                <p className="mt-2 font-paper text-sm italic leading-relaxed text-foreground whitespace-pre-wrap">
+                                  {src.text}
+                                </p>
+                              )}
+                              {src.sourceUrl && (
+                                <p className="mt-2 text-[11px] text-muted-foreground">
+                                  <a
+                                    href={src.sourceUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="break-all font-medium text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary"
+                                  >
+                                    View source
+                                    <span aria-hidden="true"> ↗</span>
+                                  </a>
+                                  <span className="ml-2 text-muted-foreground/70">
+                                    {(() => { try { return new URL(src.sourceUrl).hostname.replace(/^www\./, ""); } catch { return src.sourceUrl; } })()}
+                                  </span>
+                                </p>
+                              )}
+                            </div>
+                          );
+                          return (
+                            <div className="rounded-xl border border-border bg-card p-5">
+                              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                Sources for this section
+                              </p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Refer to these sources when answering Section {sec.letter}.
+                                {imageSources.length > 0 && textSources.length > 0
+                                  ? " Documentary text sources appear first; pictorial sources are grouped separately below."
+                                  : ""}
+                              </p>
+                              {textSources.length > 0 && (
+                                <div className="mt-4 space-y-4">
+                                  {imageSources.length > 0 && (
+                                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80">
+                                      Documentary sources
+                                    </p>
+                                  )}
+                                  {textSources.map(renderSource)}
+                                </div>
+                              )}
+                              {imageSources.length > 0 && (
+                                <div className="mt-6 space-y-4 border-t border-dashed border-border pt-4">
+                                  <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+                                    Pictorial sources ({imageSources.length})
+                                  </p>
+                                  {imageSources.map(renderSource)}
+                                </div>
+                              )}
                               {q.source_url && !sectionSources.some((s) => s.sourceUrl) && (
-                                <p className="text-xs text-muted-foreground">
+                                <p className="mt-3 text-xs text-muted-foreground">
                                   Primary citation:{" "}
                                   <a
                                     href={q.source_url}
@@ -789,8 +812,8 @@ function EditorPage() {
                                 </p>
                               )}
                             </div>
-                          </div>
-                        )}
+                          );
+                        })()}
                       </div>
                     )}
                     <QuestionCard
