@@ -895,25 +895,60 @@ function EditorPage() {
 }
 
 /** A parsed source entry from the SBQ pool. Text sources have a `text` body; image
- *  sources have an `imageUrl` and a caption. */
+ *  sources have an `imageUrl` and a caption. Both kinds may carry a one-sentence
+ *  `provenance` and a per-source `sourceUrl` (extracted from the [PROV]/[URL]
+ *  markers added by the generator). */
 type ParsedSource =
-  | { label: string; kind: "text"; text: string }
-  | { label: string; kind: "image"; caption: string; imageUrl: string };
+  | { label: string; kind: "text"; text: string; provenance?: string; sourceUrl?: string }
+  | { label: string; kind: "image"; caption: string; imageUrl: string; provenance?: string; sourceUrl?: string };
 
 /** Parse the generator's concatenated SBQ pool string ("Source A: …\n\nSource B: …")
- *  back into discrete labelled sources. Recognises the `[IMAGE] caption — url`
- *  marker the generator uses for pictorial primary sources. Falls back to a single
- *  "A" entry when the excerpt does not match the multi-source pattern. */
+ *  back into discrete labelled sources. Recognises:
+ *    • new format: "Source A: [PROV] … [URL] … [TEXT] …"
+ *    • new image format: "Source A: [IMAGE] caption — imageUrl [PROV] … [URL] …"
+ *    • legacy format: "Source A: …" (plain text) and
+ *      "Source A: [IMAGE] caption — imageUrl" (no provenance)
+ *  Falls back to a single "A" entry when the excerpt does not match the
+ *  multi-source pattern. */
 function parseSharedSourcePool(excerpt: string): ParsedSource[] {
   const matches = [...excerpt.matchAll(/Source\s+([A-F])\s*:\s*([\s\S]*?)(?=\n\s*Source\s+[A-F]\s*:|$)/g)];
   const raw = matches.length === 0
     ? [{ label: "A", text: excerpt.trim() }]
     : matches.map((m) => ({ label: m[1], text: m[2].trim() }));
   return raw.map((entry): ParsedSource => {
-    const imgMatch = entry.text.match(/^\[IMAGE\]\s*([\s\S]*?)\s+—\s+(https?:\/\/\S+)\s*$/);
-    if (imgMatch) {
-      return { label: entry.label, kind: "image", caption: imgMatch[1].trim(), imageUrl: imgMatch[2].trim() };
+    // Image (new format with provenance + URL markers)
+    const imgWithMeta = entry.text.match(
+      /^\[IMAGE\]\s*([\s\S]*?)\s+—\s+(https?:\/\/\S+?)\s+\[PROV\]\s*([\s\S]*?)\s+\[URL\]\s*(\S+)\s*$/,
+    );
+    if (imgWithMeta) {
+      return {
+        label: entry.label,
+        kind: "image",
+        caption: imgWithMeta[1].trim(),
+        imageUrl: imgWithMeta[2].trim(),
+        provenance: imgWithMeta[3].trim(),
+        sourceUrl: imgWithMeta[4].trim(),
+      };
     }
+    // Image (legacy format)
+    const imgLegacy = entry.text.match(/^\[IMAGE\]\s*([\s\S]*?)\s+—\s+(https?:\/\/\S+)\s*$/);
+    if (imgLegacy) {
+      return { label: entry.label, kind: "image", caption: imgLegacy[1].trim(), imageUrl: imgLegacy[2].trim() };
+    }
+    // Text (new format with provenance + URL markers)
+    const textWithMeta = entry.text.match(
+      /^\[PROV\]\s*([\s\S]*?)\s+\[URL\]\s*(\S+)\s+\[TEXT\]\s*([\s\S]*)$/,
+    );
+    if (textWithMeta) {
+      return {
+        label: entry.label,
+        kind: "text",
+        text: textWithMeta[3].trim(),
+        provenance: textWithMeta[1].trim(),
+        sourceUrl: textWithMeta[2].trim(),
+      };
+    }
+    // Text (legacy format)
     return { label: entry.label, kind: "text", text: entry.text };
   });
 }
