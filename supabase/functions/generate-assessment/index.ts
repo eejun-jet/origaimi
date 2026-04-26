@@ -915,7 +915,18 @@ Calibrate stem complexity, distractor closeness (for MCQ), required reasoning st
 
 OBJECTIVES TO COVER (each generated question MUST list the AO codes, KO categories, and LO statements it actually addresses — set ao_codes, knowledge_outcomes and learning_outcomes accordingly):
 ${sectionAOs.length > 0 ? `  - Assessment Objectives pool: ${sectionAOs.join(", ")}\n` : ""}${sectionKOs.length > 0 ? `  - Knowledge Outcome categories pool: ${sectionKOs.join(", ")}\n` : ""}${sectionLOs.length > 0 ? `  - Learning Outcomes pool (verbatim statements):\n${sectionLOs.slice(0, 20).map((lo) => `      • ${lo}`).join("\n")}\n` : ""}
-Across the ${section.num_questions} questions in this section, COLLECTIVELY cover every item in the pools above. Each individual question must tag the specific AOs / KOs / LOs it addresses (do not blanket-tag every objective on every question).
+Across the ${section.num_questions} questions in this section, COLLECTIVELY cover every item in the pools above.
+
+TAG INCLUSIVELY (CRITICAL — under-tagging creates false "uncovered" warnings):
+  - For EACH question, tag EVERY LO from the pool that the stem (and any sub-parts and the model answer) genuinely demonstrates — not just the single most central one. Most multi-part structured questions and source-based questions exercise 2–4 LOs at once.
+  - Tag EVERY KO category that the question demands. A question that asks the student to explain AND apply normally tags both "Understanding" and "Application". A compare/evaluate question normally tags "Skills" + "Understanding".
+  - Tag EVERY AO the stem demands. A 6-mark structured item that asks the student to describe (AO1) AND explain (AO2) tags both AO1 and AO2.
+  - LO statements MUST be copied verbatim from the pool above (so coverage matching works).
+  - Do NOT, however, blanket-tag every LO/KO/AO on every question — only those the stem ACTUALLY exercises.
+
+WORKED EXAMPLE (illustrative; adapt the principle, not the wording):
+  Stem: "Study Source A. Compare the views of the two newspapers on the 1969 racial riots. Explain your answer using details from both sources."
+  Tags: ao_codes = ["AO3"]; knowledge_outcomes = ["Understanding", "Skills"]; learning_outcomes = [the LO about analysing primary sources, the LO about communal relations / the 1969 riots] — both LOs, because the stem demands both.
 
 LO/KO USAGE RULE (CRITICAL — applies to every question stem):
   - Learning Outcomes and Knowledge Outcomes describe what the student must DEMONSTRATE through their answer. They are NOT question stems and MUST NOT be copied into a stem verbatim, even with light paraphrasing.
