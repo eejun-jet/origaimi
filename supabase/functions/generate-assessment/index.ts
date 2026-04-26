@@ -573,21 +573,37 @@ function buildDeterministicSbqQuestions(section: Section, sources: GroundedSourc
       .replace(/\{T\}/g, topicNoun)
       .replace(/\{P\}/g, part);
 
+    // Pull a short snippet from the bound source(s) so the deterministic
+    // exemplar can quote real text. Trim to ~120 chars and end on a word.
+    const snippet = (text: string | undefined, max = 120): string => {
+      const t = (text ?? "").replace(/\s+/g, " ").trim();
+      if (!t) return "";
+      if (t.length <= max) return t;
+      const cut = t.slice(0, max);
+      const lastSpace = cut.lastIndexOf(" ");
+      return (lastSpace > 40 ? cut.slice(0, lastSpace) : cut) + "…";
+    };
+    const singleIdx = i % Math.max(1, sources.length);
+    const secondIdx = (i + 1) % Math.max(1, sources.length);
+    const q1 = snippet(sources[singleIdx]?.excerpt);
+    const q2 = snippet(sources[secondIdx]?.excerpt);
+    const allQuotes = sources.map((s, idx) => `Source ${labels[idx]}: "${snippet(s.excerpt, 80)}"`).join("; ");
+
     let answer: string;
     if (skillId === "comparison") {
-      answer = `A strong answer compares both message AND tone/provenance across Sources ${single} and ${second}, supports each comparison with quoted evidence, and reaches a reasoned judgement on overall similarity.`;
+      answer = `Sources ${single} and ${second} share a broad message about ${topicNoun}: both frame it as a development with significant consequences (Source ${single}: "${q1}"; Source ${second}: "${q2}"). However, they differ in tone and emphasis — Source ${single} reads as more measured and observational, while Source ${second} adopts a more pointed, evaluative register, reflecting their different authors and intended audiences. Looking at provenance, Source ${single}'s framing reflects the perspective of its publisher and date, whereas Source ${second}'s framing reflects a different vantage point. Overall, the two sources agree on the broad significance of ${topicNoun} but disagree on how to interpret it; the difference in tone and provenance is the more substantial divergence, so I would judge them only partially similar.`;
     } else if (skillId === "assertion") {
-      answer = `A strong answer uses EVERY source (${allLabels}), groups those that support and challenge the assertion with specific evidence, weighs source quality (provenance + bias), and reaches a substantiated overall judgement.`;
+      answer = `On balance, the sources offer mixed support for the assertion. SUPPORT: several sources back the claim — for example, ${allQuotes} — together suggesting that ${topicNoun} was indeed shaped in the way the assertion proposes. CHALLENGE: other sources qualify or contradict the assertion, pointing to alternative drivers and counter-examples. SOURCE QUALITY: the supporting sources include contemporary documents whose provenance lends weight, but they also reflect the partial perspective of their authors; the challenging sources draw on different vantage points and so cannot simply be dismissed. Weighing the set as a whole, the assertion is partially supported: the strongest contemporary evidence aligns with it, but the qualifications raised by the more critical sources show that the picture is more nuanced than the assertion implies.`;
     } else if (skillId === "utility") {
-      answer = `A strong answer evaluates utility using BOTH content AND provenance of Source ${single}, acknowledges clear limitations, and reaches a reasoned overall judgement.`;
+      answer = `Source ${single} is moderately useful as evidence about ${topicNoun}. CONTENT: it provides specific details — "${q1}" — that illuminate how the issue was perceived at the time. PROVENANCE: as a contemporary publication aimed at a specific audience, it gives us direct access to attitudes of that period, which raises its utility. LIMITATIONS: it cannot show the views of those outside that audience, omits the wider economic and political context, and reflects the editorial agenda of its publisher. Overall, Source ${single} is useful for understanding contemporary perspectives on ${topicNoun}, but it must be read alongside other sources to build a balanced picture.`;
     } else if (skillId === "reliability") {
-      answer = `A strong answer cross-references the content of Source ${single} against contextual knowledge AND analyses provenance/bias, then reaches a reasoned, balanced judgement.`;
+      answer = `Source ${single} is partially reliable as evidence about ${topicNoun}. CROSS-REFERENCE: its claim that "${q1}" is broadly consistent with what we know from contextual evidence about ${topicNoun}, which strengthens its trustworthiness on that point. PROVENANCE: published by a known outlet at the time of the events, it has the immediacy of contemporary reporting, but its readership and editorial line shape what it chose to include. BIAS / MOTIVE: the language is not neutral — the framing serves a particular agenda, and certain perspectives are conspicuously absent. Overall, Source ${single} can be trusted on the broad facts of ${topicNoun} but its interpretation should be treated with caution; cross-checking against sources with a different vantage point is essential.`;
     } else if (skillId === "purpose") {
-      answer = `A strong answer identifies a plausible purpose and supports it with BOTH provenance (author, audience, date, context) AND specific content evidence from Source ${single}, drawing on contextual knowledge.`;
+      answer = `The purpose of Source ${single} is to shape contemporary opinion about ${topicNoun} — most likely to persuade its readership to adopt a particular view. PROVENANCE: published by its named author for a specific contemporary audience at a critical moment, it was produced precisely when public attitudes were being formed. CONTENT: the loaded phrasing — "${q1}" — and what the source chooses to emphasise (or omit) point to a clear persuasive intent rather than a neutral record. Drawing on contextual knowledge of the period, it is reasonable to conclude that Source ${single} was produced to mobilise sympathy for one side of the debate over ${topicNoun}.`;
     } else if (skillId === "surprise") {
-      answer = `A strong answer explains BOTH what is surprising AND what is not surprising about Source ${single}, anchored in source evidence and contextual knowledge, then reaches a reasoned judgement.`;
+      answer = `I am partly surprised by Source ${single}. SURPRISING: the claim that "${q1}" is unexpected because contextual knowledge suggests that contemporary attitudes were generally more cautious about ${topicNoun}. NOT SURPRISING: at the same time, given the source's provenance — its author, audience and date — the framing is consistent with what that publication would be expected to argue, and other contemporary evidence shows similar views were in circulation. Overall I am more surprised by the strength of the language than by the position itself; the position fits the period, but the framing goes further than I would have predicted.`;
     } else {
-      answer = `A strong answer makes TWO valid inferences about ${topicNoun} and supports each with precise quoted evidence from Source ${single}.`;
+      answer = `Source ${single} suggests two things about ${topicNoun}. First, it implies that contemporary opinion was strongly engaged with the issue: the source states that "${q1}", which suggests not just description but evaluation by the author. Secondly, it implies that there was a particular perspective being promoted — the language used reveals attitudes and assumptions, not just facts, indicating that the author was inviting readers to share a specific view. Overall, Source ${single} reveals that ${topicNoun} was a contested issue at the time, and that the source itself is a deliberate intervention in that contest rather than a neutral record.`;
     }
 
     const scheme = skill?.markScheme ?? SBQ_SKILLS.inference.markScheme;
