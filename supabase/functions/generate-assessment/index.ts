@@ -1323,18 +1323,23 @@ Deno.serve(async (req) => {
       const sourcesForSection: (GroundedSource | null)[][] = [];
 
       if (isHumanitiesSBQ) {
-        // SEAB History SBQ papers cap at ~6 sources total. We reserve up to 2
-        // slots for pictorial primary sources (cartoons, posters, photographs)
-        // and up to 4 slots for documentary text sources — hard ceiling of 6.
+        // SEAB History SBQ papers cap at ~6 sources total. We reserve up to 1
+        // slot for a pictorial primary source and up to 5 slots for documentary
+        // text sources. Hard ceiling of 6.
+        //
+        // PERF: this whole block is the dominant cost of History generation.
+        // We previously did:
+        //   curated seed → live text fetch → rescue text fetch → image fetch
+        //                → AI provenance call
+        // which routinely tripped the function's CPU limit. We now:
+        //   curated seed (up to 4) → live text fetch ONLY if curated under-
+        //   delivered → no rescue → 1 quick image fetch → deterministic
+        //   provenance (no AI).
         const MAX_TOTAL_SOURCES = 6;
-        const MAX_IMAGE_SOURCES = 2;
+        const MAX_IMAGE_SOURCES = 1;
         const maxMinSources = effectiveSkillDefs.reduce((m, s) => Math.max(m, s.minSources), 0);
         const poolSize = Math.min(MAX_TOTAL_SOURCES, Math.max(4, maxMinSources));
         const sectionTopic = section.topic_pool[0] ?? null;
-        // Vary the query angle for each fetch so we get DIFFERENT perspectives
-        // on the SAME inquiry question (rather than near-duplicate articles).
-        // Hints rotate through complementary angles a historian would assemble
-        // for an SBQ pool.
         const POOL_QUERY_HINTS = [
           "official government statement",
           "newspaper report contemporary",
@@ -1344,46 +1349,54 @@ Deno.serve(async (req) => {
           "political cartoon poster propaganda",
         ];
         if (sectionTopic) {
-          // Seed from the curated bundle, but cap so live fetches still get
-          // slots — the curated bundle for a topic can have 5–6 entries which
-          // would otherwise saturate the pool before live primary sources run.
-          const CURATED_SEED_CAP = 2;
+          // Seed generously from curated bundles. If they already cover the
+          // section, we skip live web fetching entirely — that is what keeps
+          // History SBQ generation under the CPU budget.
+          const CURATED_SEED_CAP = 4;
+          const SKIP_LIVE_THRESHOLD = 4;
           const curatedSeed = curatedHumanitiesSourcePool(sectionTopic.topic, sectionTopic.learning_outcomes ?? []).slice(0, CURATED_SEED_CAP);
           sharedSourcePool.push(...curatedSeed);
-          // Per-pool budget: allow at most ONE Tier-2 (historian/historiography)
-          // source so the SBQ pool stays primary-source heavy. This is shared
-          // across all parallel fetches in the pool.
+          for (const src of curatedSeed) {
+            usedUrls.add(src.source_url);
+            try { usedHosts.add(new URL(src.source_url).hostname.toLowerCase()); } catch { /* ignore */ }
+          }
+          console.log(`[generate] section ${section.letter}: seeded ${curatedSeed.length} curated source(s); ${sharedSourcePool.length >= SKIP_LIVE_THRESHOLD ? "SKIPPING live text fetch" : "will run live text fetch"}`);
+
+          // Per-pool budget: at most ONE Tier-2 (historian) source, shared
+          // across parallel fetches.
           const tierBudget: TierBudget = { tier2Used: 0, maxTier2: 1 };
-          // Target up to 4 text sources so that, with up to 2 pictorial sources,
-          // every History/Social Studies SBQ section ships with ≤6 sources
-          // total (SEAB SBQ format / teacher requirement).
           const FETCH_TARGET = Math.max(0, MAX_TOTAL_SOURCES - MAX_IMAGE_SOURCES);
-          const PER_FETCH_TIMEOUT_MS = 14000;
+          const PER_FETCH_TIMEOUT_MS = 8000;
           const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T | null> =>
             new Promise((resolve) => {
               const t = setTimeout(() => resolve(null), ms);
               p.then((v) => { clearTimeout(t); resolve(v); })
                .catch(() => { clearTimeout(t); resolve(null); });
             });
-          const remaining = Math.max(0, Math.min(poolSize, FETCH_TARGET) - sharedSourcePool.length);
-          const settled = await Promise.all(
-            Array.from({ length: remaining }, (_, i) =>
-              withTimeout(
-                fetchGroundedSource(
-                  subjectKind, sectionTopic.topic, sectionTopic.learning_outcomes ?? [],
-                  usedHosts, usedUrls, POOL_QUERY_HINTS[i % POOL_QUERY_HINTS.length],
-                  tierBudget,
-                ),
-                PER_FETCH_TIMEOUT_MS,
-              ).catch((e) => {
-                console.warn("[generate] shared source fetch failed for", sectionTopic.topic, e);
-                return null;
-              }),
-            ),
-          );
-          for (const src of settled) {
-            if (src) sharedSourcePool.push(src);
+
+          // ONLY run live text fetches if curated didn't already cover us.
+          if (sharedSourcePool.length < SKIP_LIVE_THRESHOLD) {
+            const remaining = Math.max(0, Math.min(poolSize, FETCH_TARGET) - sharedSourcePool.length);
+            const settled = await Promise.all(
+              Array.from({ length: remaining }, (_, i) =>
+                withTimeout(
+                  fetchGroundedSource(
+                    subjectKind, sectionTopic.topic, sectionTopic.learning_outcomes ?? [],
+                    usedHosts, usedUrls, POOL_QUERY_HINTS[i % POOL_QUERY_HINTS.length],
+                    tierBudget,
+                  ),
+                  PER_FETCH_TIMEOUT_MS,
+                ).catch((e) => {
+                  console.warn("[generate] shared source fetch failed for", sectionTopic.topic, e);
+                  return null;
+                }),
+              ),
+            );
+            for (const src of settled) {
+              if (src) sharedSourcePool.push(src);
+            }
           }
+
           // Belt-and-suspenders: even with the shared tierBudget, parallel
           // fetches can race past the cap. Drop excess Tier-2 sources here.
           let tier2Kept = 0;
@@ -1402,10 +1415,9 @@ Deno.serve(async (req) => {
           sharedSourcePool.length = 0;
           sharedSourcePool.push(...trimmed);
 
-          // Backfill: if live fetches under-delivered (slow crawls, off-topic
-          // misses, allow-list misses), top up from curated primary-source
-          // bundles for this topic. Skip any URL already in usedUrls so we
-          // don't duplicate. Cap at the SBQ pool maximum.
+          // Backfill from curated only — no second live "rescue" round, which
+          // was the worst CPU offender. If curated still can't reach the
+          // target we ship with what we have (>=2 is enough for an SBQ).
           if (sharedSourcePool.length < FETCH_TARGET) {
             const curated = curatedHumanitiesSourcePool(
               sectionTopic.topic,
@@ -1420,47 +1432,13 @@ Deno.serve(async (req) => {
               try { usedHosts.add(new URL(src.source_url).hostname.toLowerCase()); } catch { /* ignore */ }
             }
           }
-
-          // Rescue pass: if the pool is STILL under target after live fetches
-          // and curated backfill (e.g. niche topic, no curated bundle match),
-          // fire a final round with broader queries. SBQ pools below 5 break
-          // the SEAB Source A–E format the teacher requires.
           if (sharedSourcePool.length < FETCH_TARGET) {
-            const RESCUE_HINTS = [
-              "primary source historical document",
-              "secondary source historian explanation",
-              "policy decision official record",
-              "photograph image archive",
-            ];
-            const rescueNeeded = Math.max(0, FETCH_TARGET - sharedSourcePool.length);
-            const rescued = await Promise.all(
-              Array.from({ length: rescueNeeded }, (_, i) =>
-                withTimeout(
-                  fetchGroundedSource(
-                    subjectKind, sectionTopic.topic, sectionTopic.learning_outcomes ?? [],
-                    usedHosts, usedUrls, RESCUE_HINTS[i % RESCUE_HINTS.length],
-                    tierBudget,
-                  ),
-                  PER_FETCH_TIMEOUT_MS,
-                ).catch(() => null),
-              ),
-            );
-            for (const src of rescued) {
-              if (!src) continue;
-              if (sharedSourcePool.length >= poolSize) break;
-              if (sharedSourcePool.some((s) => s.source_url === src.source_url)) continue;
-              sharedSourcePool.push(src);
-            }
-            if (sharedSourcePool.length < FETCH_TARGET) {
-              console.warn(`[generate] section ${section.letter}: SBQ pool still ${sharedSourcePool.length}/${FETCH_TARGET} after rescue; continuing`);
-            }
+            console.warn(`[generate] section ${section.letter}: text pool ${sharedSourcePool.length}/${FETCH_TARGET} after curated backfill; continuing without live rescue`);
           }
 
-          // Pictorial primary sources: fetch up to MAX_IMAGE_SOURCES distinct
-          // visuals (cartoons, posters, photographs, graphs, charts, maps).
-          // Per teacher requirement: pictorial sources are clearly distinct
-          // from documentary text sources, and the total source count never
-          // exceeds MAX_TOTAL_SOURCES.
+          // Pictorial primary source: at most ONE, on a tight time budget.
+          // If nothing is found quickly we just ship without an image rather
+          // than blocking the section.
           try {
             const imgs = await fetchGroundedImageSources(
               sectionTopic.topic,
@@ -1473,9 +1451,7 @@ Deno.serve(async (req) => {
               console.log(`[generate] section ${section.letter}: pictorial source ${img.image_url} from ${img.publisher}`);
             }
             if (imgs.length === 0) {
-              console.log(`[generate] section ${section.letter}: no pictorial source found`);
-            } else if (imgs.length < MAX_IMAGE_SOURCES) {
-              console.warn(`[generate] section ${section.letter}: only ${imgs.length} pictorial source(s) found (target ${MAX_IMAGE_SOURCES})`);
+              console.log(`[generate] section ${section.letter}: no pictorial source found (continuing without)`);
             }
           } catch (e) {
             console.warn(`[generate] section ${section.letter}: image source fetch failed`, (e as Error).message);
@@ -1488,38 +1464,26 @@ Deno.serve(async (req) => {
         if (sharedSourcePool.length > textCap) {
           sharedSourcePool.length = textCap;
         }
-        // Also trim images defensively.
         if (sharedImageSources.length > MAX_IMAGE_SOURCES) {
           sharedImageSources.length = MAX_IMAGE_SOURCES;
         }
         console.log(`[generate] section ${section.letter} SBQ pool: ${sharedSourcePool.length} text sources + ${sharedImageSources.length} image(s) (cap ${MAX_TOTAL_SOURCES} total, ${MAX_IMAGE_SOURCES} pictorial)`);
 
-        // Hard floor: an SBQ section needs at least 2 distinct sources to be
-        // worth presenting (anything less and the labels collapse to "Source
-        // A" everywhere, which the user has flagged as a defect). If we still
-        // can't reach 2, skip this section cleanly rather than emit nonsense.
+        // Hard floor: an SBQ section needs at least 2 distinct sources.
         if (sharedSourcePool.length < 2) {
           console.warn(`[generate] section ${section.letter}: SBQ pool only has ${sharedSourcePool.length} source(s); skipping section`);
           sectionFailures++;
           continue;
         }
 
-        // Generate a one-sentence provenance for every source in the pool
-        // (text + images) so SBQ sources are introduced in proper SEAB style.
-        // Non-blocking: failure falls back to "From <publisher>: <title>." per
-        // source.
-        try {
-          const sectionTopicForProv = section.topic_pool[0]?.topic ?? "this topic";
-          const { textProv, imageProv } = await generateProvenances(
-            sharedSourcePool,
-            sharedImageSources,
-            sectionTopicForProv,
-          );
-          textProv.forEach((p, i) => { if (sharedSourcePool[i]) sharedSourcePool[i].provenance = p; });
-          imageProv.forEach((p, i) => { if (sharedImageSources[i]) sharedImageSources[i].provenance = p; });
-          console.log(`[generate] section ${section.letter}: provenance assigned to ${textProv.length + imageProv.length} sources`);
-        } catch (e) {
-          console.warn(`[generate] section ${section.letter}: provenance step failed`, (e as Error).message);
+        // Deterministic provenance — no AI call. This used to be an extra
+        // model round-trip after sources were already chosen, which was
+        // pure CPU/wall-clock cost. Use publisher + title instead.
+        for (const s of sharedSourcePool) {
+          if (!s.provenance) s.provenance = `From ${s.publisher}: ${s.source_title}.`;
+        }
+        for (const img of sharedImageSources) {
+          if (!img.provenance) img.provenance = `From ${img.publisher}: ${img.source_title}.`;
         }
 
         // Every question slot references the SAME shared pool.
