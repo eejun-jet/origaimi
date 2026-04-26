@@ -200,10 +200,40 @@ export function inferKOs(questionText: string, koPool: string[]): string[] {
 
 // Bloom-verb / command-word → AO. Now expanded to catch verbs that surface
 // in the L4 sample answer / mark scheme even when the stem itself is terse.
+//
+// We support BOTH the legacy 3-band tags (AO1/AO2/AO3) used by humanities-
+// style syllabuses AND the granular MOE Combined Science 5086 codes
+// (A1–A5 Knowledge with Understanding, B1–B7 Handling Information &
+// Solving Problems, C1–C6 Experimental Skills) carried in
+// syllabus_assessment_objectives. The pool drives the loop, so codes that
+// are not in the syllabus's pool simply never fire.
 const AO_VERBS_SCI: Record<string, string[]> = {
   AO1: ["state", "name", "list", "identify", "recall", "define", "label", "give"],
   AO2: ["calculate", "explain", "describe", "predict", "apply", "use", "determine", "show that", "estimate", "interpret", "account for"],
   AO3: ["analyse", "analyze", "evaluate", "assess", "compare", "design", "investigate", "plan", "justify", "weigh", "critique"],
+  // ── 5086 / Combined Science granular AOs ─────────────────────────────
+  // A series — Knowledge with Understanding
+  A1: ["state", "name", "define", "describe", "explain", "outline", "phenomena", "law", "theory", "concept"],
+  A2: ["symbol", "formula", "notation", "unit", "terminology", "vocabulary", "nuclide", "convention"],
+  A3: ["apparatus", "burette", "pipette", "cylinder", "syringe", "technique", "instrument", "safety", "thermometer", "balance"],
+  A4: ["mass", "volume", "temperature", "concentration", "determine", "measure", "quantity", "rate", "energy"],
+  A5: ["application", "social", "economic", "environmental", "industrial", "fuel", "pollution", "atmosphere", "alloy", "polymer"],
+  // B series — Handling Information & Solving Problems
+  B1: ["locate", "select", "organise", "organize", "present", "from the", "given the"],
+  B2: ["translate", "interpret", "convert", "graph", "chart", "table", "diagram"],
+  B3: ["calculate", "manipulate", "compute", "stoichiometr", "moles of", "mol/dm"],
+  B4: ["identify", "trend", "pattern", "infer", "deduce", "compare"],
+  B5: ["explain", "account for", "reasoned", "relationship", "in terms of"],
+  B6: ["predict", "propose", "hypothesis", "hypothesise", "hypothesize", "suggest"],
+  B7: ["solve", "problem", "to find", "to determine"],
+  // C series — Experimental Skills (Paper 5 only). Fire only on practical-
+  // flavoured stems so theory papers don't accidentally tag them.
+  C1: ["follow the procedure", "carry out", "step 1", "step 2", "instructions"],
+  C2: ["apparatus", "set up", "set-up", "use the", "technique"],
+  C3: ["record", "observe", "observation", "measurement", "estimate", "reading"],
+  C4: ["interpret", "evaluate", "explain your", "from your results", "your observations"],
+  C5: ["plan", "design an experiment", "select", "outline a procedure"],
+  C6: ["evaluate", "improvement", "limitation", "modification", "extension", "improve"],
 };
 const AO_VERBS_HUM: Record<string, string[]> = {
   AO1: ["describe", "identify", "state", "list", "name", "outline", "recount"],
@@ -239,12 +269,13 @@ export function inferAOs(
     out.add("AO2");
   }
   // A long substantive answer that names specific factual content (years,
-  // proper nouns) demonstrates AO1 knowledge recall, even when the stem is
-  // a pure AO3 evaluation prompt.
-  if (aoPool.includes("AO1") && !out.has("AO1")) {
-    const yearHits = (questionText.match(/\b(1[5-9]\d{2}|20\d{2})\b/g) ?? []).length;
-    const capHits = (questionText.match(/\b[A-Z][a-z]{2,}\b/g) ?? []).length;
-    if (yearHits >= 2 || capHits >= 6) out.add("AO1");
+  // proper nouns) demonstrates AO1 / A1 knowledge recall, even when the
+  // stem is a pure evaluation prompt.
+  const yearHits = (questionText.match(/\b(1[5-9]\d{2}|20\d{2})\b/g) ?? []).length;
+  const capHits = (questionText.match(/\b[A-Z][a-z]{2,}\b/g) ?? []).length;
+  if (yearHits >= 2 || capHits >= 6) {
+    if (aoPool.includes("AO1") && !out.has("AO1")) out.add("AO1");
+    if (aoPool.includes("A1") && !out.has("A1")) out.add("A1");
   }
   return Array.from(out);
 }
