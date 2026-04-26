@@ -660,3 +660,104 @@ export async function fetchGroundedSource(
   }
   return null;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pictorial primary-source fetcher (Humanities only).
+// Uses Tavily image search restricted to the humanities allow-list +
+// .gov/.edu/.org/.mil/.ac.* TLDs. Returns a single best image with a caption,
+// or null on miss. Designed to be called ONCE per SBQ section, after the
+// textual pool has been assembled.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const IMAGE_URL_RE = /\.(png|jpe?g|gif|svg|webp)(\?|#|$)/i;
+
+export async function fetchGroundedImageSource(
+  topic: string,
+  learningOutcomes: string[] = [],
+  usedHosts?: Set<string>,
+): Promise<GroundedImageSource | null> {
+  if (!hasTavily()) return null;
+  const topicKw = extractKeywords(topic, 5);
+  const loKw = extractKeywords(learningOutcomes.join(" "), 4);
+  if (topicKw.length === 0) return null;
+
+  // Try a few angles — propaganda poster, cartoon, photograph — so we surface
+  // a real pictorial primary source rather than an article hero image.
+  const baseTerms = [...topicKw, ...loKw].slice(0, 8).join(" ");
+  const queries = [
+    `${baseTerms} political cartoon`,
+    `${baseTerms} propaganda poster`,
+    `${baseTerms} historical photograph`,
+    `${baseTerms} primary source image archive`,
+  ];
+
+  const topicVocab = syllabusKeywordsFor(topic, learningOutcomes);
+  const deadline = Date.now() + 8000;
+
+  for (const query of queries) {
+    if (Date.now() > deadline) break;
+    let response;
+    try {
+      response = await tavilySearch(query, {
+        excludeDomains: DENY_DOMAINS,
+        maxResults: 12,
+        includeImages: true,
+        includeImageDescriptions: true,
+      });
+    } catch (e) {
+      console.warn("[sources] image search exception", (e as Error).message);
+      continue;
+    }
+    const { images, results } = response;
+    if (!images || images.length === 0) continue;
+
+    // Filter: real image URL, allow-listed host, not already used, not denied.
+    const candidates = images
+      .filter((im) => im.url && IMAGE_URL_RE.test(im.url))
+      .filter((im) => isAllowed(im.url, ALLOW_DOMAINS_HUMANITIES, true))
+      .filter((im) => !(usedHosts && usedHosts.has(hostnameOf(im.url))));
+
+    if (candidates.length === 0) continue;
+
+    // Rank: Tier-1 host + topic-keyword overlap in description boosts score.
+    const ranked = candidates
+      .map((im) => {
+        const host = hostnameOf(im.url);
+        const tier = humanitiesTier(host);
+        const desc = (im.description ?? "").toLowerCase();
+        let score = 0;
+        if (tier === 1) score += 6;
+        else if (tier === 2) score += 2;
+        for (const kw of topicVocab) {
+          if (kw.length >= 4 && desc.includes(kw)) score += 2;
+        }
+        if (/cartoon|poster|propaganda|photograph|portrait|engraving|painting/.test(desc)) score += 3;
+        if (/logo|icon|avatar|sprite|banner|advert/.test(desc)) score -= 6;
+        return { im, score, host };
+      })
+      .sort((a, b) => b.score - a.score)
+      .filter((r) => r.score > 0);
+
+    if (ranked.length === 0) continue;
+    const best = ranked[0];
+
+    // Find the page that contained the image, for a clean citation.
+    const sourcePage = results.find((r) => hostnameOf(r.url) === best.host)?.url ?? best.im.url;
+    const sourceTitle = results.find((r) => hostnameOf(r.url) === best.host)?.title
+      ?? best.im.description?.slice(0, 120)
+      ?? `${topic} — pictorial primary source`;
+
+    if (usedHosts) usedHosts.add(best.host);
+
+    return {
+      kind: "image",
+      image_url: best.im.url,
+      caption: (best.im.description ?? "").trim().slice(0, 220) || `Pictorial source: ${topic}`,
+      source_url: sourcePage,
+      source_title: sourceTitle,
+      publisher: publisherOf(sourcePage),
+    };
+  }
+
+  return null;
+}
