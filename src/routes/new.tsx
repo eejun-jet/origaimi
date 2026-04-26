@@ -320,6 +320,7 @@ function NewAssessment() {
               learning_outcomes: t.learningOutcomes,
               ao_codes: t.aoCodes,
               outcome_categories: t.outcomeCategories,
+              section: t.section,
             }))
         : topics.map((t) => ({ topic: t }));
       setSections([{
@@ -347,6 +348,7 @@ function NewAssessment() {
           learning_outcomes: t.learningOutcomes,
           ao_codes: t.aoCodes,
           outcome_categories: t.outcomeCategories,
+          section: t.section,
         }));
     }
     return topics.map((t) => ({ topic: t }));

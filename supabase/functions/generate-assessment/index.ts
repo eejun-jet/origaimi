@@ -21,6 +21,9 @@ type SectionTopic = {
   learning_outcomes?: string[];
   ao_codes?: string[];
   outcome_categories?: string[];
+  /** Discipline label e.g. "Physics", "Chemistry", "Practical". Used to enforce
+   *  50/50 splits on multi-track papers like Combined Science 5086 Paper 1. */
+  section?: string | null;
 };
 
 type DifficultyMix = { easy: number; medium: number; hard: number };
@@ -1102,6 +1105,30 @@ THIS SECTION:
   ${section.instructions ? `- Section instructions for the rubric: ${section.instructions}` : ""}
 ${skillBlock}${difficultyBlock}${objectivesBlock}
 ${humanitiesSourceGuidance}${sbqSectionPreamble}${historyEssayBlock}
+${(() => {
+  // When the caller has narrowed topic_pool to exactly one entry per question
+  // (e.g. Combined Science Paper 1 with a planned Physics/Chemistry split), we
+  // emit a strict per-question topic+discipline assignment so each MCQ is
+  // anchored to the planned slot. This is what enforces the 50/50 split.
+  if (section.topic_pool.length !== section.num_questions || section.num_questions < 2) return "";
+  const disciplines = section.topic_pool.map((t) => (t.section ?? "").trim());
+  const distinct = new Set(disciplines.filter(Boolean));
+  if (distinct.size < 2) return "";
+  const lines = section.topic_pool.map((t, i) => {
+    const disc = (t.section ?? "Other").trim() || "Other";
+    const code = t.topic_code ? ` [${t.topic_code}]` : "";
+    const losPreview = (t.learning_outcomes ?? []).slice(0, 2).map((lo) => lo.length > 90 ? lo.slice(0, 87) + "…" : lo);
+    const losStr = losPreview.length > 0 ? ` — target LO(s): ${losPreview.join(" | ")}` : "";
+    return `  - Question ${i + 1}: discipline=${disc}; topic=${t.topic}${code}${losStr}`;
+  }).join("\n");
+  const totals = Array.from(distinct).map((d) => `${d}=${disciplines.filter((x) => x === d).length}`).join(", ");
+  return `
+PER-QUESTION TOPIC ASSIGNMENT (HARD CONSTRAINT — write each question on EXACTLY the assigned topic and discipline; do NOT swap, merge or skip any slot):
+${lines}
+
+DISCIPLINE BALANCE for this section: ${totals}. Each question's stem, options, working and tags must clearly belong to its assigned discipline. The set of learning_outcomes you tag on each question MUST be drawn from that question's target LO(s) above (verbatim copies from the syllabus pool). Across the section, COLLECTIVELY cover as many distinct learning outcomes as the slots allow — repeat an LO only if the slot count exceeds the available LO count.
+`;
+})()}
 ALLOWED TOPICS (pick from these only — DO NOT invent topics outside this pool):
 ${topicLines}
 ${sourceBlocks}
@@ -1286,10 +1313,109 @@ Deno.serve(async (req) => {
     // the same figure across multiple questions.
     const usedDiagramUrls = new Set<string>();
 
-    // Pick a topic pool entry, round-robining so all topics in the pool are covered.
-    const pickTopic = (s: Section, qIdx: number): SectionTopic | null => {
+    // Build a per-section topic plan: one SectionTopic slot per question.
+    //
+    // Default behaviour: round-robin across the section's topic_pool so every
+    // topic is touched at least once before any topic repeats.
+    //
+    // Combined Science (5086) Paper 1 (MCQ) override: SEAB Paper 1 is 40 MCQs
+    // split 50/50 Physics + Chemistry. When the subject looks like Combined
+    // Science AND the section is MCQ AND the pool spans multiple disciplines
+    // (i.e. topic_pool entries carry different `section` labels like "Physics"
+    // and "Chemistry"), we interleave the disciplines so the first half of the
+    // section is balanced even if the AI fails some slots. Within each
+    // discipline we round-robin topics, preferring ones whose learning
+    // outcomes have not yet been claimed in this section so KO coverage is
+    // maximised.
+    const isCombinedScience = /combined\s*science/i.test(String(subject ?? "")) ||
+      String(syllabusCode ?? "").trim() === "5086";
+
+    const buildBalancedPlan = (s: Section): (SectionTopic | null)[] => {
+      const n = s.num_questions;
+      if (s.topic_pool.length === 0) return Array.from({ length: n }, () => null);
+
+      const wantBalanced = isCombinedScience && s.question_type === "mcq";
+      if (!wantBalanced) {
+        return Array.from({ length: n }, (_, i) => s.topic_pool[i % s.topic_pool.length]);
+      }
+
+      // Group by discipline (section label). Practical / unlabelled fall into "Other".
+      const groups = new Map<string, SectionTopic[]>();
+      for (const t of s.topic_pool) {
+        const key = (t.section ?? "Other").trim() || "Other";
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key)!.push(t);
+      }
+      // Prefer Physics + Chemistry as the two interleave tracks when present.
+      const preferredOrder = ["Physics", "Chemistry"];
+      const trackKeys = [
+        ...preferredOrder.filter((k) => groups.has(k)),
+        ...Array.from(groups.keys()).filter((k) => !preferredOrder.includes(k)),
+      ];
+      if (trackKeys.length < 2) {
+        // Pool is single-discipline — fall back to plain round-robin.
+        return Array.from({ length: n }, (_, i) => s.topic_pool[i % s.topic_pool.length]);
+      }
+
+      // For each track, maintain (a) a rotating index over its topics and
+      // (b) a set of LOs already used so we can prefer fresh-LO topics first.
+      const trackState = new Map<string, { topics: SectionTopic[]; cursor: number; usedLos: Set<string> }>();
+      for (const k of trackKeys) {
+        trackState.set(k, { topics: groups.get(k)!, cursor: 0, usedLos: new Set() });
+      }
+
+      const pickFromTrack = (k: string): SectionTopic => {
+        const st = trackState.get(k)!;
+        // First-pass coverage: scan once for a topic with an unseen LO.
+        for (let i = 0; i < st.topics.length; i++) {
+          const idx = (st.cursor + i) % st.topics.length;
+          const cand = st.topics[idx];
+          const los = cand.learning_outcomes ?? [];
+          const hasFresh = los.length === 0 || los.some((lo) => !st.usedLos.has(lo));
+          if (hasFresh) {
+            st.cursor = (idx + 1) % st.topics.length;
+            for (const lo of los) st.usedLos.add(lo);
+            return cand;
+          }
+        }
+        // All LOs already covered — plain round-robin from the cursor.
+        const cand = st.topics[st.cursor % st.topics.length];
+        st.cursor = (st.cursor + 1) % st.topics.length;
+        for (const lo of (cand.learning_outcomes ?? [])) st.usedLos.add(lo);
+        return cand;
+      };
+
+      // Interleave tracks with marks-weighted balance. For Combined Sci Paper 1
+      // (Physics + Chemistry only), a strict 50/50 alternation gives 20+20.
+      // With a 3rd track (e.g. Practical), distribute evenly using a
+      // largest-remainder schedule so totals match the # questions.
+      const baseShare = Math.floor(n / trackKeys.length);
+      const remainder = n - baseShare * trackKeys.length;
+      const quotas: Record<string, number> = {};
+      trackKeys.forEach((k, i) => { quotas[k] = baseShare + (i < remainder ? 1 : 0); });
+
+      // Round-robin across tracks while quota remains.
+      const plan: SectionTopic[] = [];
+      let safety = n * trackKeys.length + 5;
+      let ti = 0;
+      while (plan.length < n && safety-- > 0) {
+        const k = trackKeys[ti % trackKeys.length];
+        if (quotas[k] > 0) {
+          plan.push(pickFromTrack(k));
+          quotas[k]--;
+        }
+        ti++;
+      }
+      return plan;
+    };
+
+    // Per-section cached plan. Built lazily once per section.
+    const sectionPlans = new Map<number, (SectionTopic | null)[]>();
+    const pickTopic = (s: Section, qIdx: number, sIdx: number = 0): SectionTopic | null => {
       if (s.topic_pool.length === 0) return null;
-      return s.topic_pool[qIdx % s.topic_pool.length];
+      let plan = sectionPlans.get(sIdx);
+      if (!plan) { plan = buildBalancedPlan(s); sectionPlans.set(sIdx, plan); }
+      return plan[qIdx] ?? s.topic_pool[qIdx % s.topic_pool.length];
     };
 
     for (let si = 0; si < sections.length; si++) {
@@ -1547,7 +1673,7 @@ Deno.serve(async (req) => {
       } else if (needsSourcePerQ && subjectKind) {
         // Non-SBQ humanities or English comprehension: per-question source.
         for (let qi = 0; qi < section.num_questions; qi++) {
-          const t = pickTopic(section, qi);
+          const t = pickTopic(section, qi, si);
           const qSkill = perQSkillsForFetch[qi];
           const sourcesPerQ = qSkill ? Math.max(1, qSkill.minSources) : 1;
           const slot: (GroundedSource | null)[] = [];
@@ -1602,10 +1728,23 @@ Deno.serve(async (req) => {
             chunkQCount,
             Math.round((section.marks * chunkQCount) / totalQs),
           );
+          // Narrow the chunk's topic_pool to the planned per-question topics
+          // so the AI prompt prescribes exactly which discipline and topic each
+          // slot must target. This is what makes the 50/50 Physics+Chemistry
+          // split survive into the Combined Science Paper 1 (MCQ) output.
+          const plannedSlice: SectionTopic[] = [];
+          for (let qi = startIdx; qi < endIdx; qi++) {
+            const t = pickTopic(section, qi, si);
+            if (t) plannedSlice.push(t);
+          }
+          const chunkTopicPool = plannedSlice.length > 0
+            ? plannedSlice
+            : section.topic_pool;
           const chunkSection: Section = {
             ...section,
             num_questions: chunkQCount,
             marks: chunkMarks,
+            topic_pool: chunkTopicPool,
           };
           const chunkSources = sourcesForSection.slice(startIdx, endIdx);
           const chunkDifficultyTargets = sectionDifficultyTargets
@@ -1761,7 +1900,7 @@ Deno.serve(async (req) => {
         }
 
         // Decide whether this question wants a diagram (resolved later, in parallel).
-        const t = pickTopic(section, qi);
+        const t = pickTopic(section, qi, si);
         const wantDiagram = !!scienceMathKind && questionWantsDiagram(
           scienceMathKind,
           [question_type],
