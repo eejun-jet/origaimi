@@ -1577,6 +1577,242 @@ function computeCoverage(
   };
 }
 
+// ───────────────────────────── Topics map (science papers) ─────────────────────
+
+type TopicsMap = {
+  disciplines: {
+    name: string;
+    totalLOs: number;
+    coveredLOs: number;
+    topics: {
+      title: string;
+      totalLOs: number;
+      coveredLOs: number;
+      los: { text: string; covered: boolean; actual: number }[];
+    }[];
+  }[];
+};
+
+const DISCIPLINE_ORDER = ["Physics", "Chemistry", "Biology", "Practical", "General"];
+
+function normaliseDiscipline(s: string | null | undefined): string {
+  if (!s) return "General";
+  const t = s.toLowerCase();
+  if (t.includes("physic")) return "Physics";
+  if (t.includes("chem")) return "Chemistry";
+  if (t.includes("bio")) return "Biology";
+  if (t.includes("practical") || t.includes("experimental")) return "Practical";
+  // Trim "Combined Science — " or similar prefixes; otherwise pass through.
+  return s.split(/[—–-]/).slice(-1)[0]?.trim() || s;
+}
+
+function buildTopicsMap(
+  paperLOs: Coverage["paper"]["los"],
+  sections: Section[],
+): TopicsMap {
+  // (discipline, topicTitle) → Map<loText, {covered, actual}>
+  const grouped = new Map<string, Map<string, Map<string, { covered: boolean; actual: number }>>>();
+  // Lookup of paper LO stats
+  const loStats = new Map(paperLOs.map((l) => [l.text, l] as const));
+
+  const place = (discipline: string, topicTitle: string, loText: string) => {
+    const stat = loStats.get(loText);
+    if (!stat) return; // LO not in paper rollup → skip
+    if (!grouped.has(discipline)) grouped.set(discipline, new Map());
+    const disc = grouped.get(discipline)!;
+    if (!disc.has(topicTitle)) disc.set(topicTitle, new Map());
+    const topic = disc.get(topicTitle)!;
+    if (!topic.has(loText)) {
+      topic.set(loText, { covered: stat.covered, actual: stat.actual });
+    }
+  };
+
+  // 1. Walk every section's topic_pool
+  const seenLOs = new Set<string>();
+  for (const s of sections) {
+    for (const t of s.topic_pool ?? []) {
+      const discipline = normaliseDiscipline(t.section);
+      const topicTitle = t.topic || "Other";
+      for (const lo of t.learning_outcomes ?? []) {
+        place(discipline, topicTitle, lo);
+        seenLOs.add(lo);
+      }
+    }
+  }
+
+  // 2. Any LO from the paper rollup that we never grouped → bucket under "Other / General"
+  for (const l of paperLOs) {
+    if (!seenLOs.has(l.text)) place("General", "Other", l.text);
+  }
+
+  const disciplines = Array.from(grouped.entries()).map(([name, topicsMap]) => {
+    const topics = Array.from(topicsMap.entries()).map(([title, losMap]) => {
+      const los = Array.from(losMap.entries()).map(([text, v]) => ({ text, ...v }));
+      const coveredLOs = los.filter((l) => l.covered).length;
+      // Stable: covered first within a topic? Keep insertion order (matches syllabus order).
+      return { title, totalLOs: los.length, coveredLOs, los };
+    });
+    // Sort topics: uncovered first, then partial, then fully covered
+    topics.sort((a, b) => {
+      const aRatio = a.totalLOs ? a.coveredLOs / a.totalLOs : 0;
+      const bRatio = b.totalLOs ? b.coveredLOs / b.totalLOs : 0;
+      if (aRatio !== bRatio) return aRatio - bRatio;
+      return a.title.localeCompare(b.title);
+    });
+    const totalLOs = topics.reduce((s, t) => s + t.totalLOs, 0);
+    const coveredLOs = topics.reduce((s, t) => s + t.coveredLOs, 0);
+    return { name, totalLOs, coveredLOs, topics };
+  });
+
+  // Sort disciplines: known order first, others alphabetical
+  disciplines.sort((a, b) => {
+    const ai = DISCIPLINE_ORDER.indexOf(a.name);
+    const bi = DISCIPLINE_ORDER.indexOf(b.name);
+    if (ai === -1 && bi === -1) return a.name.localeCompare(b.name);
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  });
+
+  return { disciplines };
+}
+
+function statusTone(covered: number, total: number): "success" | "warn" | "destructive" | "muted" {
+  if (total === 0) return "muted";
+  if (covered === 0) return "destructive";
+  if (covered >= total) return "success";
+  return "warn";
+}
+
+function SegmentBar({ covered, total }: { covered: number; total: number }) {
+  const max = 12;
+  const segs = Math.min(total, max);
+  const filled = Math.round((covered / Math.max(1, total)) * segs);
+  return (
+    <div className="flex items-center gap-0.5">
+      {Array.from({ length: segs }).map((_, i) => (
+        <span
+          key={i}
+          className={`h-1.5 w-1.5 rounded-sm ${i < filled ? "bg-success" : "bg-muted-foreground/25"}`}
+        />
+      ))}
+      {total > max && (
+        <span className="ml-0.5 text-[9px] text-muted-foreground">+{total - max}</span>
+      )}
+    </div>
+  );
+}
+
+function TopicsMapView({
+  map,
+  remarkCount,
+  setTarget,
+  paperLOs,
+}: {
+  map: TopicsMap;
+  remarkCount: (kind: "lo", value: string) => number;
+  setTarget: (t: CoverageTarget) => void;
+  paperLOs: Coverage["paper"]["los"];
+}) {
+  const loStats = new Map(paperLOs.map((l) => [l.text, l] as const));
+  if (map.disciplines.length === 0) {
+    return <p className="mt-3 text-xs text-muted-foreground">No Learning Outcomes targeted.</p>;
+  }
+  return (
+    <div className="mt-3 space-y-2">
+      {map.disciplines.map((disc) => {
+        const tone = statusTone(disc.coveredLOs, disc.totalLOs);
+        const discDefaultOpen = disc.coveredLOs < disc.totalLOs; // open if anything missing
+        return (
+          <Collapsible key={disc.name} defaultOpen={discDefaultOpen}>
+            <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg border border-border bg-muted/30 px-2.5 py-1.5 text-left text-xs hover:bg-muted/50">
+              <span className="flex items-center gap-1.5">
+                <ChevronRight className="h-3 w-3 transition-transform group-data-[state=open]:rotate-90" />
+                <span className="font-medium">{disc.name}</span>
+              </span>
+              <span className="flex items-center gap-2">
+                <SegmentBar covered={disc.coveredLOs} total={disc.totalLOs} />
+                <span
+                  className={
+                    tone === "success" ? "text-success" :
+                    tone === "destructive" ? "text-destructive" :
+                    tone === "warn" ? "text-amber-600 dark:text-amber-400" :
+                    "text-muted-foreground"
+                  }
+                >
+                  {disc.coveredLOs} / {disc.totalLOs}
+                </span>
+              </span>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-1 space-y-1 pl-3">
+              {disc.topics.map((t) => {
+                const tTone = statusTone(t.coveredLOs, t.totalLOs);
+                const tOpen = t.coveredLOs < t.totalLOs && t.coveredLOs < t.totalLOs;
+                return (
+                  <Collapsible key={t.title} defaultOpen={tOpen}>
+                    <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-md px-2 py-1 text-left text-[11px] hover:bg-muted/40">
+                      <span className="flex items-center gap-1.5">
+                        <ChevronRight className="h-2.5 w-2.5 transition-transform group-data-[state=open]:rotate-90" />
+                        <span
+                          className={
+                            tTone === "destructive" ? "font-medium text-destructive" :
+                            tTone === "warn" ? "font-medium text-amber-600 dark:text-amber-400" :
+                            tTone === "success" ? "font-medium text-success" :
+                            "font-medium text-foreground"
+                          }
+                        >
+                          {t.title}
+                        </span>
+                        {tTone === "destructive" && (
+                          <span className="rounded bg-destructive/10 px-1 py-0 text-[9px] font-medium text-destructive">uncovered</span>
+                        )}
+                        {tTone === "warn" && (
+                          <span className="rounded bg-amber-500/10 px-1 py-0 text-[9px] font-medium text-amber-700 dark:text-amber-400">thin</span>
+                        )}
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <SegmentBar covered={t.coveredLOs} total={t.totalLOs} />
+                        <span className="text-[10px] text-muted-foreground tabular-nums">
+                          {t.coveredLOs}/{t.totalLOs}
+                        </span>
+                      </span>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="mt-0.5 space-y-0.5 pl-4">
+                      {t.los.map((lo) => {
+                        const count = remarkCount("lo", lo.text);
+                        const stat = loStats.get(lo.text);
+                        return (
+                          <button
+                            key={lo.text}
+                            type="button"
+                            onClick={() => stat && setTarget({ kind: "lo", text: stat.text, actual: stat.actual, target: stat.target, covered: stat.covered })}
+                            className={`flex w-full items-start gap-1.5 rounded px-1.5 py-0.5 text-left text-[11px] leading-snug transition hover:bg-muted/50 ${
+                              lo.covered ? "text-foreground" : "text-muted-foreground"
+                            }`}
+                          >
+                            <span className={`mt-0.5 ${lo.covered ? "text-success" : "text-destructive"}`}>
+                              {lo.covered ? "✓" : "○"}
+                            </span>
+                            <span className="flex-1">{lo.text}</span>
+                            {lo.covered && lo.actual > 1 && (
+                              <span className="shrink-0 text-[9px] text-muted-foreground">×{lo.actual}</span>
+                            )}
+                            {count > 0 && <RemarkPill count={count} />}
+                          </button>
+                        );
+                      })}
+                    </CollapsibleContent>
+                  </Collapsible>
+                );
+              })}
+            </CollapsibleContent>
+          </Collapsible>
+        );
+      })}
+    </div>
+  );
+}
+
 // ───────────────────────────── Coverage panel UI ─────────────────────────────
 
 function MeterRow({
