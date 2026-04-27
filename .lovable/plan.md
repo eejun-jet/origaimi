@@ -1,78 +1,99 @@
-## What the new XLSX confirms
+## Problem
 
-Compared the upload (`Chemistry_Dataset_mod-2.xlsx`) against what's currently in the database for 5086 Combined Science. Findings:
+For science papers (especially Combined Science 5086, which mixes Physics + Chemistry across many topics), the **LO Coverage** card in the assessment sidebar shows a long, flat list of every learning outcome. With 60+ LOs there is no way to scan which **topics** are well covered, which are thin, and which are completely missing — exactly the question teachers ask first.
 
-**Already correct (no work needed):**
-- AO definitions A1–A5, B1–B7, C1–C6 match the XLSX exactly.
-- 17 of 22 Chemistry topic rows (1.1 → 10) carry granular `A1..B7` AO tags from the previous ingestion.
+## Solution
 
-**Wrong / stale / missing:**
+Add a grouped "Topics map" visualisation to the Coverage panel that only renders for science papers. It groups every LO in the paper's pool by **discipline → topic strand → LO**, with a coverage indicator at every level.
 
-| # | Issue | Evidence |
-|---|---|---|
-| 1 | 5 Chemistry topic rows still on legacy `[A, B]` letters: **11.1 Fuels & Crude Oil, 11.2 Hydrocarbons, 11.3 Alcohols & Carboxylic Acids, 11.4 Polymers, 12 Maintaining Air Quality** | Not present in the XLSX, so previous ingestion skipped them |
-| 2 | DB has flat topic codes `5`, `6`, `7` but the XLSX uses `5.1`, `6.1`, `7.1`, `7.2` (Redox Concepts vs Electrolysis is one row in DB, two in XLSX) | `topic_code` mismatch — Coverage drawer can't surface "Electrolysis" as a distinct LO group |
-| 3 | **Paper 1 MCQ (0 topics linked)** and **Paper 5 Practical (0 topics linked)** | Per XLSX Format sheet, Paper 1 = Physics + Chemistry, Paper 5 = Physics + Chemistry (5086) — both should expose those topics |
-| 4 | Physics topics (16 rows) still on legacy `[A, B]` — never ingested with granular AOs | All Physics rows show `ao_codes: [A, B]` |
-| 5 | Papers 2/3/4 stored as single 65-mark blocks; XLSX format says **Section A = 55 m (last Q = 10 m), Section B = 10 m (choose 1 of 2)** | `syllabus_papers` has no section split |
-| 6 | A1 "Recall" sub-weight (20% of total marks) not encoded | Format sheet line 2 — affects MCQ blueprint targets |
-| 7 | Biology rows tagged to 5086 (12 topics, all letter-code) — actually wrong syllabus association: 5086 = Physics + Chemistry only | Format line 16: "Science (Physics, Chemistry), Syllabus 5086" |
+Existing flat AO / KO / LO cards stay (they're useful for quick numeric checks). The Topics map becomes the default sub-view inside the LO card so teachers see the structured map first and can collapse/expand sections at will.
 
----
+### Layout (inside the existing LO Coverage card)
 
-## Plan
+```text
+LO Coverage                         42 / 68 outcomes covered  [Map | List]
+─────────────────────────────────────────────────────────────────────────
+▼ Physics                           18 / 32 ●●●●●○○○○○
+   ▼ Dynamics                        4 / 4  ●●●●  (all covered)
+       ✓ Newton's laws of motion          (3 questions)
+       ✓ Effects of resistive forces      (1 question)
+   ▼ Energy                          1 / 5  ●○○○○  ⚠ thin
+       ✓ Energy stores and transfers      (1)
+       ✗ Work
+       ✗ Power
+   ▶ Electric Charge & Current      0 / 10 ○○○○○○○○○○  ⚠ uncovered
+▼ Chemistry                         24 / 36 ●●●●●●●○○○
+   ▶ Chemical Bonding                7 / 11 …
+   …
+```
 
-### 1. Refresh Chemistry topics 11.x and 12 with granular AOs
-These topics aren't in the XLSX (the 2025 syllabus dropped Organic Chemistry from the Combined Science scope), so confirm with you: **delete them**, or keep them but auto-tag with the inference engine. Default action in this plan: **delete** topics 11.1, 11.2, 11.3, 11.4, 12 from `syllabus_topics` for 5086 Chemistry, since the canonical XLSX is authoritative.
+- Discipline rows (Physics / Chemistry / Biology / Practical) come from `SectionTopic.section` — already populated for 5086.
+- Topic rows come from `SectionTopic.topic` (the strand title from `syllabus_topics`).
+- Each row shows `covered / total` LOs, a tiny segment bar, and a colour status:
+  - green = fully covered
+  - amber = partially covered
+  - red = no LOs covered (uncovered topic — the key signal teachers want)
+- Topics with 0 coverage auto-expand; fully-covered topics start collapsed; partial topics start expanded.
+- Clicking an LO opens the existing DetailDrawer (evidence questions + remarks) — same behaviour as today.
+- The "List" toggle keeps the current flat list available as a fallback.
 
-### 2. Restructure topic codes to match XLSX exactly
-- Rename topic_code `5` → `5.1`, `6` → `6.1`, `7` → `7.1` (Redox Concepts).
-- Insert new row `7.2 Electrolysis` with its 1 LO from the XLSX.
-- Refresh LO sentences and granular AO tags for all 18 Chemistry groups using the new XLSX (re-runs the existing `ingest_5086_chem.mjs` against the new file).
+### When the Topics map shows
 
-### 3. Ingest granular AOs for Physics
-Apply the same command-word inference (`coverage-infer.ts AO_VERBS_SCI`) to all 16 Physics topic rows so they carry `A1..B7` instead of `[A, B]`. This is automatic — no XLSX needed for Physics since you haven't supplied one. When you upload a Physics XLSX I'll re-run with the canonical text.
+- Only when `isScienceSubject(assessment.subject)` is true. Humanities papers keep today's flat list (their LOs are typically already short).
+- Within science papers, the map appears even on single-discipline papers (Physics-only, Chemistry-only) — the discipline row simply collapses to one group, and the topic grouping is still the win.
 
-### 4. Drop the orphaned Biology topics from 5086
-Delete the 12 Biology rows under doc `65010473…` (5086 is Physics+Chem only per the XLSX Format sheet). Biology stays attached to 5087/5088 syllabuses if those are added later.
+## Technical Plan
 
-### 5. Wire Paper 1 (MCQ) and Paper 5 (Practical) to a topic pool
-- **Paper 1**: link every 5086 Physics + Chemistry topic to Paper 1's `paper_id` via a new join table `syllabus_topic_papers (topic_id, paper_id)`. `loadPaperTopics()` reads through this table when present, otherwise falls back to `paper_id` direct match (back-compat for other syllabuses).
-- **Paper 5**: same join, plus add 6 synthetic "Practical skill" topic rows tagged C1..C6 with the canonical SEAB descriptors as LOs.
+All changes are confined to `src/routes/assessment.$id.tsx` (with one tiny helper in the same file). No DB / edge-function / migration work — the data is already in the section's `topic_pool` (each `SectionTopic` carries `topic`, `section` discipline, and `learning_outcomes`).
 
-### 6. Encode the section structure for Papers 2/3/4
-Update the 3 rows in `syllabus_papers`:
-- Insert child rows: `2A` (55 m, compulsory), `2B` (10 m, 1-of-2). Same for Papers 3 and 4. Use the existing `section` column.
-- Generator's `defaultSection()` already supports per-section marks/instructions, so these surface as suggested blueprint sections in `/new`.
+### 1. New grouped data model (helper next to `computeCoverage`)
 
-### 7. Add A1 recall sub-quota to coverage targets
-In `src/routes/assessment.$id.tsx` `computeCoverage()`, when the assessment is tagged to 5086 add a derived target: A1 ≥ 20% of total marks (separate from the A 50% block). Surfaces in the Coverage panel as "Recall (A1) target ≥ Xm".
+Add `buildTopicsMap(coverage, sections)` returning:
 
-### 8. Scope the AO list and topic pool to the chosen paper at runtime
-- `assessment.$id.tsx` `loadAll`: when `syllabus_paper_id` is set, filter `aoDefs` to the paper's relevant prefix (`A*`/`B*` for Papers 1–4, `C*` for Paper 5).
-- `supabase/functions/generate-assessment/index.ts`: restrict the `Assessment Objectives pool` and topic candidate pool the LLM sees to the chosen paper.
+```ts
+type TopicsMap = {
+  disciplines: {
+    name: string;          // "Physics" | "Chemistry" | "Biology" | "Practical" | "General"
+    totalLOs: number;
+    coveredLOs: number;
+    topics: {
+      title: string;       // strand title from SectionTopic.topic
+      totalLOs: number;
+      coveredLOs: number;
+      los: { text: string; covered: boolean; actual: number }[];
+    }[];
+  }[];
+};
+```
 
-### 9. Re-run the post-generation tagger on existing 5086 mocks
-After the DB changes, `expandQuestionTags` will produce non-empty pools for MCQ + Practical. A one-shot script re-tags every existing `assessment_questions` row whose assessment is tagged to 5086.
+Build it by walking every `section.topic_pool[].learning_outcomes`, indexing each LO by `(discipline, topic)`, then joining against `coverage.paper.los` to get the covered/actual flags. LOs that come from question tags but have no matching pool topic fall into a synthetic "Other" topic under "General" so nothing is dropped.
 
----
+### 2. New `TopicsMapView` component
 
-## Confirmations needed before I implement
+Renders the disciplines → topics → LOs tree. Uses existing primitives:
 
-I'd like to lock down 4 choices before code/migration changes:
+- `Collapsible` from `@/components/ui/collapsible` (already used elsewhere) for expand/collapse.
+- The same row-button pattern + `RemarkPill` + `setTarget({ kind: "lo", … })` plumbing the flat list uses, so clicking an LO still opens the existing DetailDrawer with evidence + comments.
+- Tiny segment bar = `flex` of N divs (`bg-success` for covered, `bg-muted` for not), capped at ~12 segments with a "+N" suffix when topics are big.
+- Status badge: `success` / `warn` / `destructive` tones using existing tokens.
 
-1. **Topics 11.x & 12 (Organic Chemistry, Air Quality) — delete or keep?** XLSX excludes them. Default = delete.
-2. **Biology rows under 5086 — delete?** XLSX Format says 5086 = Physics + Chem only. Default = delete.
-3. **Section A/B split for Papers 2/3/4** — store as child rows in `syllabus_papers` (default), or as a flag on the existing row?
-4. **Physics granular AOs** — auto-tag now using the inference engine (default), or wait for a Physics XLSX?
+### 3. Wire it into `CoveragePanel`
 
-I'll then run a single migration + ingestion script + edge-function redeploy to apply everything.
+In the LO card (around line 1795–1820 of `assessment.$id.tsx`):
 
----
+- Add a `useState<"map" | "list">` toggle, defaulting to `"map"` for science subjects, `"list"` for everything else.
+- Pass `assessment.subject` into `CoveragePanel` (currently it's not passed; just thread it from the parent at line ~870 alongside `coverage`).
+- Render the toggle (two small `Button`s) only when `isScienceSubject(subject)` is true — humanities papers see the existing list with no toggle.
+- Render `<TopicsMapView />` or the existing `<ul>` of LOs based on the toggle.
 
-## Technical summary (for reference)
+### 4. No regressions
 
-- **DB migration:** new join table `syllabus_topic_papers (topic_id uuid, paper_id uuid, primary key)`; renames + deletes on `syllabus_topics`; insert C1..C6 practical-skill topic rows; insert child paper rows for 2A/2B/3A/3B/4A/4B.
-- **Ingestion script:** rerun `scripts-tmp/ingest_5086_chem.mjs` against `Chemistry_Dataset_mod-2.xlsx`.
-- **Code changes:** `src/lib/syllabus-data.ts` (loadPaperTopics via join), `src/routes/assessment.$id.tsx` (AO scoping + A1 recall target), `supabase/functions/generate-assessment/index.ts` (paper-scoped pools), `src/lib/coverage-infer.ts` (no change — already covers A1..C6).
-- **Re-tag pass:** in-place `UPDATE assessment_questions` for every 5086 question using the new pools.
+- AO Coverage and KO Coverage cards above are unchanged.
+- Comments / remarks for LOs continue to use the same `target_kind: "lo"` + `target_key: coverageKey("lo", lo.text)` keys, so existing remarks attach to the same LOs in the new view.
+- `computeCoverage` itself is untouched — the topics map is a pure derivation from its output plus the section pool metadata.
+
+### Files touched
+
+- `src/routes/assessment.$id.tsx` — add `buildTopicsMap`, add `TopicsMapView`, add `subject` prop + toggle to `CoveragePanel`, pass `assessment.subject` from the call site.
+
+That's it — single-file change, ~150 lines added, fully reversible via the View toggle.
