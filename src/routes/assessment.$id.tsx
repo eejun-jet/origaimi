@@ -2037,14 +2037,44 @@ function CoveragePanel({
 
       {/* LO Coverage */}
       <div className="rounded-xl border border-border bg-card p-5">
-        <h3 className="font-medium">LO Coverage</h3>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {paper.los.length - uncoveredLOs.length} / {paper.los.length} learning outcomes covered
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="font-medium">LO Coverage</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {paper.los.length - uncoveredLOs.length} / {paper.los.length} learning outcomes covered
+            </p>
+          </div>
+          {isScience && paper.los.length > 0 && (
+            <div className="inline-flex shrink-0 rounded-md border border-border bg-muted/30 p-0.5 text-[10px]">
+              <button
+                type="button"
+                onClick={() => setLoView("map")}
+                className={`rounded px-2 py-0.5 transition ${loView === "map" ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                Map
+              </button>
+              <button
+                type="button"
+                onClick={() => setLoView("list")}
+                className={`rounded px-2 py-0.5 transition ${loView === "list" ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                List
+              </button>
+            </div>
+          )}
+        </div>
         {paper.los.length === 0 && (
           <p className="mt-3 text-xs text-muted-foreground">No Learning Outcomes targeted.</p>
         )}
-        {paper.los.length > 0 && (
+        {paper.los.length > 0 && isScience && loView === "map" && (
+          <TopicsMapView
+            map={topicsMap}
+            remarkCount={remarkCount}
+            setTarget={setTarget}
+            paperLOs={paper.los}
+          />
+        )}
+        {paper.los.length > 0 && (!isScience || loView === "list") && (
           <ul className="mt-3 space-y-1">
             {paper.los.map((lo) => {
               const count = remarkCount("lo", lo.text);
