@@ -1643,18 +1643,23 @@ function RemarkPill({ count }: { count: number }) {
 }
 
 function CoveragePanel({
-  coverage, totalMarks, totalActual, questions, comments, identity,
+  coverage, totalMarks, totalActual, questions, comments, identity, subject, sections,
   onAddComment, onSetCommentStatus, onDeleteComment, onScrollToQuestion,
 }: {
   coverage: Coverage;
   totalMarks: number;
   totalActual: number;
   questions: Question[];
+  subject: string;
+  sections: Section[];
   onScrollToQuestion: (questionId: string) => void;
 } & CoverageCommentHandlers) {
   const { paper, bySection } = coverage;
   const uncoveredLOs = paper.los.filter((l) => !l.covered);
   const [target, setTarget] = useState<CoverageTarget | null>(null);
+  const isScience = isScienceSubject(subject);
+  const [loView, setLoView] = useState<"map" | "list">(isScience ? "map" : "list");
+  const topicsMap = useMemo(() => buildTopicsMap(paper.los, sections), [paper.los, sections]);
 
   // Map coverage comments by target_key for fast lookup
   const remarkCount = (kind: "ao" | "ko" | "lo", value: string) => {
