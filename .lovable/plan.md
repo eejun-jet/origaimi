@@ -1,34 +1,27 @@
-## Root cause
+## Goal
+Use the uploaded swan + wordmark image as the new hero banner on the landing page (`/`).
 
-After connecting/sharing the project on GitHub, the `.env` file got deleted (visible in your last edit: "Files changed: .env (delete)"). Without it:
+## Heads up — brand spelling
+The uploaded image reads **"origami — Unfold the Joy of Assessing"**, but the project's core brand rule is **origAImi** (capital "AI" in the middle). Using this image as-is would contradict the brand spelling shown everywhere else in the app.
 
-- `import.meta.env.VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` are undefined
-- `src/integrations/supabase/client.ts` throws "Missing Supabase environment variables" at module load
-- That throw bubbles up through TanStack Start's client entry, which is exactly the runtime error you're seeing:
-  > Failed to fetch dynamically imported module: `virtual:tanstack-start-client-entry`
+Two options — I'll go with (A) unless you tell me otherwise:
 
-So nothing renders — not because the app code broke, but because the env file Lovable Cloud manages is gone.
+- **(A) Use the image as-is** for the hero. Fast, matches your request literally. Brand spelling on the hero will differ from the rest of the app.
+- **(B) Use the image but keep the "AI" treatment** by overlaying/adjusting later, or asking you for an updated asset that says "origAImi".
 
-The deeper reason it disappeared on GitHub sync: `.env` is **not** in your `.gitignore`, but Lovable Cloud auto-generates it locally and it didn't get committed/pulled correctly during the GitHub round-trip. The fix is to regenerate it and make sure it stays in sync.
+## Changes
 
-## Plan
+1. **Add the asset**
+   - Copy `user-uploads://45fdec5a-...jpg` → `src/assets/hero-banner.jpg`.
 
-1. **Regenerate `.env`** by writing the standard Lovable Cloud values (they're already known and shown in your project context — `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_SUPABASE_PROJECT_ID` for project ref `bsfwuueujkhptnfifyef`). This unblocks the Vite client immediately.
+2. **Update `src/routes/index.tsx` hero section**
+   - Replace the current stacked layout (small logo + "Unfold the joy of assessing" headline + subheadline) with the new banner image as the dominant hero visual.
+   - Render the banner full-width inside the existing `max-w-6xl` container, with rounded corners and a subtle border to match the card aesthetic.
+   - Remove the now-redundant small `<img src={logo}>` and the `<h1>Unfold the joy of assessing</h1>` (the banner already contains both the logo and the tagline).
+   - Keep: the "Human-in-the-loop AI for Singapore educators" chip (above the banner), the supporting paragraph (below the banner), the two CTAs ("Start setting" / "The story behind the name"), and the fine-print line.
+   - Add proper `alt` text and `loading="eager"` + `fetchpriority="high"` for LCP.
 
-2. **Verify `.gitignore`** already excludes nothing problematic (confirmed: `.env` is NOT listed, so once regenerated it will sync to GitHub on the next push — that's what you want for a Lovable-managed env).
+3. **Metadata** — no changes needed; existing `head()` title/description still apply.
 
-3. **Confirm the preview boots** — the `Failed to fetch dynamically imported module` error should disappear once the Supabase client stops throwing at import time.
-
-4. **No code changes needed** to `client.ts`, `router.tsx`, or any route file — the app code is fine. This is purely an env restoration.
-
-## What I will NOT do
-
-- Touch `src/integrations/supabase/client.ts` (auto-generated)
-- Touch `src/integrations/supabase/types.ts` (auto-generated)
-- Hardcode keys into source files
-- Modify Vite config, CORS, or auth settings
-- Change `.gitignore` (current setup is correct for Lovable Cloud)
-
-## After approval
-
-Once you approve, I'll switch to build mode, write the `.env` file, and you should be able to refresh the preview and continue building. If the error persists after that, the next step is checking Lovable Cloud project health (`cloud_status`) — but the env restore should resolve it.
+## Out of scope
+- No changes to `AppHeader` logo, other routes, or the rest of the page sections (Swan story, Philosophy, Pillars, Close).
