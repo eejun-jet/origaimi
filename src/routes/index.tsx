@@ -11,7 +11,7 @@ import {
   Eye,
   Waves,
 } from "lucide-react";
-import logo from "@/assets/origaimi-logo.png";
+import heroBanner from "@/assets/hero-banner.jpg";
 
 export const Route = createFileRoute("/")({
   component: Landing,
@@ -41,21 +41,25 @@ function Landing() {
       <main>
         {/* HERO */}
         <section className="relative overflow-hidden">
-          <div className="mx-auto max-w-6xl px-4 pb-20 pt-16 sm:px-6 sm:pt-24">
+          <div className="mx-auto max-w-6xl px-4 pb-20 pt-12 sm:px-6 sm:pt-16">
             <div className="mx-auto max-w-3xl text-center">
-              <img
-                src={logo}
-                alt="origAImi"
-                className="mx-auto h-24 w-auto sm:h-28"
-              />
-              <div className="mt-8 inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground">
+              <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground">
                 <Sparkles className="h-3.5 w-3.5 text-primary" />
                 Human-in-the-loop AI for Singapore educators
               </div>
-              <h1 className="mt-6 font-paper text-4xl font-semibold leading-tight tracking-tight text-foreground sm:text-6xl">
-                Unfold the joy of <span className="text-primary">assessing</span>
-              </h1>
-              <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
+            </div>
+            <h1 className="sr-only">origAImi — Unfold the Joy of Assessing</h1>
+            <div className="mx-auto mt-8 max-w-5xl overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+              <img
+                src={heroBanner}
+                alt="origAImi — Unfold the Joy of Assessing, with an origami swan"
+                className="h-auto w-full"
+                loading="eager"
+                fetchPriority="high"
+              />
+            </div>
+            <div className="mx-auto max-w-3xl text-center">
+              <p className="mx-auto mt-8 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
                 AI does the paddling. You set the course. origAImi takes over the heavy
                 lifting of assessment design — so educators can focus on what only they
                 can do.
