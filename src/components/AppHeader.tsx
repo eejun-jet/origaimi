@@ -1,13 +1,13 @@
 import { Link } from "@tanstack/react-router";
-import logo from "@/assets/origaimi-logo.png";
+import logo from "@/assets/hero-banner.jpg";
 
 export function AppHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6">
         <Link to="/" className="flex items-center gap-2 font-semibold tracking-tight">
-          <img src={logo} alt="origAImi" className="h-7 w-7 object-contain" />
-          <span>orig<span className="text-primary">AI</span>mi</span>
+          <img src={logo} alt="origAImi" className="h-9 object-contain" />
+          <span className="sr-only">orig<span className="text-primary">AI</span>mi</span>
         </Link>
         <nav className="flex items-center gap-4">
           <Link

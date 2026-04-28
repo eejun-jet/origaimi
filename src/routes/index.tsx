@@ -49,7 +49,7 @@ function Landing() {
               </div>
             </div>
             <h1 className="sr-only">origAImi — Unfold the Joy of Assessing</h1>
-            <div className="mx-auto mt-8 max-w-5xl overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+            <div className="mx-auto mt-8 max-w-3xl overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
               <img
                 src={heroBanner}
                 alt="origAImi — Unfold the Joy of Assessing, with an origami swan"
