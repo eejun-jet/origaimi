@@ -166,7 +166,7 @@ function Landing() {
             <div className="mt-14 grid gap-6 md:grid-cols-2">
               <Pillar
                 icon={<Wand2 className="h-5 w-5" />}
-                title="Effortless Generation"
+                title="Intentional Generation"
                 body="Usable, high-quality questions — diagrams included — from simple guided prompts."
               />
               <Pillar
