@@ -78,7 +78,7 @@ function Landing() {
                 </a>
               </div>
               <p className="mt-6 text-xs text-muted-foreground">
-                MOE-aligned · P1–Sec 4
+                ​
               </p>
             </div>
           </div>
