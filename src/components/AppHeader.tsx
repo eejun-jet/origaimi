@@ -38,9 +38,6 @@ export function AppHeader() {
           >
             Syllabi
           </Link>
-          <span className="hidden rounded-full border border-primary/30 bg-primary-soft px-2 py-0.5 text-xs text-primary sm:inline-block">
-            Free trial
-          </span>
         </nav>
       </div>
     </header>
