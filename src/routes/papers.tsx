@@ -9,8 +9,10 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SUBJECTS, LEVELS } from "@/lib/syllabus";
-import { Loader2, Upload, FileText, Trash2, RefreshCw } from "lucide-react";
+import { Loader2, Upload, FileText, Trash2, RefreshCw, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import { useNavigate } from "@tanstack/react-router";
+import { analysePastPaper } from "@/lib/analyse-past-paper";
 
 export const Route = createFileRoute("/papers")({
   component: PapersPage,
