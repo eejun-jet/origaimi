@@ -2076,6 +2076,69 @@ function CoveragePanel({
   const [loView, setLoView] = useState<"overview" | "map" | "list">(isScience ? "overview" : "list");
   const topicsMap = useMemo(() => buildTopicsMap(paper.los, sections), [paper.los, sections]);
 
+  // ── Coverage Explorer (full-screen KO → LO drill-down) ──
+  const [explorerOpen, setExplorerOpen] = useState(false);
+  const [explorerKO, setExplorerKO] = useState<string | null>(null);
+  const [explorerFilter, setExplorerFilter] = useState<"all" | OverviewStatus>("all");
+
+  // Build KO → list of LOs (with per-LO covered/actual) using questions as the
+  // source of truth. Falls back to an "Unassigned" bucket for orphan LOs.
+  const koLoGroups = useMemo(() => {
+    const loStat = new Map(paper.los.map((l) => [l.text, l] as const));
+    const koMap = new Map<string, Map<string, { covered: boolean; actual: number }>>();
+    // Seed with all KOs (even if no questions tagged yet)
+    for (const k of paper.kos) koMap.set(k.name, new Map());
+    for (const q of questions) {
+      const kos = q.knowledge_outcomes ?? [];
+      const los = q.learning_outcomes ?? [];
+      for (const ko of kos) {
+        if (!koMap.has(ko)) koMap.set(ko, new Map());
+        const bucket = koMap.get(ko)!;
+        for (const lo of los) {
+          const stat = loStat.get(lo);
+          if (!stat) continue;
+          if (!bucket.has(lo)) bucket.set(lo, { covered: stat.covered, actual: stat.actual });
+        }
+      }
+    }
+    // Orphan LOs (in paper rollup but never grouped under a KO)
+    const grouped = new Set<string>();
+    koMap.forEach((b) => b.forEach((_, lo) => grouped.add(lo)));
+    const orphans = paper.los.filter((l) => !grouped.has(l.text));
+    if (orphans.length > 0) {
+      const bucket = new Map<string, { covered: boolean; actual: number }>();
+      for (const l of orphans) bucket.set(l.text, { covered: l.covered, actual: l.actual });
+      koMap.set("Unassigned", bucket);
+    }
+    // Materialise & enrich with marks from paper.kos
+    const koMarks = new Map(paper.kos.map((k) => [k.name, k] as const));
+    return Array.from(koMap.entries()).map(([name, bucket]) => {
+      const los = Array.from(bucket.entries()).map(([text, v]) => ({ text, ...v }));
+      const covered = los.filter((l) => l.covered).length;
+      const marks = koMarks.get(name);
+      const status: OverviewStatus = classifyTopic(los);
+      return {
+        name,
+        los,
+        coveredLOs: covered,
+        totalLOs: los.length,
+        actualMarks: marks?.actual ?? los.reduce((s, l) => s + l.actual, 0),
+        targetMarks: marks?.target ?? 0,
+        status,
+      };
+    }).sort((a, b) => {
+      const ai = STATUS_META[a.status].sortKey;
+      const bi = STATUS_META[b.status].sortKey;
+      if (ai !== bi) return ai - bi;
+      return a.name.localeCompare(b.name);
+    });
+  }, [paper.kos, paper.los, questions]);
+
+  const visibleKOs = explorerFilter === "all"
+    ? koLoGroups
+    : koLoGroups.filter((g) => g.status === explorerFilter);
+  const selectedKO = explorerKO ? koLoGroups.find((g) => g.name === explorerKO) ?? null : null;
+
   // Map coverage comments by target_key for fast lookup
   const remarkCount = (kind: "ao" | "ko" | "lo", value: string) => {
     const key = coverageKey(kind, value);
