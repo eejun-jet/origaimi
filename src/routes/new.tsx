@@ -1169,6 +1169,8 @@ type SectionCardProps = {
   globalAoCodes: string[];
   globalKos: string[];
   globalLos: string[];
+  specimenMix?: DifficultyMix | null;
+  specimenLabel?: string;
   onUpdate: (patch: Partial<Section>) => void;
   onRemove: () => void;
   onMove: (dir: -1 | 1) => void;
@@ -1177,6 +1179,7 @@ type SectionCardProps = {
 function SectionCard({
   section, isFirst, isLast, masterPool, visibleQuestionTypes, subject,
   allAOs, globalAoCodes, globalKos, globalLos,
+  specimenMix, specimenLabel,
   onUpdate, onRemove, onMove,
 }: SectionCardProps) {
   const [customLo, setCustomLo] = useState("");
