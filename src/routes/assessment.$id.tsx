@@ -2246,10 +2246,26 @@ function CoveragePanel({
 
       {/* AO Coverage */}
       <div className="rounded-xl border border-border bg-card p-5">
-        <h3 className="font-medium">AO Coverage</h3>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Marks per Assessment Objective {paper.aos.some((a) => a.weighting != null) ? "(targets from syllabus weightings)" : ""}
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="font-medium">AO Coverage</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Marks per Assessment Objective {paper.aos.some((a) => a.weighting != null) ? "(targets from syllabus weightings)" : ""}
+            </p>
+          </div>
+          {onRetag && questions.length > 0 && (
+            <button
+              type="button"
+              onClick={() => onRetag()}
+              disabled={retagBusy}
+              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-[10px] font-medium text-foreground transition hover:bg-muted disabled:opacity-50"
+              title="Re-tag every question with AI based on its stem and the section's allowed AOs / KOs / LOs"
+            >
+              {retagBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+              Re-tag with AI
+            </button>
+          )}
+        </div>
         <p className="mt-1 text-[10px] text-muted-foreground">Click any row for detail and to leave a remark.</p>
         <div className="mt-3 space-y-2.5">
           {paper.aos.length === 0 && (
