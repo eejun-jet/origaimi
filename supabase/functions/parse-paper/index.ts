@@ -333,12 +333,32 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Compute the difficulty fingerprint so the Coach + Builder can compare
+    // future generated papers against this specimen / past paper.
+    const fingerprintQuestions: FingerprintQuestion[] = questions.map((q) => {
+      const cls = classifications[q.number];
+      return {
+        marks: q.marks ?? null,
+        command_word: q.command_word ?? null,
+        stem: q.stem ?? null,
+        bloom_level: cls?.bloom_level ?? null,
+        ao_codes: cls?.ao_codes ?? [],
+        sub_parts: q.sub_parts ?? null,
+      };
+    });
+    const difficultyFingerprint = computeFingerprint(fingerprintQuestions, {
+      title: (paper as { title: string }).title,
+      notes: (paper as { notes?: string | null }).notes ?? null,
+      paper_number: paperNumber,
+    });
+
     await supabase.from("past_papers").update({
       parse_status: "ready",
       page_count: pageCount,
       topics: topicsOverall,
       questions_json: questions,
       style_summary: styleSummary,
+      difficulty_fingerprint: difficultyFingerprint,
     }).eq("id", paperId);
 
     return new Response(JSON.stringify({
