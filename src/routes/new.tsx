@@ -577,8 +577,8 @@ function NewAssessment() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <Label className="flex items-center gap-2">
-                    <BookOpen className="h-3.5 w-3.5" /> Syllabus
+                  <Label>
+                    Syllabus
                   </Label>
                   <Select value={selectedPaperKey} onValueChange={setSelectedPaperKey}>
                     <SelectTrigger>
