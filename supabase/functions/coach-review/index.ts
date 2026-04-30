@@ -216,7 +216,6 @@ Deno.serve(async (req) => {
         position: q.position,
         type: q.question_type,
         topic: q.topic,
-        bloom: q.bloom_level,
         difficulty: q.difficulty,
         marks: q.marks,
         stem: typeof q.stem === "string" ? q.stem.slice(0, 1200) : "",
