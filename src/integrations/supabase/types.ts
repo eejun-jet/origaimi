@@ -332,6 +332,7 @@ export type Database = {
       past_papers: {
         Row: {
           created_at: string
+          difficulty_fingerprint: Json | null
           exam_board: string | null
           file_path: string
           id: string
@@ -353,6 +354,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          difficulty_fingerprint?: Json | null
           exam_board?: string | null
           file_path: string
           id?: string
@@ -374,6 +376,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          difficulty_fingerprint?: Json | null
           exam_board?: string | null
           file_path?: string
           id?: string
