@@ -788,6 +788,7 @@ function Stepper({ step }: { step: number }) {
   const labels = ["Basics", "Assessment Builder", "Special Instructions", "Generate"];
   return (
     <div className="w-full">
+      {/* Row of circles + connectors */}
       <div className="flex items-center">
         {labels.map((l, i) => {
           const n = i + 1;
@@ -796,29 +797,48 @@ function Stepper({ step }: { step: number }) {
           const isLast = n === labels.length;
           return (
             <div key={l} className="flex flex-1 items-center last:flex-none">
-              <div className="flex flex-col items-center gap-2 shrink-0">
-                <div
-                  className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold transition-colors ${
-                    active
-                      ? "bg-primary text-primary-foreground ring-4 ring-primary/15"
-                      : done
-                      ? "bg-success text-success-foreground"
-                      : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  {done ? "✓" : n}
-                </div>
-                <span
-                  className={`hidden text-center text-xs sm:block ${
-                    active ? "text-foreground font-medium" : "text-muted-foreground"
-                  }`}
-                >
-                  {l}
-                </span>
+              <div
+                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-colors ${
+                  active
+                    ? "bg-primary text-primary-foreground ring-4 ring-primary/15"
+                    : done
+                    ? "bg-success text-success-foreground"
+                    : "bg-muted text-muted-foreground"
+                }`}
+              >
+                {done ? "✓" : n}
               </div>
               {!isLast && (
-                <div className="mx-3 mb-6 h-px flex-1 bg-border sm:mx-4" />
+                <div
+                  className={`mx-2 h-px flex-1 transition-colors sm:mx-3 ${
+                    done ? "bg-success/60" : "bg-border"
+                  }`}
+                />
               )}
+            </div>
+          );
+        })}
+      </div>
+      {/* Row of labels aligned under each circle */}
+      <div className="mt-2 hidden sm:flex">
+        {labels.map((l, i) => {
+          const n = i + 1;
+          const active = n === step;
+          const isLast = n === labels.length;
+          return (
+            <div
+              key={l}
+              className={`flex items-start ${isLast ? "" : "flex-1"}`}
+            >
+              <span
+                className={`w-8 shrink-0 text-center text-[11px] leading-tight ${
+                  active ? "text-foreground font-medium" : "text-muted-foreground"
+                }`}
+                style={{ marginLeft: "-6px", marginRight: "-6px", minWidth: "5rem" }}
+              >
+                {l}
+              </span>
+              {!isLast && <div className="mx-2 flex-1 sm:mx-3" />}
             </div>
           );
         })}
