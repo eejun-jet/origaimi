@@ -2086,6 +2086,95 @@ function RemarkPill({ count }: { count: number }) {
   );
 }
 
+// ── Card-level collapse state, persisted per assessment in localStorage ─────
+type CardKey = "ao" | "ko" | "lo" | "sections";
+type CardCollapseAPI = {
+  isOpen: (k: CardKey) => boolean;
+  toggle: (k: CardKey) => void;
+  set: (k: CardKey, v: boolean) => void;
+};
+function useCardCollapseState(assessmentId: string, defaults: Record<CardKey, boolean>): CardCollapseAPI {
+  const storageKey = `origaimi.coverage.collapsed.${assessmentId}`;
+  const [state, setState] = useState<Record<CardKey, boolean>>(defaults);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") {
+          setState((prev) => ({ ...prev, ...parsed }));
+        }
+      }
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey]);
+  const persist = (next: Record<CardKey, boolean>) => {
+    setState(next);
+    try { window.localStorage.setItem(storageKey, JSON.stringify(next)); } catch { /* ignore */ }
+  };
+  return {
+    isOpen: (k) => state[k],
+    toggle: (k) => persist({ ...state, [k]: !state[k] }),
+    set: (k, v) => persist({ ...state, [k]: v }),
+  };
+}
+
+// Collapsible card shell with a header trigger row + chevron.
+function CollapsibleCard({
+  open,
+  onOpenChange,
+  title,
+  description,
+  summary,
+  actions,
+  children,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  title: React.ReactNode;
+  description?: React.ReactNode;
+  summary?: React.ReactNode;
+  actions?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-card">
+      <Collapsible open={open} onOpenChange={onOpenChange}>
+        <div className="flex items-start gap-2 p-5">
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="group flex flex-1 items-start gap-2 text-left"
+              aria-label={open ? "Collapse" : "Expand"}
+            >
+              <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
+              <div className="min-w-0 flex-1">
+                <h3 className="font-medium">{title}</h3>
+                {description && <p className="mt-1 text-xs text-muted-foreground">{description}</p>}
+                {!open && summary && (
+                  <p className="mt-1 text-[11px] text-muted-foreground">{summary}</p>
+                )}
+              </div>
+            </button>
+          </CollapsibleTrigger>
+          {actions && (
+            <div
+              className="flex shrink-0 items-center gap-1.5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {actions}
+            </div>
+          )}
+        </div>
+        <CollapsibleContent className="px-5 pb-5">
+          {children}
+        </CollapsibleContent>
+      </Collapsible>
+    </div>
+  );
+}
+
 function CoveragePanel({
   assessmentId,
   coverage, totalMarks, totalActual, questions, comments, identity, subject, sections,
