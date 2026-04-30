@@ -13,7 +13,7 @@ import { SUBJECTS, LEVELS } from "@/lib/syllabus";
 
 export const Route = createFileRoute("/dashboard")({
   component: Dashboard,
-  head: () => ({ meta: [{ title: "My Assessments · origAImi" }] }),
+  head: () => ({ meta: [{ title: "Assessments · origAImi" }] }),
 });
 
 type Assessment = {
