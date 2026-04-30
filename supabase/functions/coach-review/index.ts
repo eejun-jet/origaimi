@@ -49,21 +49,6 @@ const COACH_TOOL = {
           required: ["kos", "los", "note"],
           additionalProperties: false,
         },
-        bloom_curve: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              section_letter: { type: "string" },
-              expected_progression: { type: "string" },
-              observed_progression: { type: "string" },
-              severity: { type: "string", enum: ["info", "warn", "fail"] },
-              note: { type: "string" },
-            },
-            required: ["section_letter", "severity", "note"],
-            additionalProperties: false,
-          },
-        },
         source_fit_issues: {
           type: "array",
           items: {
