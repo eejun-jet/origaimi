@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -280,10 +280,13 @@ function PaperCard({
 }) {
   const [busy, setBusy] = useState(false);
   const remove = async () => {
-    if (!confirm(`Delete "${paper.title}"?`)) return;
+    if (!confirm(`Delete "${paper.title}"? This will also remove its extracted bank items.`)) return;
     setBusy(true);
+    // Cascade: remove bank items, diagrams, then the paper itself.
+    await supabase.from("question_bank_items").delete().eq("past_paper_id", paper.id);
+    await supabase.from("past_paper_diagrams").delete().eq("paper_id", paper.id);
     await supabase.from("past_papers").delete().eq("id", paper.id);
-    toast.success("Paper deleted");
+    toast.success("Paper and bank items deleted");
     onChanged();
   };
   const reparse = async () => {

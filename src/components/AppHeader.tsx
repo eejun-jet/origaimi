@@ -22,7 +22,7 @@ export function AppHeader() {
             className="text-sm text-muted-foreground hover:text-foreground"
             activeProps={{ className: "text-foreground font-medium" }}
           >
-            Inspiration
+            Bank
           </Link>
           <Link
             to="/papers"
