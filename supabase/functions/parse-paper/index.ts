@@ -1,10 +1,15 @@
 // Parse an uploaded past paper PDF: extract per-page text, detect figures with captions,
-// AND extract verbatim question stems + a style summary so the generator can anchor
+// extract verbatim question stems + a style summary so the generator can anchor
 // future assessments on the paper's tone, command-words, and difficulty.
 //
 // We also crop each detected figure into a real PNG (via Lovable AI vision-edit mode)
 // and store it in the public `diagrams` bucket so the generator can reuse the image
 // directly instead of pointing at the source PDF.
+//
+// NEW: After extraction we fan each question (and substantive sub-part) out into
+// `question_bank_items` rows tagged with subject/level/year/paper, source excerpt,
+// attached diagrams, command word, marks, and — if a matching syllabus_documents
+// row is found — Knowledge Outcome / Learning Outcome / Assessment Objective codes.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.0";
@@ -17,12 +22,12 @@ const corsHeaders = {
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 
 const SYSTEM_PROMPT = `You are an exam-paper analyst. Given the rendered pages of a past exam paper PDF, extract:
-1) Figures present on each page (caption verbatim if printed; topic_tags from question context).
-2) Every numbered question with its verbatim stem, command word, marks, and sub-parts.
-3) A short (2-3 sentence) "style_summary" describing the paper's tone, command-word patterns,
-   structural format (e.g. source-based, structured (a)(b)(c), MCQ + short answer, essay), and difficulty norms.
-4) Overall topic tags.
-Return ONLY via the save_paper_index tool.`;
+1) Figures present on each page (caption verbatim if printed; topic_tags from question context, plus a concise figure_description so it can be re-rendered).
+2) Every numbered question with its verbatim stem, command word, marks, sub-parts, AND any stimulus/source material attached to it (passage, data table, source A/B excerpts, equations) as source_excerpt.
+3) For each question, list which figure indices (0-based, order matches the figures array) it visually depends on, in figure_refs.
+4) A short (2-3 sentence) "style_summary" describing the paper's tone, command-word patterns, structural format, and difficulty norms.
+5) Overall topic tags.
+Return ONLY via the save_paper_index tool. Be exhaustive on questions and sub-parts. For each (a)(b)(i)(ii) sub-part include its own marks and stem.`;
 
 const TOOL = {
   type: "function",
@@ -58,9 +63,23 @@ const TOOL = {
             properties: {
               number: { type: "string", description: "e.g. '1', '2', '3a' as printed." },
               page: { type: "integer", minimum: 1 },
-              command_word: { type: "string", description: "e.g. Explain, Compare, To what extent, How far do you agree." },
+              command_word: { type: "string", description: "e.g. Explain, Compare, Calculate, Describe." },
               marks: { type: "integer", minimum: 0 },
-              stem: { type: "string", description: "Verbatim question stem (no paraphrasing). For source-based questions, include the prompt around sources but NOT the source text itself." },
+              question_type: {
+                type: "string",
+                enum: ["mcq", "structured", "essay", "source_based", "data_response", "short_answer", "practical"],
+              },
+              stem: { type: "string", description: "Verbatim question stem (no paraphrasing)." },
+              source_excerpt: {
+                type: "string",
+                description: "Verbatim stimulus / source / passage / data block attached to this question, if any. Empty string if none.",
+              },
+              figure_refs: {
+                type: "array",
+                items: { type: "integer", minimum: 0 },
+                description: "0-based indices into the figures array for figures this question references.",
+              },
+              difficulty_hint: { type: "string", enum: ["easy", "medium", "hard"] },
               sub_parts: {
                 type: "array",
                 items: {
@@ -69,6 +88,7 @@ const TOOL = {
                     label: { type: "string", description: "e.g. 'a', 'b', 'i', 'ii'." },
                     text: { type: "string" },
                     marks: { type: "integer", minimum: 0 },
+                    command_word: { type: "string" },
                   },
                   required: ["label", "text"],
                   additionalProperties: false,
@@ -89,6 +109,26 @@ const TOOL = {
       additionalProperties: false,
     },
   },
+};
+
+type ExtractedSubPart = { label: string; text: string; marks?: number; command_word?: string };
+type ExtractedQuestion = {
+  number: string;
+  page: number;
+  command_word?: string;
+  marks?: number;
+  question_type?: string;
+  stem: string;
+  source_excerpt?: string;
+  figure_refs?: number[];
+  difficulty_hint?: string;
+  sub_parts?: ExtractedSubPart[];
+};
+type ExtractedFigure = {
+  page_number: number;
+  caption: string;
+  topic_tags: string[];
+  figure_description?: string;
 };
 
 Deno.serve(async (req) => {
@@ -140,7 +180,7 @@ Deno.serve(async (req) => {
           {
             role: "user",
             content: [
-              { type: "text", text: `Index this past paper. Title: ${(paper as { title: string }).title}. Subject: ${(paper as { subject: string | null }).subject ?? "unknown"}. Level: ${(paper as { level: string | null }).level ?? "unknown"}. Identify every figure (with a concise visual description so it can be re-rendered), every numbered question (verbatim), and produce a style_summary.` },
+              { type: "text", text: `Index this past paper. Title: ${(paper as { title: string }).title}. Subject: ${(paper as { subject: string | null }).subject ?? "unknown"}. Level: ${(paper as { level: string | null }).level ?? "unknown"}. Identify every figure (with concise visual description), every numbered question and sub-part (verbatim, with marks, command word, source_excerpt if any, figure_refs), and produce a style_summary.` },
               { type: "file", file: { filename: "paper.pdf", file_data: `data:application/pdf;base64,${b64}` } },
             ],
           },
@@ -173,36 +213,39 @@ Deno.serve(async (req) => {
 
     const args = JSON.parse(toolCall.function.arguments);
     const pageCount: number = args.page_count ?? 0;
-    const figures: Array<{ page_number: number; caption: string; topic_tags: string[]; figure_description?: string }> = args.figures ?? [];
-    const questions: unknown[] = Array.isArray(args.questions) ? args.questions : [];
+    const figures: ExtractedFigure[] = args.figures ?? [];
+    const questions: ExtractedQuestion[] = Array.isArray(args.questions) ? args.questions : [];
     const styleSummary: string | null = typeof args.style_summary === "string" ? args.style_summary : null;
     const topicsOverall: string[] = args.topics_overall ?? [];
     const subjectName = (paper as { subject: string | null }).subject ?? "";
     const levelName = (paper as { level: string | null }).level ?? "";
+    const examBoard = (paper as { exam_board: string | null }).exam_board ?? null;
+    const paperYear = (paper as { year: number | null }).year ?? null;
+    const paperNumber = (paper as { paper_number: string | null }).paper_number ?? null;
+
+    // Map figureIndex -> uploaded image_path so we can attach to questions later.
+    const figureIndexToPath: Record<number, string> = {};
 
     if (figures.length > 0) {
       // Replace existing diagram rows for this paper to keep things idempotent on re-parse.
       await supabase.from("past_paper_diagrams").delete().eq("paper_id", paperId);
 
-      // Render each detected figure as a clean B&W PNG via Lovable AI image generation
-      // (Worker runtime cannot run native PDF renderers / image libs, so we ask the
-      // image model to produce a faithful re-rendering keyed off the figure description
-      // + caption + topic context). Then upload to the public diagrams bucket.
       const rows: Array<{
         paper_id: string; page_number: number; image_path: string;
         caption: string; topic_tags: string[]; bbox: null;
       }> = [];
 
-      for (const f of figures) {
+      for (let i = 0; i < figures.length; i++) {
+        const f = figures[i];
         const imageKey = await renderAndUploadFigure({
           supabase, paperId, figure: f, subject: subjectName, level: levelName,
         });
+        const finalPath = imageKey ?? `papers/${filePath}`;
+        figureIndexToPath[i] = finalPath;
         rows.push({
           paper_id: paperId,
           page_number: f.page_number,
-          // If rendering failed, fall back to PDF reference (legacy behaviour) so we
-          // at least keep the metadata for retrieval ranking.
-          image_path: imageKey ?? `papers/${filePath}`,
+          image_path: finalPath,
           caption: f.caption,
           topic_tags: f.topic_tags,
           bbox: null,
@@ -210,6 +253,82 @@ Deno.serve(async (req) => {
       }
       if (rows.length > 0) {
         await supabase.from("past_paper_diagrams").insert(rows);
+      }
+    }
+
+    // Try to classify questions against a matching syllabus document.
+    const { data: syllabusDoc } = await supabase
+      .from("syllabus_documents")
+      .select("id")
+      .eq("subject", subjectName)
+      .eq("level", levelName)
+      .eq("parse_status", "ready")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const syllabusDocId: string | null = (syllabusDoc as { id: string } | null)?.id ?? null;
+    let classifications: Record<string, ClassifyResult> = {};
+
+    if (syllabusDocId && questions.length > 0) {
+      try {
+        const { data: topics } = await supabase
+          .from("syllabus_topics")
+          .select("topic_code, title, learning_outcome_code, learning_outcomes, ao_codes, outcome_categories")
+          .eq("source_doc_id", syllabusDocId)
+          .limit(500);
+
+        const topicCatalogue = ((topics as SyllabusTopicRow[]) ?? []).map((t) => ({
+          topic_code: t.topic_code ?? "",
+          title: t.title ?? "",
+          learning_outcome_code: t.learning_outcome_code ?? "",
+          learning_outcomes: t.learning_outcomes ?? [],
+          ao_codes: t.ao_codes ?? [],
+          knowledge_outcomes: t.outcome_categories ?? [],
+        }));
+
+        if (topicCatalogue.length > 0) {
+          classifications = await classifyQuestions(questions, topicCatalogue, subjectName, levelName);
+        }
+      } catch (e) {
+        console.warn("[parse-paper] classifier failed", e);
+      }
+    }
+
+    // Fan questions out into question_bank_items (idempotent for this paper).
+    await supabase
+      .from("question_bank_items")
+      .delete()
+      .eq("past_paper_id", paperId);
+
+    const bankRows = buildBankRows({
+      questions,
+      paper: paper as PaperShape,
+      figureIndexToPath,
+      classifications,
+      syllabusDocId,
+      topicsOverall,
+      subjectName,
+      levelName,
+      examBoard,
+      paperYear,
+      paperNumber,
+    });
+
+    let bankInserted = 0;
+    if (bankRows.length > 0) {
+      // Insert in chunks to stay well under any row limit.
+      const CHUNK = 100;
+      for (let i = 0; i < bankRows.length; i += CHUNK) {
+        const slice = bankRows.slice(i, i + CHUNK);
+        const { error: bErr, count } = await supabase
+          .from("question_bank_items")
+          .insert(slice, { count: "exact" });
+        if (bErr) {
+          console.warn("[parse-paper] bank insert error", bErr);
+        } else {
+          bankInserted += count ?? slice.length;
+        }
       }
     }
 
@@ -226,7 +345,10 @@ Deno.serve(async (req) => {
       figures: figures.length,
       pages: pageCount,
       questions: questions.length,
+      bankItems: bankInserted,
+      classified: Object.keys(classifications).length,
       hasStyleSummary: Boolean(styleSummary),
+      syllabusDocId,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
@@ -237,6 +359,240 @@ Deno.serve(async (req) => {
     });
   }
 });
+
+// ---------- helpers ----------
+
+type SyllabusTopicRow = {
+  topic_code: string | null;
+  title: string | null;
+  learning_outcome_code: string | null;
+  learning_outcomes: string[] | null;
+  ao_codes: string[] | null;
+  outcome_categories: string[] | null;
+};
+
+type TopicCatalogueEntry = {
+  topic_code: string;
+  title: string;
+  learning_outcome_code: string;
+  learning_outcomes: string[];
+  ao_codes: string[];
+  knowledge_outcomes: string[];
+};
+
+type ClassifyResult = {
+  topic_code: string;
+  learning_outcomes: string[];
+  knowledge_outcomes: string[];
+  ao_codes: string[];
+  bloom_level: string | null;
+};
+
+type PaperShape = { id: string; user_id: string; title: string };
+
+async function classifyQuestions(
+  questions: ExtractedQuestion[],
+  catalogue: TopicCatalogueEntry[],
+  subject: string,
+  level: string,
+): Promise<Record<string, ClassifyResult>> {
+  // Compact catalogue for the prompt — keep sizes manageable.
+  const catalogueText = catalogue.slice(0, 200).map((t, i) =>
+    `[${i}] code=${t.topic_code} title="${t.title}" LO_code=${t.learning_outcome_code} LOs=${(t.learning_outcomes ?? []).slice(0, 6).join("|")} AOs=${(t.ao_codes ?? []).join(",")} KOs=${(t.knowledge_outcomes ?? []).slice(0, 4).join("|")}`,
+  ).join("\n");
+
+  const items = questions.map((q) => ({
+    number: q.number,
+    stem: (q.stem ?? "").slice(0, 800),
+    sub_parts: (q.sub_parts ?? []).slice(0, 8).map((s) => ({ label: s.label, text: (s.text ?? "").slice(0, 400) })),
+    command_word: q.command_word ?? null,
+    marks: q.marks ?? null,
+  }));
+
+  const TOOL_CLASSIFY = {
+    type: "function",
+    function: {
+      name: "save_classifications",
+      description: "Map each question to syllabus topic_code, learning_outcomes, knowledge_outcomes, ao_codes, bloom_level.",
+      parameters: {
+        type: "object",
+        properties: {
+          mappings: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                question_number: { type: "string" },
+                topic_code: { type: "string" },
+                learning_outcomes: { type: "array", items: { type: "string" } },
+                knowledge_outcomes: { type: "array", items: { type: "string" } },
+                ao_codes: { type: "array", items: { type: "string" } },
+                bloom_level: {
+                  type: "string",
+                  enum: ["remember", "understand", "apply", "analyze", "evaluate", "create"],
+                },
+              },
+              required: ["question_number"],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["mappings"],
+        additionalProperties: false,
+      },
+    },
+  };
+
+  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash",
+      messages: [
+        {
+          role: "system",
+          content: `You map past-paper exam questions to a syllabus catalogue. For each question pick exactly one topic_code from the catalogue, then list the specific learning_outcomes, knowledge_outcomes (high-level outcome categories), and ao_codes (assessment objectives) it tests. Add a Bloom level. Use exact codes/strings from the catalogue. Subject: ${subject}. Level: ${level}.`,
+        },
+        {
+          role: "user",
+          content: `CATALOGUE:\n${catalogueText}\n\nQUESTIONS:\n${JSON.stringify(items)}`,
+        },
+      ],
+      tools: [TOOL_CLASSIFY],
+      tool_choice: { type: "function", function: { name: "save_classifications" } },
+    }),
+  });
+
+  if (!resp.ok) {
+    console.warn("[classify] AI failed", resp.status, (await resp.text()).slice(0, 200));
+    return {};
+  }
+  const json = await resp.json();
+  const tc = json.choices?.[0]?.message?.tool_calls?.[0];
+  if (!tc) return {};
+  let parsed: { mappings?: Array<Partial<ClassifyResult> & { question_number?: string }> } = {};
+  try { parsed = JSON.parse(tc.function.arguments); } catch { return {}; }
+  const out: Record<string, ClassifyResult> = {};
+  for (const m of parsed.mappings ?? []) {
+    if (!m.question_number) continue;
+    out[m.question_number] = {
+      topic_code: m.topic_code ?? "",
+      learning_outcomes: Array.isArray(m.learning_outcomes) ? m.learning_outcomes : [],
+      knowledge_outcomes: Array.isArray(m.knowledge_outcomes) ? m.knowledge_outcomes : [],
+      ao_codes: Array.isArray(m.ao_codes) ? m.ao_codes : [],
+      bloom_level: typeof m.bloom_level === "string" ? m.bloom_level : null,
+    };
+  }
+  return out;
+}
+
+function buildBankRows(opts: {
+  questions: ExtractedQuestion[];
+  paper: PaperShape;
+  figureIndexToPath: Record<number, string>;
+  classifications: Record<string, ClassifyResult>;
+  syllabusDocId: string | null;
+  topicsOverall: string[];
+  subjectName: string;
+  levelName: string;
+  examBoard: string | null;
+  paperYear: number | null;
+  paperNumber: string | null;
+}): Array<Record<string, unknown>> {
+  const rows: Array<Record<string, unknown>> = [];
+  const fallbackTopic = (opts.topicsOverall ?? [])[0] ?? null;
+
+  const pickQuestionType = (raw: string | undefined): string => {
+    if (!raw) return "structured";
+    const v = raw.toLowerCase();
+    if (v === "mcq" || v === "structured" || v === "essay" || v === "short_answer") return v;
+    if (v === "source_based") return "structured";
+    if (v === "data_response") return "structured";
+    if (v === "practical") return "structured";
+    return "structured";
+  };
+
+  for (const q of opts.questions) {
+    const cls = opts.classifications[q.number];
+    const figurePaths = (q.figure_refs ?? [])
+      .map((idx) => opts.figureIndexToPath[idx])
+      .filter((p): p is string => Boolean(p));
+
+    const baseTags = [
+      `paper:${opts.paper.id}`,
+      opts.paperYear ? `year:${opts.paperYear}` : null,
+      opts.paperNumber ? `paper_no:${opts.paperNumber}` : null,
+      opts.examBoard ? `board:${opts.examBoard}` : null,
+      q.command_word ? `cmd:${q.command_word.toLowerCase()}` : null,
+      q.difficulty_hint ? `diff:${q.difficulty_hint}` : null,
+    ].filter((t): t is string => Boolean(t));
+
+    // Parent question row
+    rows.push({
+      user_id: opts.paper.user_id,
+      subject: opts.subjectName || "Unknown",
+      level: opts.levelName || "Unknown",
+      topic: cls?.topic_code || fallbackTopic,
+      bloom_level: cls?.bloom_level ?? null,
+      difficulty: q.difficulty_hint ?? null,
+      question_type: pickQuestionType(q.question_type),
+      marks: q.marks ?? 0,
+      stem: q.stem,
+      answer: null,
+      mark_scheme: null,
+      source: "past_paper",
+      tags: baseTags,
+      past_paper_id: opts.paper.id,
+      question_number: q.number,
+      command_word: q.command_word ?? null,
+      source_excerpt: q.source_excerpt && q.source_excerpt.trim().length > 0 ? q.source_excerpt : null,
+      diagram_paths: figurePaths,
+      learning_outcomes: cls?.learning_outcomes ?? [],
+      knowledge_outcomes: cls?.knowledge_outcomes ?? [],
+      ao_codes: cls?.ao_codes ?? [],
+      syllabus_doc_id: opts.syllabusDocId,
+      topic_code: cls?.topic_code ?? null,
+      year: opts.paperYear,
+      paper_number: opts.paperNumber,
+      exam_board: opts.examBoard,
+    });
+
+    // Sub-part rows (only substantive ones — text length > 20 chars)
+    for (const sp of q.sub_parts ?? []) {
+      if (!sp.text || sp.text.trim().length < 20) continue;
+      rows.push({
+        user_id: opts.paper.user_id,
+        subject: opts.subjectName || "Unknown",
+        level: opts.levelName || "Unknown",
+        topic: cls?.topic_code || fallbackTopic,
+        bloom_level: cls?.bloom_level ?? null,
+        difficulty: q.difficulty_hint ?? null,
+        question_type: pickQuestionType(q.question_type),
+        marks: sp.marks ?? 0,
+        stem: sp.text,
+        answer: null,
+        mark_scheme: null,
+        source: "past_paper",
+        tags: [...baseTags, sp.command_word ? `cmd:${sp.command_word.toLowerCase()}` : null, "sub_part"].filter((t): t is string => Boolean(t)),
+        past_paper_id: opts.paper.id,
+        question_number: `${q.number}${sp.label}`,
+        command_word: sp.command_word ?? q.command_word ?? null,
+        source_excerpt: q.source_excerpt && q.source_excerpt.trim().length > 0 ? q.source_excerpt : null,
+        diagram_paths: figurePaths,
+        learning_outcomes: cls?.learning_outcomes ?? [],
+        knowledge_outcomes: cls?.knowledge_outcomes ?? [],
+        ao_codes: cls?.ao_codes ?? [],
+        syllabus_doc_id: opts.syllabusDocId,
+        topic_code: cls?.topic_code ?? null,
+        year: opts.paperYear,
+        paper_number: opts.paperNumber,
+        exam_board: opts.examBoard,
+      });
+    }
+  }
+
+  return rows;
+}
 
 async function renderAndUploadFigure(opts: {
   // deno-lint-ignore no-explicit-any
@@ -301,7 +657,6 @@ Requirements:
       console.warn("[parse-paper] figure upload failed", upload.error);
       return null;
     }
-    // Return key WITHOUT bucket prefix; resolver in diagrams.ts defaults to `diagrams` bucket.
     return key;
   } catch (e) {
     console.warn("[parse-paper] figure render exception", e);
