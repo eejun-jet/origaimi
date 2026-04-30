@@ -2371,20 +2371,20 @@ function CoveragePanel({
                 Expand
               </button>
             )}
-            {onRetag && questions.length > 0 && (
-              <button
-                type="button"
-                onClick={() => onRetag()}
-                disabled={retagBusy}
-                className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-[10px] font-medium text-foreground transition hover:bg-muted disabled:opacity-50"
-                title="Re-tag every question with AI based on its stem and the section's allowed AOs / KOs / LOs"
-              >
-                {retagBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-                Re-tag
-              </button>
-            )}
           </div>
         </div>
+        {onRetag && (
+          <button
+            type="button"
+            onClick={() => onRetag()}
+            disabled={retagBusy || questions.length === 0}
+            className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-medium text-primary transition hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-50"
+            title="Refresh LO coverage by re-tagging every question with AI based on its stem and the section's allowed AOs / KOs / LOs"
+          >
+            {retagBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            {retagBusy ? "Refreshing LO analysis…" : "Refresh LO coverage analysis"}
+          </button>
+        )}
         {paper.los.length === 0 && (
           <p className="mt-3 text-xs text-muted-foreground">No Learning Outcomes targeted.</p>
         )}
