@@ -2561,8 +2561,8 @@ function CoachPanel({
         <p className="mt-3 text-xs text-muted-foreground">Loading review history…</p>
       ) : runs.length === 0 ? (
         <p className="mt-2 text-xs text-muted-foreground">
-          Run the Coach to evaluate this paper against the AO framework, command-word
-          conventions, and outcome coverage. Each run is saved so you can compare iterations.
+          Run the Coach to evaluate this paper against the AO framework and outcome
+          coverage. Each run is saved so you can compare iterations.
         </p>
       ) : (
         <>
