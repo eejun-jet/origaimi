@@ -2051,7 +2051,7 @@ function TopicsByKOView({
   );
 }
 
-
+function TopicsMapView({
   map,
   remarkCount,
   setTarget,
