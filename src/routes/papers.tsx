@@ -350,13 +350,12 @@ function PaperCard({
           <RefreshCw className="h-3.5 w-3.5" /> Re-parse
         </Button>
         {paper.parse_status === "ready" && (
-          <Link
-            to="/bank"
-            search={{ paper: paper.id }}
+          <a
+            href={`/bank?paper=${paper.id}`}
             className="inline-flex h-8 items-center gap-1 rounded-md px-3 text-xs font-medium text-primary hover:bg-primary-soft"
           >
             View in bank
-          </Link>
+          </a>
         )}
         <Button size="sm" variant="ghost" onClick={remove} disabled={busy} className="ml-auto gap-1 text-destructive">
           <Trash2 className="h-3.5 w-3.5" /> Delete
