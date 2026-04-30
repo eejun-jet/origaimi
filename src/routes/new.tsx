@@ -236,6 +236,17 @@ function NewAssessment() {
     setTopics([]);
   }, [selectedPaperKey, subject, level, activeSection]);
 
+  // Topics step has been removed — auto-select every available topic so the
+  // section builder always has the full pool to choose from.
+  useEffect(() => {
+    if (useSyllabus) {
+      setSelectedTopicIds(selectableSyllabusTopics.map((t) => t.id));
+    } else {
+      setTopics(fallbackTopics.slice());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [useSyllabus, selectableSyllabusTopics.length, fallbackTopics.length]);
+
   // Step 2.5 — Objectives (AOs / KOs / LOs).
   // Globally chosen targets the paper must hit; each section can later narrow them.
   const [selectedAoCodes, setSelectedAoCodes] = useState<string[]>([]);
