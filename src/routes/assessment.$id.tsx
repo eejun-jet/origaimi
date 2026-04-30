@@ -2404,9 +2404,7 @@ type Severity = "info" | "warn" | "fail";
 type CoachFindings = {
   summary: string;
   ao_drift: { ao_code: string; declared_pct?: number; observed_pct: number; delta_pct?: number; severity: Severity; note: string }[];
-  command_word_issues: { question_id: string; position: number; detected_verb?: string; declared_ao?: string; expected_aos?: string[]; severity: Severity; note: string }[];
   unrealised_outcomes: { kos: string[]; los: string[]; note: string };
-  bloom_curve: { section_letter: string; expected_progression?: string; observed_progression?: string; severity: Severity; note: string }[];
   source_fit_issues: { question_id: string; position: number; required_skill?: string; source_type?: string; severity: Severity; note: string }[];
   mark_scheme_flags: { question_id: string; position: number; marks_declared: number; marks_suggested?: number; severity: Severity; note: string }[];
   suggestions: { question_id?: string; position?: number; rewrite: string; rationale: string; category: string }[];
