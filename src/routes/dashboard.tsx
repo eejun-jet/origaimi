@@ -138,7 +138,16 @@ function Dashboard() {
   );
 }
 
+const SUBJECT_ICON_STYLES: Record<string, string> = {
+  Mathematics: "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300",
+  Science: "bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-300",
+  "English Language": "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
+  "Mother Tongue": "bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300",
+  Humanities: "bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300",
+};
+
 function AssessmentCard({ a, onDelete }: { a: Assessment; onDelete: (a: Assessment) => void }) {
+  const iconStyle = SUBJECT_ICON_STYLES[a.subject] ?? "bg-primary-soft text-primary";
   return (
     <div className="group relative rounded-xl border border-border bg-card p-5 transition-all hover:border-primary/40 hover:shadow-sm">
       <Link
@@ -147,7 +156,7 @@ function AssessmentCard({ a, onDelete }: { a: Assessment; onDelete: (a: Assessme
         className="block"
       >
         <div className="flex items-start justify-between gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-soft text-primary">
+          <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${iconStyle}`} aria-label={`${a.subject} icon`}>
             <FileText className="h-5 w-5" />
           </div>
           <StatusBadge status={a.status} />
