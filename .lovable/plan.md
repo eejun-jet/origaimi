@@ -1,68 +1,88 @@
-## Problem
+## Goals
 
-The right-rail LO Coverage card is too cramped to show 10–20 KOs at once. The current Overview / Map / List toggle compresses everything into a narrow sidebar, so the relationship between KOs (Knowledge Outcomes) and the LOs (Learning Outcomes) inside each KO is unreadable.
+1. **LO Coverage classified by KO at a glance** — In the inline LO Coverage card (not just the Explorer dialog), show LOs grouped by their parent KO/topic with covered/uncovered status visible. Each KO group is collapsible so users can drill down into the LOs they care about, instead of one giant flat list.
+2. **Tame the long analysis column** — Make AO Coverage, KO Coverage, LO Coverage, Per-section breakdown, **and** Assessment Coach all collapsible at the card level, with sensible defaults so the page doesn't feel like an endless scroll.
 
-## Goal
+Both changes live in `src/routes/assessment.$id.tsx`.
 
-Let the user click an "Expand" button on the LO Coverage card to open a large modal-style explorer that shows:
+---
 
-1. **All KOs at a glance** — grid of cards, each with status (Untested / Under-tested / Thin / Balanced / Over-tested), covered/total LO count, and marks.
-2. **Drill-down on click** — clicking a KO card opens a second pane (or full-screen detail) listing every LO under that KO, with covered/uncovered status, marks, and remarks.
-3. **Back-out / pick another KO** without closing the dialog.
-4. Existing right-rail card stays as a quick summary; nothing else changes.
+## Part 1 — LO Coverage: KO-grouped at-a-glance view
 
-## UX flow
+### New default view: "By topic"
 
-```
-┌──────────────────────────────────────────────────────────┐
-│ Coverage explorer                              [×]       │
-│ Filters: [All ▾] [Untested] [Thin] [Balanced] [Over]     │
-├──────────────────────────┬───────────────────────────────┤
-│  KO grid (left, 60%)     │  Selected KO detail (right)   │
-│ ┌────────┐ ┌────────┐    │  Cells / Atoms                │
-│ │ Cells  │ │ Atoms  │    │  3/8 LOs covered · 12 marks   │
-│ │ ●●●○○○ │ │ ●●●●●○ │    │  ─────────────────────────   │
-│ │ 3/6 LO │ │ 5/6 LO │    │  ✓ LO text 1     2× · 4m     │
-│ │ Thin   │ │ Balanced   │  ○ LO text 2     0× · 0m     │
-│ └────────┘ └────────┘    │  …                            │
-│ ┌────────┐ ┌────────┐    │  [Open remarks] [Jump to Q]  │
-│ │ Forces │ │ Energy │    │                               │
-│ └────────┘ └────────┘    │                               │
-└──────────────────────────┴───────────────────────────────┘
+Replace the current LO view-mode toggle (`Overview / Map / List`) with a clearer set: **`By topic` (default) · `Map` · `Flat list`**.
+
+**`By topic` rendering** (the new at-a-glance):
+
+- Use the existing `topicsMap` (already computed, has `disciplines → topics → los`).
+- For each discipline (e.g. "Chemistry"), render a small section header with `coveredLOs / totalLOs`.
+- Under it, render every topic (KO) as a **collapsible row**:
+
+```text
+▸ Atomic structure          [donut 4/6]   ●●●○○○   4/6 LOs   [balanced]
+▾ Stoichiometry             [donut 3/3]   ●●●●     3/3 LOs   [balanced]
+    ✓ Calculate moles from mass …               ×2
+    ✓ Apply Avogadro constant …
+    ○ Determine empirical formula …          ← red, untested
+▸ Bonding                   [donut 0/5]   ○○○○○    0/5 LOs   [untested]
 ```
 
-On narrow screens the right pane stacks below; on wide screens it sits beside the grid.
+- Header row shows: chevron, KO title, mini `CoverageDonut`, `DensityBar`, `covered/total`, status chip (reuse `STATUS_META` colors).
+- Expanded body lists each LO with the same ✓ / ○ / ×N affordances that already exist in the matrix view, click → opens the existing `DetailDrawer` via `setTarget({ kind: "lo", ... })`.
+- Default: all KO rows **collapsed** so users see the topic-level bird's-eye view first; click any topic to drill.
+- A small toolbar above the groups: `Expand all` / `Collapse all`, and a filter pill row reusing `OverviewStatus` (`under / thin / over / balanced / untested`) so users can e.g. show only untested topics.
 
-## Implementation
+### Behavior
 
-**File: `src/routes/assessment.$id.tsx`**
+- Implementation reuses `topicsMap`, `classifyTopic`, `STATUS_META`, `CoverageDonut`, `DensityBar`, and `RemarkPill` — no new data plumbing.
+- For non-science papers (`isScience === false`) where `topicsMap.disciplines` is empty, fall back to the current flat list automatically (no toggle shown).
+- The existing fullscreen **Coverage Explorer** dialog stays as-is for power use (matrix + drill-down). The "Expand" button continues to open it.
 
-1. Add an "Expand" icon-button (Lucide `Maximize2`) next to the existing Overview/Map/List toggle in the LO Coverage card header (around line 2218–2249).
-2. Add state `const [explorerOpen, setExplorerOpen] = useState(false);` and `const [explorerKO, setExplorerKO] = useState<string | null>(null);` in `CoveragePanel`.
-3. Render a new `<Dialog>` (shadcn) when `explorerOpen` is true. Use `DialogContent` with `max-w-6xl` and `h-[85vh]` so it feels full-screen on the user's 883px viewport but scales up on larger monitors.
-4. Inside the dialog, two-column flex (`md:grid md:grid-cols-[minmax(0,3fr)_minmax(0,4fr)]`):
-   - **Left** — KO grid built from `coverage.paper.kos`, plus per-KO LO stats derived by walking `topicsMap` to find which LOs belong to each KO. Each card shows: KO name, marks (`actual / target`), covered/total LO count, status chip via `classifyTopic`, and a `SegmentBar` for visual density. Clicking a card sets `explorerKO`.
-   - **Right** — when `explorerKO` is set, list LOs for that KO using the same row UI as the existing list view (✓/○, text, marks count, RemarkPill). Each row stays clickable and reuses `setTarget({ kind: "lo", ... })` so the existing DetailDrawer still opens for evidence + comments. Empty state when nothing selected ("Pick a Knowledge Outcome to see its Learning Outcomes").
-5. Filter chips at the top (All / Untested / Thin / Balanced / Over) reuse `OverviewStatus` + `STATUS_META`.
-6. The existing right-rail card and DetailDrawer remain untouched — the explorer is purely an additional surface that reuses the same state setters.
+---
 
-**KO → LO grouping**
+## Part 2 — Make every analysis card collapsible
 
-KOs already exist in `coverage.paper.kos`. To list LOs *inside* a KO we need the mapping. Two sources are available:
+Wrap each of these cards in the existing `Collapsible` primitive (already imported and used for Per-section breakdown):
 
-- `questions.knowledge_outcomes` + `questions.learning_outcomes` per question (already loaded). Build a `Map<koName, Set<loText>>` once with `useMemo`.
-- Fallback: any LO not associated with a KO goes into a synthetic "Unassigned" KO group at the end.
+| Card | Default state |
+|---|---|
+| AO Coverage | **Open** (most-used summary) |
+| KO Coverage | Collapsed |
+| LO Coverage | **Open** (this is the headline view; KO rows inside are themselves collapsed) |
+| Per-section breakdown | Collapsed (currently first section auto-opens — change so the whole card collapses) |
+| Assessment Coach (in the Coach tab) | The Coach card itself stays, but each `CoachSection` (Alignment / Difficulty / Diversity / etc.) becomes a `Collapsible`, default **collapsed** except the first non-empty section. The top "Run Coach / Re-run" controls and `FindingTotals` summary remain always visible. |
 
-This keeps the explorer accurate even when the syllabus topic_pool doesn't enumerate KOs explicitly.
+### Card-level collapsible pattern
+
+Each card keeps its current outer `rounded-xl border bg-card p-5` shell. The header row (`<h3>` + helper text + action buttons like Re-tag / Expand / view-mode toggle) becomes the `CollapsibleTrigger`, with a chevron that rotates on open. Action buttons inside the header use `e.stopPropagation()` so clicking Re-tag / Expand doesn't toggle the card.
+
+```text
+┌─ AO Coverage ─────────────────────  [Re-tag with AI]  ▾ ─┐
+│ Marks per Assessment Objective (targets …)              │
+│  ── content (meters, lists) ──                          │
+└─────────────────────────────────────────────────────────┘
+```
+
+When collapsed, the card shows just the title row + a one-line summary (e.g. AO: `8 / 10 AOs on target`; LO: `42 / 60 LOs covered`; KO: `5 / 7 topics balanced`). This gives users a glanceable status without expanding.
+
+### Persistence
+
+Persist open/closed state per assessment in `localStorage` under a single key `origaimi.coverage.collapsed.<assessmentId>` so the user's chosen layout survives reloads. Fall back to the defaults above on first visit.
+
+---
+
+## Technical details
+
+- File: `src/routes/assessment.$id.tsx` only. No schema, no edge function, no new dependencies.
+- Replace the LO view-mode tri-state literal (`"overview" | "map" | "list"`) with `"topic" | "map" | "list"`; rename `TopicsOverviewView` usage and add a new `TopicsByKOView` component (or extend `TopicsOverviewView` with a `mode="grouped"` prop). Implementation will likely add a new component below the existing `TopicsOverviewView` to keep the diff readable.
+- Use `Collapsible / CollapsibleTrigger / CollapsibleContent` (already imported) for both the per-KO rows and the card-level wrappers. Use `ChevronRight` rotated via `data-[state=open]:rotate-90` (pattern already in the file at line 2440).
+- A small `useCollapsibleState(key, defaults)` hook handles localStorage round-tripping for the card-level state; written inline in the same file.
+- For the Coach panel: wrap each `<CoachSection>` body in `Collapsible`. `CoachSection` already takes `title` and `count` — extend it with an internal `Collapsible` and a chevron, default open only when `props.defaultOpen` is true (passed by the parent for the first non-empty section).
+
+---
 
 ## Out of scope
 
-- No data-model changes, no backend changes.
-- AO and Paper-overview cards stay as they are; the user's complaint is specifically about LO/KO readability.
-- Mobile (<768px) gets the stacked layout automatically; no separate design.
-
-## Files touched
-
-- `src/routes/assessment.$id.tsx` — add Expand button, dialog, KO grid component, LO detail pane, KO→LO memo.
-
-No new dependencies; `Dialog`, `Maximize2`, and existing helpers (`classifyTopic`, `STATUS_META`, `SegmentBar`, `RemarkPill`, `DetailDrawer`) are already in the project.
+- No changes to data model, AI prompts, edge functions, or the Coverage Explorer dialog layout.
+- No change to the fullscreen Explorer matrix/drill-down modes — they already serve the deep-dive case.

@@ -907,6 +907,7 @@ function EditorPage() {
 
               <TabsContent value="coverage" className="mt-4 space-y-4">
                 <CoveragePanel
+                  assessmentId={id}
                   coverage={coverage}
                   totalMarks={assessment.total_marks}
                   totalActual={totalActual}
@@ -1910,6 +1911,146 @@ function TopicsOverviewView({
   );
 }
 
+// ── LOs grouped by KO/topic, each topic collapsible. The "at-a-glance" view ──
+function TopicsByKOView({
+  map,
+  remarkCount,
+  setTarget,
+  paperLOs,
+}: {
+  map: TopicsMap;
+  remarkCount: (kind: "lo", value: string) => number;
+  setTarget: (t: CoverageTarget) => void;
+  paperLOs: Coverage["paper"]["los"];
+}) {
+  const loStats = new Map(paperLOs.map((l) => [l.text, l] as const));
+  const [filter, setFilter] = useState<"all" | OverviewStatus>("all");
+  const [openTopics, setOpenTopics] = useState<Set<string>>(new Set());
+
+  if (map.disciplines.length === 0) {
+    return <p className="mt-3 text-xs text-muted-foreground">No Learning Outcomes targeted.</p>;
+  }
+
+  const allTopicKeys: string[] = [];
+  map.disciplines.forEach((d) => d.topics.forEach((t) => allTopicKeys.push(`${d.name}::${t.title}`)));
+
+  const expandAll = () => setOpenTopics(new Set(allTopicKeys));
+  const collapseAll = () => setOpenTopics(new Set());
+
+  const toggle = (key: string) => {
+    setOpenTopics((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const filterPills: ("all" | OverviewStatus)[] = ["all", "untested", "under", "thin", "balanced", "over"];
+
+  return (
+    <div className="mt-3 space-y-3">
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-border/60 bg-muted/20 px-2 py-1.5 text-[10px]">
+        <span className="font-medium text-foreground">Show:</span>
+        {filterPills.map((f) => (
+          <button
+            key={f}
+            type="button"
+            onClick={() => setFilter(f)}
+            className={`rounded-full border px-2 py-0.5 transition ${
+              filter === f
+                ? "border-primary/40 bg-primary/10 text-primary"
+                : "border-border bg-background text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {f === "all" ? "All topics" : STATUS_META[f].label}
+          </button>
+        ))}
+        <span className="ml-auto inline-flex items-center gap-2">
+          <button type="button" onClick={expandAll} className="text-muted-foreground hover:text-foreground">
+            Expand all
+          </button>
+          <span className="text-muted-foreground/40">·</span>
+          <button type="button" onClick={collapseAll} className="text-muted-foreground hover:text-foreground">
+            Collapse all
+          </button>
+        </span>
+      </div>
+
+      {map.disciplines.map((disc) => {
+        const tiles = disc.topics
+          .map((t) => ({ topic: t, status: classifyTopic(t.los) }))
+          .filter(({ status }) => filter === "all" || status === filter)
+          .sort((a, b) => {
+            const k = STATUS_META[a.status].sortKey - STATUS_META[b.status].sortKey;
+            if (k !== 0) return k;
+            return a.topic.title.localeCompare(b.topic.title);
+          });
+        if (tiles.length === 0) return null;
+        return (
+          <div key={disc.name}>
+            <div className="mb-1.5 flex items-baseline justify-between">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{disc.name}</h4>
+              <span className="text-[10px] tabular-nums text-muted-foreground">{disc.coveredLOs} / {disc.totalLOs} LOs</span>
+            </div>
+            <div className="space-y-1.5">
+              {tiles.map(({ topic: t, status }) => {
+                const meta = STATUS_META[status];
+                const key = `${disc.name}::${t.title}`;
+                const isOpen = openTopics.has(key);
+                return (
+                  <Collapsible key={key} open={isOpen} onOpenChange={() => toggle(key)}>
+                    <div className={`rounded-lg border bg-card transition ${meta.ring} ${isOpen ? "shadow-sm" : ""}`}>
+                      <CollapsibleTrigger className="group flex w-full items-center gap-2 p-2 text-left hover:bg-muted/30">
+                        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
+                        <CoverageDonut covered={t.coveredLOs} total={t.totalLOs} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-1.5">
+                            <span className="truncate text-[11px] font-medium leading-tight" title={t.title}>{t.title}</span>
+                            <span className={`shrink-0 rounded border px-1 py-0 text-[9px] font-medium ${meta.chip}`}>{meta.label}</span>
+                          </div>
+                          <div className="mt-1 flex items-center justify-between gap-2">
+                            <span className="text-[10px] tabular-nums text-muted-foreground">{t.coveredLOs}/{t.totalLOs} LOs</span>
+                            <DensityBar los={t.los} />
+                          </div>
+                        </div>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="space-y-0.5 border-t border-border/60 px-2.5 py-1.5">
+                          {t.los.map((lo) => {
+                            const count = remarkCount("lo", lo.text);
+                            const stat = loStats.get(lo.text);
+                            return (
+                              <button
+                                key={lo.text}
+                                type="button"
+                                onClick={() => stat && setTarget({ kind: "lo", text: stat.text, actual: stat.actual, target: stat.target, covered: stat.covered })}
+                                className={`flex w-full items-start gap-1.5 rounded px-1.5 py-0.5 text-left text-[11px] leading-snug transition hover:bg-muted/50 ${lo.covered ? "text-foreground" : "text-muted-foreground"}`}
+                              >
+                                <span className={`mt-0.5 ${lo.covered ? "text-success" : "text-destructive"}`}>{lo.covered ? "✓" : "○"}</span>
+                                <span className="flex-1">{lo.text}</span>
+                                {lo.covered && lo.actual > 1 && (
+                                  <span className="shrink-0 text-[9px] text-muted-foreground">×{lo.actual}</span>
+                                )}
+                                {count > 0 && <RemarkPill count={count} />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </CollapsibleContent>
+                    </div>
+                  </Collapsible>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function TopicsMapView({
   map,
   remarkCount,
@@ -2085,11 +2226,102 @@ function RemarkPill({ count }: { count: number }) {
   );
 }
 
+// ── Card-level collapse state, persisted per assessment in localStorage ─────
+type CardKey = "ao" | "ko" | "lo" | "sections";
+type CardCollapseAPI = {
+  isOpen: (k: CardKey) => boolean;
+  toggle: (k: CardKey) => void;
+  set: (k: CardKey, v: boolean) => void;
+};
+function useCardCollapseState(assessmentId: string, defaults: Record<CardKey, boolean>): CardCollapseAPI {
+  const storageKey = `origaimi.coverage.collapsed.${assessmentId}`;
+  const [state, setState] = useState<Record<CardKey, boolean>>(defaults);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") {
+          setState((prev) => ({ ...prev, ...parsed }));
+        }
+      }
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey]);
+  const persist = (next: Record<CardKey, boolean>) => {
+    setState(next);
+    try { window.localStorage.setItem(storageKey, JSON.stringify(next)); } catch { /* ignore */ }
+  };
+  return {
+    isOpen: (k) => state[k],
+    toggle: (k) => persist({ ...state, [k]: !state[k] }),
+    set: (k, v) => persist({ ...state, [k]: v }),
+  };
+}
+
+// Collapsible card shell with a header trigger row + chevron.
+function CollapsibleCard({
+  open,
+  onOpenChange,
+  title,
+  description,
+  summary,
+  actions,
+  children,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  title: React.ReactNode;
+  description?: React.ReactNode;
+  summary?: React.ReactNode;
+  actions?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-card">
+      <Collapsible open={open} onOpenChange={onOpenChange}>
+        <div className="flex items-start gap-2 p-5">
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="group flex flex-1 items-start gap-2 text-left"
+              aria-label={open ? "Collapse" : "Expand"}
+            >
+              <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
+              <div className="min-w-0 flex-1">
+                <h3 className="font-medium">{title}</h3>
+                {description && <p className="mt-1 text-xs text-muted-foreground">{description}</p>}
+                {!open && summary && (
+                  <p className="mt-1 text-[11px] text-muted-foreground">{summary}</p>
+                )}
+              </div>
+            </button>
+          </CollapsibleTrigger>
+          {actions && (
+            <div
+              className="flex shrink-0 items-center gap-1.5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {actions}
+            </div>
+          )}
+        </div>
+        <CollapsibleContent className="px-5 pb-5">
+          {children}
+        </CollapsibleContent>
+      </Collapsible>
+    </div>
+  );
+}
+
 function CoveragePanel({
+  assessmentId,
   coverage, totalMarks, totalActual, questions, comments, identity, subject, sections,
   onAddComment, onSetCommentStatus, onDeleteComment, onScrollToQuestion,
   onRetag, retagBusy,
 }: {
+  assessmentId: string;
   coverage: Coverage;
   totalMarks: number;
   totalActual: number;
@@ -2104,8 +2336,16 @@ function CoveragePanel({
   const uncoveredLOs = paper.los.filter((l) => !l.covered);
   const [target, setTarget] = useState<CoverageTarget | null>(null);
   const isScience = isScienceSubject(subject);
-  const [loView, setLoView] = useState<"overview" | "map" | "list">(isScience ? "overview" : "list");
+  const [loView, setLoView] = useState<"topic" | "map" | "list">(isScience ? "topic" : "list");
   const topicsMap = useMemo(() => buildTopicsMap(paper.los, sections), [paper.los, sections]);
+
+  // Card-level open/closed state, persisted per assessment.
+  const cardOpen = useCardCollapseState(assessmentId, {
+    ao: true,
+    ko: false,
+    lo: true,
+    sections: false,
+  });
 
   // ── Coverage Explorer (full-screen KO → LO drill-down) ──
   const [explorerOpen, setExplorerOpen] = useState(false);
@@ -2246,60 +2486,70 @@ function CoveragePanel({
       </div>
 
       {/* AO Coverage */}
-      <div className="rounded-xl border border-border bg-card p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="font-medium">AO Coverage</h3>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Marks per Assessment Objective {paper.aos.some((a) => a.weighting != null) ? "(targets from syllabus weightings)" : ""}
-            </p>
-          </div>
-          {onRetag && questions.length > 0 && (
-            <button
-              type="button"
-              onClick={() => onRetag()}
-              disabled={retagBusy}
-              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-[10px] font-medium text-foreground transition hover:bg-muted disabled:opacity-50"
-              title="Re-tag every question with AI based on its stem and the section's allowed AOs / KOs / LOs"
-            >
-              {retagBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-              Re-tag with AI
-            </button>
-          )}
-        </div>
-        <p className="mt-1 text-[10px] text-muted-foreground">Click any row for detail and to leave a remark.</p>
-        <div className="mt-3 space-y-2.5">
-          {paper.aos.length === 0 && (
-            <p className="text-xs text-muted-foreground">No AOs tagged on this paper yet.</p>
-          )}
-          {paper.aos.map((a) => (
-            <button
-              key={a.code}
-              type="button"
-              onClick={() => setTarget({ kind: "ao", ...a })}
-              className="block w-full rounded-md p-1 text-left transition hover:bg-muted/50"
-            >
-              <MeterRow
-                label={
-                  <>
-                    {a.code}
-                    <RemarkPill count={remarkCount("ao", a.code)} />
-                  </>
-                }
-                sublabel={a.title ? `· ${a.title}${a.weighting != null ? ` (${a.weighting}%)` : ""}` : a.weighting != null ? `(${a.weighting}%)` : null}
-                actual={a.actual}
-                target={a.target}
-              />
-            </button>
-          ))}
-        </div>
-      </div>
+      {(() => {
+        const onTarget = paper.aos.filter((a) => a.target > 0 && a.actual >= a.target && a.actual <= a.target + 0.5).length;
+        const summary = paper.aos.length === 0
+          ? "No AOs tagged on this paper yet."
+          : `${onTarget} / ${paper.aos.length} AOs on target`;
+        return (
+          <CollapsibleCard
+            open={cardOpen.isOpen("ao")}
+            onOpenChange={(v) => cardOpen.set("ao", v)}
+            title="AO Coverage"
+            description={`Marks per Assessment Objective ${paper.aos.some((a) => a.weighting != null) ? "(targets from syllabus weightings)" : ""}`}
+            summary={summary}
+            actions={onRetag && questions.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => onRetag()}
+                disabled={retagBusy}
+                className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-[10px] font-medium text-foreground transition hover:bg-muted disabled:opacity-50"
+                title="Re-tag every question with AI based on its stem and the section's allowed AOs / KOs / LOs"
+              >
+                {retagBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                Re-tag with AI
+              </button>
+            ) : undefined}
+          >
+            <p className="text-[10px] text-muted-foreground">Click any row for detail and to leave a remark.</p>
+            <div className="mt-3 space-y-2.5">
+              {paper.aos.length === 0 && (
+                <p className="text-xs text-muted-foreground">No AOs tagged on this paper yet.</p>
+              )}
+              {paper.aos.map((a) => (
+                <button
+                  key={a.code}
+                  type="button"
+                  onClick={() => setTarget({ kind: "ao", ...a })}
+                  className="block w-full rounded-md p-1 text-left transition hover:bg-muted/50"
+                >
+                  <MeterRow
+                    label={
+                      <>
+                        {a.code}
+                        <RemarkPill count={remarkCount("ao", a.code)} />
+                      </>
+                    }
+                    sublabel={a.title ? `· ${a.title}${a.weighting != null ? ` (${a.weighting}%)` : ""}` : a.weighting != null ? `(${a.weighting}%)` : null}
+                    actual={a.actual}
+                    target={a.target}
+                  />
+                </button>
+              ))}
+            </div>
+          </CollapsibleCard>
+        );
+      })()}
 
       {/* KO Coverage */}
-      <div className="rounded-xl border border-border bg-card p-5">
-        <h3 className="font-medium">KO Coverage</h3>
-        <p className="mt-1 text-xs text-muted-foreground">Marks per Knowledge Outcome</p>
-        <div className="mt-3 space-y-2.5">
+      <CollapsibleCard
+        open={cardOpen.isOpen("ko")}
+        onOpenChange={(v) => cardOpen.set("ko", v)}
+        title="KO Coverage"
+        description="Marks per Knowledge Outcome"
+        summary={paper.kos.length === 0 ? "No Knowledge Outcomes targeted." : `${paper.kos.length} topic${paper.kos.length === 1 ? "" : "s"} tracked`}
+      >
+        <div className="space-y-2.5">
           {paper.kos.length === 0 && (
             <p className="text-xs text-muted-foreground">No Knowledge Outcomes targeted.</p>
           )}
@@ -2323,26 +2573,27 @@ function CoveragePanel({
             </button>
           ))}
         </div>
-      </div>
+      </CollapsibleCard>
 
       {/* LO Coverage */}
-      <div className="rounded-xl border border-border bg-card p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="font-medium">LO Coverage</h3>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {paper.los.length - uncoveredLOs.length} / {paper.los.length} learning outcomes covered
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-1.5">
+      <CollapsibleCard
+        open={cardOpen.isOpen("lo")}
+        onOpenChange={(v) => cardOpen.set("lo", v)}
+        title="LO Coverage"
+        description={`${paper.los.length - uncoveredLOs.length} / ${paper.los.length} learning outcomes covered`}
+        summary={paper.los.length === 0
+          ? "No Learning Outcomes targeted."
+          : `${paper.los.length - uncoveredLOs.length} / ${paper.los.length} LOs covered · ${uncoveredLOs.length} untested`}
+        actions={
+          <>
             {isScience && paper.los.length > 0 && (
               <div className="inline-flex rounded-md border border-border bg-muted/30 p-0.5 text-[10px]">
                 <button
                   type="button"
-                  onClick={() => setLoView("overview")}
-                  className={`rounded px-2 py-0.5 transition ${loView === "overview" ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                  onClick={() => setLoView("topic")}
+                  className={`rounded px-2 py-0.5 transition ${loView === "topic" ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
                 >
-                  Overview
+                  By topic
                 </button>
                 <button
                   type="button"
@@ -2356,7 +2607,7 @@ function CoveragePanel({
                   onClick={() => setLoView("list")}
                   className={`rounded px-2 py-0.5 transition ${loView === "list" ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
                 >
-                  List
+                  Flat list
                 </button>
               </div>
             )}
@@ -2371,14 +2622,15 @@ function CoveragePanel({
                 Expand
               </button>
             )}
-          </div>
-        </div>
+          </>
+        }
+      >
         {onRetag && (
           <button
             type="button"
             onClick={() => onRetag()}
             disabled={retagBusy || questions.length === 0}
-            className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-medium text-primary transition hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-medium text-primary transition hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-50"
             title="Refresh LO coverage by re-tagging every question with AI based on its stem and the section's allowed AOs / KOs / LOs"
           >
             {retagBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
@@ -2388,8 +2640,8 @@ function CoveragePanel({
         {paper.los.length === 0 && (
           <p className="mt-3 text-xs text-muted-foreground">No Learning Outcomes targeted.</p>
         )}
-        {paper.los.length > 0 && isScience && loView === "overview" && (
-          <TopicsOverviewView
+        {paper.los.length > 0 && isScience && loView === "topic" && (
+          <TopicsByKOView
             map={topicsMap}
             remarkCount={remarkCount}
             setTarget={setTarget}
@@ -2426,15 +2678,19 @@ function CoveragePanel({
             })}
           </ul>
         )}
-      </div>
+      </CollapsibleCard>
 
       {/* Per-section breakdown */}
       {Object.keys(bySection).length > 0 && (
-        <div className="rounded-xl border border-border bg-card p-5">
-          <h3 className="font-medium">Per-section breakdown</h3>
-          <div className="mt-3 space-y-2">
-            {Object.values(bySection).map((s, idx) => (
-              <Collapsible key={s.letter} defaultOpen={idx === 0}>
+        <CollapsibleCard
+          open={cardOpen.isOpen("sections")}
+          onOpenChange={(v) => cardOpen.set("sections", v)}
+          title="Per-section breakdown"
+          summary={`${Object.keys(bySection).length} section${Object.keys(bySection).length === 1 ? "" : "s"}`}
+        >
+          <div className="space-y-2">
+            {Object.values(bySection).map((s) => (
+              <Collapsible key={s.letter}>
                 <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2 text-left text-sm hover:bg-muted/50">
                   <span className="flex items-center gap-2">
                     <ChevronRight className="h-3.5 w-3.5 transition-transform group-data-[state=open]:rotate-90" />
@@ -2494,7 +2750,7 @@ function CoveragePanel({
               </Collapsible>
             ))}
           </div>
-        </div>
+        </CollapsibleCard>
       )}
 
       {drawerProps && (
@@ -3359,13 +3615,18 @@ function CoachReviewBody({
 }
 
 function CoachSection({ title, count, children }: { title: string; count: number; children: React.ReactNode }) {
-  const [open, setOpen] = useState(count > 0);
-  useEffect(() => { if (count > 0) setOpen(true); }, [count]);
+  // Default collapsed — Coach panels are long; users opt in per section.
+  const [open, setOpen] = useState(false);
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md px-1.5 py-1 text-[11px] font-medium hover:bg-muted/40">
+      <CollapsibleTrigger
+        disabled={count === 0}
+        className="flex w-full items-center justify-between rounded-md px-1.5 py-1 text-[11px] font-medium hover:bg-muted/40 disabled:cursor-default disabled:opacity-60 disabled:hover:bg-transparent"
+      >
         <span className="flex items-center gap-1.5">
-          {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+          {count === 0
+            ? <span className="inline-block h-3 w-3" />
+            : open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
           {title}
         </span>
         <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${count > 0 ? "bg-muted text-foreground" : "text-muted-foreground"}`}>
@@ -3373,11 +3634,7 @@ function CoachSection({ title, count, children }: { title: string; count: number
         </span>
       </CollapsibleTrigger>
       <CollapsibleContent className="mt-1 space-y-1.5">
-        {count === 0 ? (
-          <p className="px-1.5 text-[10px] text-muted-foreground">No findings.</p>
-        ) : (
-          children
-        )}
+        {count === 0 ? null : children}
       </CollapsibleContent>
     </Collapsible>
   );
