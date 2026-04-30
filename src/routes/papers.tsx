@@ -345,10 +345,19 @@ function PaperCard({
           Topics: {paper.topics.slice(0, 6).join(", ")}
         </div>
       )}
-      <div className="mt-3 flex gap-2">
+      <div className="mt-3 flex flex-wrap gap-2">
         <Button size="sm" variant="ghost" onClick={reparse} disabled={busy} className="gap-1">
           <RefreshCw className="h-3.5 w-3.5" /> Re-parse
         </Button>
+        {paper.parse_status === "ready" && (
+          <Link
+            to="/bank"
+            search={{ paper: paper.id }}
+            className="inline-flex h-8 items-center gap-1 rounded-md px-3 text-xs font-medium text-primary hover:bg-primary-soft"
+          >
+            View in bank
+          </Link>
+        )}
         <Button size="sm" variant="ghost" onClick={remove} disabled={busy} className="ml-auto gap-1 text-destructive">
           <Trash2 className="h-3.5 w-3.5" /> Delete
         </Button>
