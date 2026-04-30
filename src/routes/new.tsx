@@ -507,7 +507,7 @@ function NewAssessment() {
           <h1 className="font-paper text-2xl font-semibold tracking-tight">
             New assessment
           </h1>
-          <span className="text-sm text-muted-foreground">Step {step} of 6</span>
+          
         </div>
 
         <Stepper step={step} />
