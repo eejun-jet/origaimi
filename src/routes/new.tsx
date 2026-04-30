@@ -1540,6 +1540,7 @@ function SectionCard({
                   title: a.title ?? null,
                   description: a.description ?? null,
                   weightingPercent: null,
+                  position: idx,
                 }))}
                 selected={sectionAos}
                 onToggle={(code) => toggleAo(code)}
