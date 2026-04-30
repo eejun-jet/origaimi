@@ -713,7 +713,7 @@ function NewAssessment() {
 
           {step === 3 && (
             <div className="space-y-4">
-              <h2 className="font-paper text-xl font-semibold">References & instructions</h2>
+              <h2 className="font-paper text-xl font-semibold">Special instructions</h2>
               <p className="text-sm text-muted-foreground">
                 Optional: describe any style cues, past-paper patterns, or special instructions for the AI.
               </p>
@@ -785,25 +785,44 @@ function paperLabel(p: SyllabusLibraryPaper) {
 }
 
 function Stepper({ step }: { step: number }) {
-  const labels = ["Basics", "Assessment Builder", "References", "Generate"];
+  const labels = ["Basics", "Assessment Builder", "Special instructions", "Generate"];
   return (
-    <div className="flex items-center gap-2">
-      {labels.map((l, i) => {
-        const n = i + 1;
-        const active = n === step;
-        const done = n < step;
-        return (
-          <div key={l} className="flex flex-1 items-center gap-2">
-            <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-medium transition-colors ${
-              active ? "bg-primary text-primary-foreground" :
-              done ? "bg-success text-success-foreground" :
-              "bg-muted text-muted-foreground"
-            }`}>{done ? "✓" : n}</div>
-            <span className={`hidden text-xs sm:inline ${active ? "text-foreground font-medium" : "text-muted-foreground"}`}>{l}</span>
-            {n < labels.length && <div className="h-px flex-1 bg-border" />}
-          </div>
-        );
-      })}
+    <div className="w-full">
+      <div className="flex items-center">
+        {labels.map((l, i) => {
+          const n = i + 1;
+          const active = n === step;
+          const done = n < step;
+          const isLast = n === labels.length;
+          return (
+            <div key={l} className="flex flex-1 items-center last:flex-none">
+              <div className="flex flex-col items-center gap-2 shrink-0">
+                <div
+                  className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold transition-colors ${
+                    active
+                      ? "bg-primary text-primary-foreground ring-4 ring-primary/15"
+                      : done
+                      ? "bg-success text-success-foreground"
+                      : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {done ? "✓" : n}
+                </div>
+                <span
+                  className={`hidden text-center text-xs sm:block ${
+                    active ? "text-foreground font-medium" : "text-muted-foreground"
+                  }`}
+                >
+                  {l}
+                </span>
+              </div>
+              {!isLast && (
+                <div className="mx-3 mb-6 h-px flex-1 bg-border sm:mx-4" />
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
