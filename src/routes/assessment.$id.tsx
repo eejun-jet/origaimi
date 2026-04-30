@@ -2404,9 +2404,7 @@ type Severity = "info" | "warn" | "fail";
 type CoachFindings = {
   summary: string;
   ao_drift: { ao_code: string; declared_pct?: number; observed_pct: number; delta_pct?: number; severity: Severity; note: string }[];
-  command_word_issues: { question_id: string; position: number; detected_verb?: string; declared_ao?: string; expected_aos?: string[]; severity: Severity; note: string }[];
   unrealised_outcomes: { kos: string[]; los: string[]; note: string };
-  bloom_curve: { section_letter: string; expected_progression?: string; observed_progression?: string; severity: Severity; note: string }[];
   source_fit_issues: { question_id: string; position: number; required_skill?: string; source_type?: string; severity: Severity; note: string }[];
   mark_scheme_flags: { question_id: string; position: number; marks_declared: number; marks_suggested?: number; severity: Severity; note: string }[];
   suggestions: { question_id?: string; position?: number; rewrite: string; rationale: string; category: string }[];
@@ -2561,8 +2559,8 @@ function CoachPanel({
         <p className="mt-3 text-xs text-muted-foreground">Loading review history…</p>
       ) : runs.length === 0 ? (
         <p className="mt-2 text-xs text-muted-foreground">
-          Run the Coach to evaluate this paper against the AO framework, command-word
-          conventions, and outcome coverage. Each run is saved so you can compare iterations.
+          Run the Coach to evaluate this paper against the AO framework and outcome
+          coverage. Each run is saved so you can compare iterations.
         </p>
       ) : (
         <>
@@ -2658,8 +2656,6 @@ type FlatFinding = { key: string; severity: Severity };
 function collectFindings(f: CoachFindings): FlatFinding[] {
   const out: FlatFinding[] = [];
   f.ao_drift?.forEach((x, i) => out.push({ key: `ao:${i}`, severity: x.severity }));
-  f.command_word_issues?.forEach((x, i) => out.push({ key: `cw:${i}`, severity: x.severity }));
-  f.bloom_curve?.forEach((x, i) => out.push({ key: `bc:${i}`, severity: x.severity }));
   f.source_fit_issues?.forEach((x, i) => out.push({ key: `sf:${i}`, severity: x.severity }));
   f.mark_scheme_flags?.forEach((x, i) => out.push({ key: `ms:${i}`, severity: x.severity }));
   const u = f.unrealised_outcomes;
@@ -2740,48 +2736,6 @@ function CoachReviewBody({
       </CoachSection>
 
       <CoachSection
-        title="Command words"
-        count={findings.command_word_issues?.filter((_, i) => !dismissed.has(`cw:${i}`)).length ?? 0}
-      >
-        {findings.command_word_issues?.map((d, i) => {
-          const key = `cw:${i}`;
-          if (dismissed.has(key)) return null;
-          return (
-            <FindingCard
-              key={key}
-              severity={d.severity}
-              onDismiss={() => onDismiss(key)}
-              onJump={d.question_id ? () => onScrollToQuestion(d.question_id) : undefined}
-              remarkCount={remarkCountFor(key)}
-              onDiscuss={() => onDiscuss({
-                key,
-                title: `Command word · Q${d.position + 1}`,
-                subtitle: d.detected_verb ? `"${d.detected_verb}"` : undefined,
-                severity: d.severity,
-                body: (
-                  <>
-                    <p>{d.note}</p>
-                    {d.expected_aos && d.expected_aos.length > 0 && (
-                      <p className="mt-1 text-[11px] text-muted-foreground">
-                        Expected: {d.expected_aos.join(", ")}{d.declared_ao && <> · declared {d.declared_ao}</>}
-                      </p>
-                    )}
-                  </>
-                ),
-                questionId: d.question_id,
-              })}
-            >
-              <div className="font-medium">Q{d.position + 1}{d.detected_verb && <> · "{d.detected_verb}"</>}</div>
-              <p className="mt-0.5 text-muted-foreground">{d.note}</p>
-              {d.expected_aos && d.expected_aos.length > 0 && (
-                <p className="mt-0.5 text-[10px] text-muted-foreground">Expected: {d.expected_aos.join(", ")}{d.declared_ao && <> · declared {d.declared_ao}</>}</p>
-              )}
-            </FindingCard>
-          );
-        })}
-      </CoachSection>
-
-      <CoachSection
         title="Unrealised KO/LO"
         count={dismissed.has("uo:0") ? 0 : ((findings.unrealised_outcomes?.kos?.length ?? 0) + (findings.unrealised_outcomes?.los?.length ?? 0) > 0 ? 1 : 0)}
       >
@@ -2823,52 +2777,6 @@ function CoachReviewBody({
           </FindingCard>
         ) : null}
       </CoachSection>
-
-      <CoachSection
-        title="Bloom & difficulty"
-        count={findings.bloom_curve?.filter((_, i) => !dismissed.has(`bc:${i}`)).length ?? 0}
-      >
-        {findings.bloom_curve?.map((d, i) => {
-          const key = `bc:${i}`;
-          if (dismissed.has(key)) return null;
-          return (
-            <FindingCard
-              key={key}
-              severity={d.severity}
-              onDismiss={() => onDismiss(key)}
-              remarkCount={remarkCountFor(key)}
-              onDiscuss={() => onDiscuss({
-                key,
-                title: `Bloom & difficulty · Section ${d.section_letter}`,
-                severity: d.severity,
-                body: (
-                  <>
-                    <p>{d.note}</p>
-                    {(d.expected_progression || d.observed_progression) && (
-                      <p className="mt-1 text-[11px] text-muted-foreground">
-                        {d.expected_progression && <>Expected: {d.expected_progression}</>}
-                        {d.expected_progression && d.observed_progression && " · "}
-                        {d.observed_progression && <>Observed: {d.observed_progression}</>}
-                      </p>
-                    )}
-                  </>
-                ),
-              })}
-            >
-              <div className="font-medium">Section {d.section_letter}</div>
-              <p className="mt-0.5 text-muted-foreground">{d.note}</p>
-              {(d.expected_progression || d.observed_progression) && (
-                <p className="mt-0.5 text-[10px] text-muted-foreground">
-                  {d.expected_progression && <>Expected: {d.expected_progression}</>}
-                  {d.expected_progression && d.observed_progression && " · "}
-                  {d.observed_progression && <>Observed: {d.observed_progression}</>}
-                </p>
-              )}
-            </FindingCard>
-          );
-        })}
-      </CoachSection>
-
       <CoachSection
         title="Source fit"
         count={findings.source_fit_issues?.filter((_, i) => !dismissed.has(`sf:${i}`)).length ?? 0}
