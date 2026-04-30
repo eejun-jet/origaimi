@@ -1803,10 +1803,33 @@ Deno.serve(async (req) => {
         }
       }
 
-      // HARD CAP enforcement (all subjects): the sum of marks across the
-      // section's questions must equal section.marks. The model is told this in
-      // the prompt but we never trust it. SBQ sections built deterministically
-      // already match exactly; this catches AI-generated sections.
+      // HARD CAP enforcement (all subjects): the section must contain EXACTLY
+      // `section.num_questions` questions, and the sum of marks must equal
+      // `section.marks`. The model is told this in the prompt but we never
+      // trust it. SBQ sections built deterministically already match exactly;
+      // this catches AI-generated sections that returned too few or too many.
+      if (questions.length > section.num_questions) {
+        console.warn(`[generate] section ${section.letter}: AI returned ${questions.length} questions, trimming to ${section.num_questions}`);
+        questions = questions.slice(0, section.num_questions);
+      } else if (questions.length > 0 && questions.length < section.num_questions) {
+        const missing = section.num_questions - questions.length;
+        console.warn(`[generate] section ${section.letter}: AI returned ${questions.length} questions, padding ${missing} stub(s) to reach ${section.num_questions}`);
+        const fallbackTopic = section.topic_pool[0]?.topic ?? null;
+        for (let pad = 0; pad < missing; pad++) {
+          questions.push({
+            question_type: section.question_type,
+            topic: fallbackTopic,
+            bloom_level: section.bloom ?? null,
+            difficulty: null,
+            marks: 1,
+            stem: `[Placeholder question ${questions.length + 1} — generation incomplete; please regenerate or edit.]`,
+            options: section.question_type === "mcq" ? [{ key: "A", text: "—" }, { key: "B", text: "—" }, { key: "C", text: "—" }, { key: "D", text: "—" }] : null,
+            answer: null,
+            mark_scheme: null,
+          });
+        }
+      }
+
       if (questions.length > 0) {
         const lockedIndices = new Set<number>();
         if (isHumanitiesSBQ) {
