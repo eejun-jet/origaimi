@@ -103,9 +103,7 @@ const COACH_TOOL = {
       required: [
         "summary",
         "ao_drift",
-        "command_word_issues",
         "unrealised_outcomes",
-        "bloom_curve",
         "source_fit_issues",
         "mark_scheme_flags",
         "suggestions",
