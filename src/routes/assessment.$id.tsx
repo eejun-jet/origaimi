@@ -919,6 +919,8 @@ function EditorPage() {
                   onSetCommentStatus={setCommentStatus}
                   onDeleteComment={deleteComment}
                   onScrollToQuestion={scrollToQuestion}
+                  onRetag={retagAllQuestions}
+                  retagBusy={retagBusy}
                 />
 
                 <CoachPanel
