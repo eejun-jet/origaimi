@@ -2658,8 +2658,6 @@ type FlatFinding = { key: string; severity: Severity };
 function collectFindings(f: CoachFindings): FlatFinding[] {
   const out: FlatFinding[] = [];
   f.ao_drift?.forEach((x, i) => out.push({ key: `ao:${i}`, severity: x.severity }));
-  f.command_word_issues?.forEach((x, i) => out.push({ key: `cw:${i}`, severity: x.severity }));
-  f.bloom_curve?.forEach((x, i) => out.push({ key: `bc:${i}`, severity: x.severity }));
   f.source_fit_issues?.forEach((x, i) => out.push({ key: `sf:${i}`, severity: x.severity }));
   f.mark_scheme_flags?.forEach((x, i) => out.push({ key: `ms:${i}`, severity: x.severity }));
   const u = f.unrealised_outcomes;
