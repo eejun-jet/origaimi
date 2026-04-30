@@ -2048,6 +2048,13 @@ function CoveragePanel({
             <div className="inline-flex shrink-0 rounded-md border border-border bg-muted/30 p-0.5 text-[10px]">
               <button
                 type="button"
+                onClick={() => setLoView("overview")}
+                className={`rounded px-2 py-0.5 transition ${loView === "overview" ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                Overview
+              </button>
+              <button
+                type="button"
                 onClick={() => setLoView("map")}
                 className={`rounded px-2 py-0.5 transition ${loView === "map" ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
               >
@@ -2065,6 +2072,14 @@ function CoveragePanel({
         </div>
         {paper.los.length === 0 && (
           <p className="mt-3 text-xs text-muted-foreground">No Learning Outcomes targeted.</p>
+        )}
+        {paper.los.length > 0 && isScience && loView === "overview" && (
+          <TopicsOverviewView
+            map={topicsMap}
+            remarkCount={remarkCount}
+            setTarget={setTarget}
+            paperLOs={paper.los}
+          />
         )}
         {paper.los.length > 0 && isScience && loView === "map" && (
           <TopicsMapView
