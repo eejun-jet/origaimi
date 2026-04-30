@@ -764,17 +764,38 @@ function NewAssessment() {
                     No AOs published for this syllabus. The generator will infer AOs from the topic metadata.
                   </p>
                 ) : (
-                  <AOGroupedSelector
-                    aos={docAOs}
-                    selected={selectedAoCodes}
-                    onToggle={(code) => setSelectedAoCodes((prev) => toggle(prev, code))}
-                    onToggleMany={(codes, select) =>
-                      setSelectedAoCodes((prev) => {
-                        if (select) return Array.from(new Set([...prev, ...codes]));
-                        return prev.filter((c) => !codes.includes(c));
-                      })
-                    }
-                  />
+                  <>
+                    {(() => {
+                      const allCodes = docAOs.map((a) => a.code);
+                      const allChecked = allCodes.length > 0 && allCodes.every((c) => selectedAoCodes.includes(c));
+                      const someChecked = allCodes.some((c) => selectedAoCodes.includes(c)) && !allChecked;
+                      return (
+                        <label className="mt-3 flex cursor-pointer items-center gap-2 rounded-md border border-dashed border-border p-2 text-xs font-medium hover:bg-muted/40">
+                          <Checkbox
+                            checked={allChecked ? true : someChecked ? "indeterminate" : false}
+                            onCheckedChange={() => {
+                              setSelectedAoCodes((prev) => {
+                                if (allChecked) return prev.filter((c) => !allCodes.includes(c));
+                                return Array.from(new Set([...prev, ...allCodes]));
+                              });
+                            }}
+                          />
+                          <span>{allChecked ? "Deselect all AOs" : "Select all AOs"}</span>
+                        </label>
+                      );
+                    })()}
+                    <AOGroupedSelector
+                      aos={docAOs}
+                      selected={selectedAoCodes}
+                      onToggle={(code) => setSelectedAoCodes((prev) => toggle(prev, code))}
+                      onToggleMany={(codes, select) =>
+                        setSelectedAoCodes((prev) => {
+                          if (select) return Array.from(new Set([...prev, ...codes]));
+                          return prev.filter((c) => !codes.includes(c));
+                        })
+                      }
+                    />
+                  </>
                 )}
               </div>
 
