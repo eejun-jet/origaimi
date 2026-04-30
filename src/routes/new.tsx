@@ -411,12 +411,7 @@ function NewAssessment() {
     }
     if (step === 2) return useSyllabus ? selectedTopicIds.length > 0 : topics.length > 0;
     if (step === 3) {
-      // Objectives — at least one of AO / KO / LO chosen, OR allow skipping if
-      // no AOs are published and no LOs derivable (custom-only flow).
-      // We allow proceeding even with all empty so non-syllabus flows aren't blocked.
-      return true;
-    }
-    if (step === 4) {
+      // Objectives + Sections combined: require a valid section blueprint.
       if (sections.length === 0) return false;
       if (sectionsTotalMarks !== totalMarks) return false;
       if (sections.some((s) => s.topic_pool.length === 0 || s.num_questions < 1)) return false;
