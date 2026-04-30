@@ -2738,48 +2738,6 @@ function CoachReviewBody({
       </CoachSection>
 
       <CoachSection
-        title="Command words"
-        count={findings.command_word_issues?.filter((_, i) => !dismissed.has(`cw:${i}`)).length ?? 0}
-      >
-        {findings.command_word_issues?.map((d, i) => {
-          const key = `cw:${i}`;
-          if (dismissed.has(key)) return null;
-          return (
-            <FindingCard
-              key={key}
-              severity={d.severity}
-              onDismiss={() => onDismiss(key)}
-              onJump={d.question_id ? () => onScrollToQuestion(d.question_id) : undefined}
-              remarkCount={remarkCountFor(key)}
-              onDiscuss={() => onDiscuss({
-                key,
-                title: `Command word · Q${d.position + 1}`,
-                subtitle: d.detected_verb ? `"${d.detected_verb}"` : undefined,
-                severity: d.severity,
-                body: (
-                  <>
-                    <p>{d.note}</p>
-                    {d.expected_aos && d.expected_aos.length > 0 && (
-                      <p className="mt-1 text-[11px] text-muted-foreground">
-                        Expected: {d.expected_aos.join(", ")}{d.declared_ao && <> · declared {d.declared_ao}</>}
-                      </p>
-                    )}
-                  </>
-                ),
-                questionId: d.question_id,
-              })}
-            >
-              <div className="font-medium">Q{d.position + 1}{d.detected_verb && <> · "{d.detected_verb}"</>}</div>
-              <p className="mt-0.5 text-muted-foreground">{d.note}</p>
-              {d.expected_aos && d.expected_aos.length > 0 && (
-                <p className="mt-0.5 text-[10px] text-muted-foreground">Expected: {d.expected_aos.join(", ")}{d.declared_ao && <> · declared {d.declared_ao}</>}</p>
-              )}
-            </FindingCard>
-          );
-        })}
-      </CoachSection>
-
-      <CoachSection
         title="Unrealised KO/LO"
         count={dismissed.has("uo:0") ? 0 : ((findings.unrealised_outcomes?.kos?.length ?? 0) + (findings.unrealised_outcomes?.los?.length ?? 0) > 0 ? 1 : 0)}
       >
