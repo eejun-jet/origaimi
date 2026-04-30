@@ -751,7 +751,7 @@ function NewAssessment() {
                 </p>
               </div>
 
-              {/* Assessment Objectives */}
+              {/* Assessment Objectives — grouped by main AO band, expandable to sub-AOs */}
               <div className="rounded-lg border border-border bg-muted/20 p-4">
                 <div className="flex items-center justify-between">
                   <Label className="text-sm font-medium">Assessment Objectives (AOs)</Label>
@@ -764,34 +764,17 @@ function NewAssessment() {
                     No AOs published for this syllabus. The generator will infer AOs from the topic metadata.
                   </p>
                 ) : (
-                  <div className="mt-3 space-y-1.5">
-                    {docAOs.map((ao) => {
-                      const checked = selectedAoCodes.includes(ao.code);
-                      return (
-                        <label
-                          key={ao.id}
-                          className={`flex cursor-pointer items-start gap-3 rounded-md border p-2.5 transition-colors ${checked ? "border-primary bg-primary-soft/40" : "border-border hover:bg-muted/40"}`}
-                        >
-                          <Checkbox
-                            checked={checked}
-                            onCheckedChange={() => setSelectedAoCodes((prev) => toggle(prev, ao.code))}
-                          />
-                          <div className="flex-1 text-sm">
-                            <div className="flex items-baseline gap-2">
-                              <span className="font-mono font-medium">{ao.code}</span>
-                              {ao.title && <span className="text-foreground">{ao.title}</span>}
-                              {ao.weightingPercent != null && (
-                                <span className="ml-auto text-xs text-muted-foreground">[{ao.weightingPercent}%]</span>
-                              )}
-                            </div>
-                            {ao.description && (
-                              <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">{ao.description}</p>
-                            )}
-                          </div>
-                        </label>
-                      );
-                    })}
-                  </div>
+                  <AOGroupedSelector
+                    aos={docAOs}
+                    selected={selectedAoCodes}
+                    onToggle={(code) => setSelectedAoCodes((prev) => toggle(prev, code))}
+                    onToggleMany={(codes, select) =>
+                      setSelectedAoCodes((prev) => {
+                        if (select) return Array.from(new Set([...prev, ...codes]));
+                        return prev.filter((c) => !codes.includes(c));
+                      })
+                    }
+                  />
                 )}
               </div>
 
