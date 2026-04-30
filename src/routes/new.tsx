@@ -723,7 +723,7 @@ function NewAssessment() {
             </div>
           )}
 
-          {step === 5 && (
+          {step === 4 && (
             <div className="space-y-4 text-center">
               <Sparkles className="mx-auto h-10 w-10 text-primary" />
               <h2 className="font-paper text-2xl font-semibold">Ready to draft</h2>
