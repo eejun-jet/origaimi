@@ -104,6 +104,7 @@ function EditorPage() {
   const [identity, setIdentity] = useReviewerIdentity();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<"coverage" | "comments">("coverage");
+  const [retagBusy, setRetagBusy] = useState(false);
 
   const loadAll = async () => {
     const { data: a } = await supabase.from("assessments").select("*").eq("id", id).single();
