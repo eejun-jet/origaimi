@@ -281,6 +281,9 @@ function PaperCard({
   paper: PaperRow; diagramCount: number; onChanged: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [analysing, setAnalysing] = useState(false);
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const remove = async () => {
     if (!confirm(`Delete "${paper.title}"? This will also remove its extracted bank items.`)) return;
     setBusy(true);
@@ -303,6 +306,21 @@ function PaperCard({
       toast.error(msg);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const analyse = async () => {
+    if (!user) { toast.error("Please sign in"); return; }
+    setAnalysing(true);
+    try {
+      const id = await analysePastPaper({ paperId: paper.id, userId: user.id });
+      toast.success("Paper imported — opening analysis");
+      navigate({ to: "/assessment/$id", params: { id } });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(msg);
+    } finally {
+      setAnalysing(false);
     }
   };
 
