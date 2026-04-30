@@ -366,7 +366,13 @@ function PaperCard({
         </div>
       )}
       <div className="mt-3 flex flex-wrap gap-2">
-        <Button size="sm" variant="ghost" onClick={reparse} disabled={busy} className="gap-1">
+        {paper.parse_status === "ready" && Array.isArray(paper.questions_json) && (paper.questions_json as unknown[]).length > 0 && (
+          <Button size="sm" onClick={analyse} disabled={analysing || busy} className="gap-1">
+            {analysing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+            Analyse paper
+          </Button>
+        )}
+        <Button size="sm" variant="ghost" onClick={reparse} disabled={busy || analysing} className="gap-1">
           <RefreshCw className="h-3.5 w-3.5" /> Re-parse
         </Button>
         {paper.parse_status === "ready" && (
@@ -377,7 +383,7 @@ function PaperCard({
             View in bank
           </a>
         )}
-        <Button size="sm" variant="ghost" onClick={remove} disabled={busy} className="ml-auto gap-1 text-destructive">
+        <Button size="sm" variant="ghost" onClick={remove} disabled={busy || analysing} className="ml-auto gap-1 text-destructive">
           <Trash2 className="h-3.5 w-3.5" /> Delete
         </Button>
       </div>
