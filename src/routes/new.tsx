@@ -420,9 +420,8 @@ function NewAssessment() {
       if (library.length > 0 && !selected) return false;
       return title.trim().length > 0;
     }
-    if (step === 2) return useSyllabus ? selectedTopicIds.length > 0 : topics.length > 0;
-    if (step === 3) {
-      // Objectives + Sections combined: require a valid section blueprint.
+    if (step === 2) {
+      // Assessment Builder: require a valid section blueprint.
       if (sections.length === 0) return false;
       if (sectionsTotalMarks !== totalMarks) return false;
       if (sections.some((s) => s.topic_pool.length === 0 || s.num_questions < 1)) return false;
