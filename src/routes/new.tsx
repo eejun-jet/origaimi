@@ -814,17 +814,37 @@ function NewAssessment() {
                 </p>
 
                 {derivedLos.length > 0 && (
-                  <LOGroupedSelector
-                    topics={selectableSyllabusTopics.filter((t) => selectedTopicIds.includes(t.id))}
-                    selected={selectedLos}
-                    onToggle={(lo) => setSelectedLos((prev) => toggle(prev, lo))}
-                    onToggleMany={(los, select) =>
-                      setSelectedLos((prev) => {
-                        if (select) return Array.from(new Set([...prev, ...los]));
-                        return prev.filter((x) => !los.includes(x));
-                      })
-                    }
-                  />
+                  <>
+                    {(() => {
+                      const allChecked = derivedLos.length > 0 && derivedLos.every((lo) => selectedLos.includes(lo));
+                      const someChecked = derivedLos.some((lo) => selectedLos.includes(lo)) && !allChecked;
+                      return (
+                        <label className="mt-3 flex cursor-pointer items-center gap-2 rounded-md border border-dashed border-border p-2 text-xs font-medium hover:bg-muted/40">
+                          <Checkbox
+                            checked={allChecked ? true : someChecked ? "indeterminate" : false}
+                            onCheckedChange={() => {
+                              setSelectedLos((prev) => {
+                                if (allChecked) return prev.filter((lo) => !derivedLos.includes(lo));
+                                return Array.from(new Set([...prev, ...derivedLos]));
+                              });
+                            }}
+                          />
+                          <span>{allChecked ? "Deselect all LOs" : "Select all LOs"}</span>
+                        </label>
+                      );
+                    })()}
+                    <LOGroupedSelector
+                      topics={selectableSyllabusTopics.filter((t) => selectedTopicIds.includes(t.id))}
+                      selected={selectedLos}
+                      onToggle={(lo) => setSelectedLos((prev) => toggle(prev, lo))}
+                      onToggleMany={(los, select) =>
+                        setSelectedLos((prev) => {
+                          if (select) return Array.from(new Set([...prev, ...los]));
+                          return prev.filter((x) => !los.includes(x));
+                        })
+                      }
+                    />
+                  </>
                 )}
 
                 <div className="mt-3">
