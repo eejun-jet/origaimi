@@ -665,95 +665,11 @@ function NewAssessment() {
           )}
 
           {step === 2 && (
-            <div className="space-y-5">
-              <h2 className="font-paper text-xl font-semibold">Topics / Knowledge Outcomes (KO)</h2>
-              {useSyllabus ? (
-                <>
-                  <p className="text-sm text-muted-foreground">
-                    From <span className="font-medium text-foreground">{selected!.paper.paperCode ?? selected!.doc.syllabusCode}</span>
-                    {selected!.paper.componentName ? ` · ${selected!.paper.componentName}` : ""}.
-                  </p>
-                  {topicsLoading ? (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" /> Loading topics…
-                    </div>
-                  ) : selectableSyllabusTopics.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No topics parsed for this paper yet.</p>
-                  ) : (
-                    <div className="space-y-1.5">
-                      {(() => {
-                        const allIds = selectableSyllabusTopics.map((t) => t.id);
-                        const allChecked = allIds.length > 0 && allIds.every((id) => selectedTopicIds.includes(id));
-                        const someChecked = allIds.some((id) => selectedTopicIds.includes(id));
-                        return (
-                          <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-border p-2 hover:bg-muted/40">
-                            <Checkbox
-                              checked={allChecked ? true : someChecked ? "indeterminate" : false}
-                              onCheckedChange={() => {
-                                setSelectedTopicIds(allChecked ? [] : allIds);
-                              }}
-                            />
-                            <span className="text-xs font-medium">
-                              {allChecked ? "Deselect all" : "Select all"}{" "}
-                              <span className="text-muted-foreground">({selectedTopicIds.length}/{allIds.length})</span>
-                            </span>
-                          </label>
-                        );
-                      })()}
-                      {selectableSyllabusTopics.map((t) => {
-                        const checked = selectedTopicIds.includes(t.id);
-                        const indent = Math.min(t.depth, 3);
-                        return (
-                          <label
-                            key={t.id}
-                            className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors ${checked ? "border-primary bg-primary-soft/40" : "border-border hover:bg-muted/40"}`}
-                            style={{ marginLeft: indent * 16 }}
-                          >
-                            <Checkbox
-                              checked={checked}
-                              onCheckedChange={() => setSelectedTopicIds((ids) => toggle(ids, t.id))}
-                            />
-                            <div className="flex-1 text-sm">
-                              <div>
-                                {t.topicCode && (
-                                  <span className="mr-2 font-mono text-xs text-muted-foreground">{t.topicCode}</span>
-                                )}
-                              <span>{t.title}</span>
-                            </div>
-                          </div>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  )}
-                </>
-              ) : (
-                <>
-                  <p className="text-sm text-muted-foreground">
-                    Pick the syllabus topics to cover. {fallbackTopics.length === 0 && "No curated topics for this combo yet — we'll still draft, just describe in references."}
-                  </p>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {fallbackTopics.map((t) => {
-                      const checked = topics.includes(t);
-                      return (
-                        <label key={t} className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors ${checked ? "border-primary bg-primary-soft/40" : "border-border hover:bg-muted/40"}`}>
-                          <Checkbox checked={checked} onCheckedChange={() => setTopics(toggle(topics, t))} />
-                          <span className="text-sm">{t}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
-          {step === 3 && (
             <div className="space-y-6">
               <div>
-                <h2 className="font-paper text-xl font-semibold">Sections</h2>
+                <h2 className="font-paper text-xl font-semibold">Assessment Builder</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Build each section with its own question type, topic pool, marks — and tag the AOs/LOs each section must cover. Total marks must equal {totalMarks}.
+                  Build each section with its own question type, marks, and AOs/LOs. Total marks must equal {totalMarks}.
                 </p>
               </div>
 
