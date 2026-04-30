@@ -411,12 +411,7 @@ function NewAssessment() {
     }
     if (step === 2) return useSyllabus ? selectedTopicIds.length > 0 : topics.length > 0;
     if (step === 3) {
-      // Objectives — at least one of AO / KO / LO chosen, OR allow skipping if
-      // no AOs are published and no LOs derivable (custom-only flow).
-      // We allow proceeding even with all empty so non-syllabus flows aren't blocked.
-      return true;
-    }
-    if (step === 4) {
+      // Objectives + Sections combined: require a valid section blueprint.
       if (sections.length === 0) return false;
       if (sectionsTotalMarks !== totalMarks) return false;
       if (sections.some((s) => s.topic_pool.length === 0 || s.num_questions < 1)) return false;
@@ -745,9 +740,9 @@ function NewAssessment() {
           {step === 3 && (
             <div className="space-y-6">
               <div>
-                <h2 className="font-paper text-xl font-semibold">Objectives</h2>
+                <h2 className="font-paper text-xl font-semibold">Objectives & Sections</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Pick the AOs, KOs and LOs the <strong>whole paper</strong> must hit. You can refine each section's coverage in Step 4.
+                  Pick the AOs and LOs the <strong>whole paper</strong> must hit, then build each section. You can refine each section's coverage below.
                 </p>
               </div>
 
@@ -898,23 +893,18 @@ function NewAssessment() {
 
               {/* KO selection removed — KOs are inferred from topics chosen in the previous step. */}
 
-              <p className="text-xs text-muted-foreground">
-                You can narrow these targets per section in the next step. Sections inherit your picks here.
-              </p>
-            </div>
-          )}
-
-          {step === 4 && (
-            <div className="space-y-5">
-              <h2 className="font-paper text-xl font-semibold">Sections</h2>
-              <p className="text-sm text-muted-foreground">
-                Build your paper section by section. Each section has its own question type, topic pool, and marks.
-                Total marks must equal {totalMarks}.
-              </p>
+              {/* ── Sections (merged from former Step 4) ── */}
+              <div className="pt-2">
+                <h3 className="font-paper text-lg font-semibold">Sections</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Build your paper section by section. Each section has its own question type, topic pool, and marks.
+                  Total marks must equal {totalMarks}.
+                </p>
+              </div>
 
               {sections.length === 0 && (
                 <div className="rounded-lg border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
-                  Pick topics in Step 2 first, then add a section here.
+                  Pick topics in the previous step first, then add a section here.
                 </div>
               )}
 
@@ -928,7 +918,7 @@ function NewAssessment() {
                   visibleQuestionTypes={visibleQuestionTypes}
                   subject={subject}
                   allAOs={docAOs}
-                  
+
                   globalAoCodes={selectedAoCodes}
                   globalKos={selectedKos}
                   globalLos={selectedLos}
@@ -951,7 +941,7 @@ function NewAssessment() {
             </div>
           )}
 
-          {step === 6 && (
+          {step === 4 && (
             <div className="space-y-4">
               <h2 className="font-paper text-xl font-semibold">References & instructions</h2>
               <p className="text-sm text-muted-foreground">
@@ -995,7 +985,7 @@ function NewAssessment() {
             onClick={() => setStep((s) => Math.max(1, s - 1))} className="gap-1">
             <ChevronLeft className="h-4 w-4" /> Back
           </Button>
-          {step < 6 ? (
+          {step < 5 ? (
             <Button disabled={!canNext()} onClick={() => setStep((s) => s + 1)} className="gap-1">
               Next <ChevronRight className="h-4 w-4" />
             </Button>
@@ -1025,7 +1015,7 @@ function paperLabel(p: SyllabusLibraryPaper) {
 }
 
 function Stepper({ step }: { step: number }) {
-  const labels = ["Basics", "Topics / KO", "Objectives", "Sections", "References", "Generate"];
+  const labels = ["Basics", "Topics / KO", "Objectives & Sections", "References", "Generate"];
   return (
     <div className="flex items-center gap-2">
       {labels.map((l, i) => {
