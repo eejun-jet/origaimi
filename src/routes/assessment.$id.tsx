@@ -3359,13 +3359,18 @@ function CoachReviewBody({
 }
 
 function CoachSection({ title, count, children }: { title: string; count: number; children: React.ReactNode }) {
-  const [open, setOpen] = useState(count > 0);
-  useEffect(() => { if (count > 0) setOpen(true); }, [count]);
+  // Default collapsed — Coach panels are long; users opt in per section.
+  const [open, setOpen] = useState(false);
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md px-1.5 py-1 text-[11px] font-medium hover:bg-muted/40">
+      <CollapsibleTrigger
+        disabled={count === 0}
+        className="flex w-full items-center justify-between rounded-md px-1.5 py-1 text-[11px] font-medium hover:bg-muted/40 disabled:cursor-default disabled:opacity-60 disabled:hover:bg-transparent"
+      >
         <span className="flex items-center gap-1.5">
-          {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+          {count === 0
+            ? <span className="inline-block h-3 w-3" />
+            : open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
           {title}
         </span>
         <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${count > 0 ? "bg-muted text-foreground" : "text-muted-foreground"}`}>
@@ -3373,11 +3378,7 @@ function CoachSection({ title, count, children }: { title: string; count: number
         </span>
       </CollapsibleTrigger>
       <CollapsibleContent className="mt-1 space-y-1.5">
-        {count === 0 ? (
-          <p className="px-1.5 text-[10px] text-muted-foreground">No findings.</p>
-        ) : (
-          children
-        )}
+        {count === 0 ? null : children}
       </CollapsibleContent>
     </Collapsible>
   );
