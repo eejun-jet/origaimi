@@ -1852,3 +1852,185 @@ function Bar({ segments, total }: { segments: { label: string; value: number; co
     </div>
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Grouped, collapsible Assessment-Objective selector.
+// AO codes like "A1, A2, B1, C3" are grouped by their leading letter prefix
+// (everything before the trailing digits). Codes like "AO1, AO2, AO3" group
+// under the shared "AO" prefix.
+// ─────────────────────────────────────────────────────────────────────────
+function aoBandPrefix(code: string): string {
+  const m = code.match(/^([A-Za-z]+)/);
+  return m ? m[1].toUpperCase() : code.toUpperCase();
+}
+
+function AOGroupedSelector({
+  aos,
+  selected,
+  onToggle,
+  onToggleMany,
+}: {
+  aos: AssessmentObjective[];
+  selected: string[];
+  onToggle: (code: string) => void;
+  onToggleMany: (codes: string[], select: boolean) => void;
+}) {
+  const groups = useMemo(() => {
+    const m = new Map<string, AssessmentObjective[]>();
+    for (const ao of aos) {
+      const key = aoBandPrefix(ao.code);
+      const arr = m.get(key) ?? [];
+      arr.push(ao);
+      m.set(key, arr);
+    }
+    return Array.from(m.entries()).map(([prefix, items]) => ({ prefix, items }));
+  }, [aos]);
+
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+
+  return (
+    <div className="mt-3 space-y-2">
+      {groups.map(({ prefix, items }) => {
+        const codes = items.map((i) => i.code);
+        const selectedInGroup = codes.filter((c) => selected.includes(c));
+        const allChecked = codes.length > 0 && selectedInGroup.length === codes.length;
+        const someChecked = selectedInGroup.length > 0 && !allChecked;
+        const isOpen = !!open[prefix];
+        return (
+          <div key={prefix} className="rounded-md border border-border bg-background">
+            <div className="flex items-center gap-2 p-2.5">
+              <Checkbox
+                checked={allChecked ? true : someChecked ? "indeterminate" : false}
+                onCheckedChange={() => onToggleMany(codes, !allChecked)}
+                aria-label={`Select all ${prefix}`}
+              />
+              <button
+                type="button"
+                className="flex flex-1 items-center gap-2 text-left"
+                onClick={() => setOpen((p) => ({ ...p, [prefix]: !isOpen }))}
+              >
+                {isOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                <span className="font-mono text-sm font-semibold">{prefix}</span>
+                <span className="text-xs text-muted-foreground">
+                  {selectedInGroup.length} / {codes.length} selected
+                </span>
+              </button>
+            </div>
+            {isOpen && (
+              <div className="border-t border-border p-2 space-y-1">
+                {items.map((ao) => {
+                  const checked = selected.includes(ao.code);
+                  return (
+                    <label
+                      key={ao.id}
+                      className={`flex cursor-pointer items-start gap-3 rounded-md border p-2 transition-colors ${checked ? "border-primary bg-primary-soft/40" : "border-border hover:bg-muted/40"}`}
+                    >
+                      <Checkbox checked={checked} onCheckedChange={() => onToggle(ao.code)} />
+                      <div className="flex-1 text-sm">
+                        <div className="flex items-baseline gap-2">
+                          <span className="font-mono font-medium">{ao.code}</span>
+                          {ao.title && <span className="text-foreground">{ao.title}</span>}
+                          {ao.weightingPercent != null && (
+                            <span className="ml-auto text-xs text-muted-foreground">[{ao.weightingPercent}%]</span>
+                          )}
+                        </div>
+                        {ao.description && (
+                          <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">{ao.description}</p>
+                        )}
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Grouped, collapsible Learning-Outcome selector. LOs are grouped by the
+// topic they came from so teachers see topics first, then drill in.
+// ─────────────────────────────────────────────────────────────────────────
+function LOGroupedSelector({
+  topics,
+  selected,
+  onToggle,
+  onToggleMany,
+}: {
+  topics: PaperTopic[];
+  selected: string[];
+  onToggle: (lo: string) => void;
+  onToggleMany: (los: string[], select: boolean) => void;
+}) {
+  // Dedupe LOs across topics — the same LO can appear under multiple topics;
+  // we keep its first-seen topic grouping so the user picks once.
+  const groups = useMemo(() => {
+    const seen = new Set<string>();
+    const out: { topicId: string; title: string; los: string[] }[] = [];
+    for (const t of topics) {
+      const los: string[] = [];
+      for (const raw of t.learningOutcomes ?? []) {
+        const lo = raw.trim();
+        if (!lo || seen.has(lo)) continue;
+        seen.add(lo);
+        los.push(lo);
+      }
+      if (los.length > 0) out.push({ topicId: t.id, title: t.title, los });
+    }
+    return out;
+  }, [topics]);
+
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+
+  return (
+    <div className="mt-3 max-h-96 space-y-2 overflow-auto rounded-md border border-border bg-background p-2">
+      {groups.map(({ topicId, title, los }) => {
+        const selectedInGroup = los.filter((lo) => selected.includes(lo));
+        const allChecked = los.length > 0 && selectedInGroup.length === los.length;
+        const someChecked = selectedInGroup.length > 0 && !allChecked;
+        const isOpen = !!open[topicId];
+        return (
+          <div key={topicId} className="rounded-md border border-border">
+            <div className="flex items-center gap-2 p-2">
+              <Checkbox
+                checked={allChecked ? true : someChecked ? "indeterminate" : false}
+                onCheckedChange={() => onToggleMany(los, !allChecked)}
+                aria-label={`Select all LOs for ${title}`}
+              />
+              <button
+                type="button"
+                className="flex flex-1 items-center gap-2 text-left"
+                onClick={() => setOpen((p) => ({ ...p, [topicId]: !isOpen }))}
+              >
+                {isOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                <span className="text-sm font-medium">{title}</span>
+                <span className="ml-auto text-xs text-muted-foreground">
+                  {selectedInGroup.length} / {los.length}
+                </span>
+              </button>
+            </div>
+            {isOpen && (
+              <div className="border-t border-border p-1.5 space-y-1">
+                {los.map((lo) => {
+                  const checked = selected.includes(lo);
+                  return (
+                    <label
+                      key={lo}
+                      className={`flex cursor-pointer items-start gap-2 rounded p-1.5 text-xs ${checked ? "bg-primary-soft/40" : "hover:bg-muted/40"}`}
+                    >
+                      <Checkbox checked={checked} onCheckedChange={() => onToggle(lo)} />
+                      <span className="flex-1">{lo}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
