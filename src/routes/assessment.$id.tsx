@@ -2544,10 +2544,33 @@ function CoveragePanel({
       <Dialog open={explorerOpen} onOpenChange={(o) => { setExplorerOpen(o); if (!o) setExplorerKO(null); }}>
         <DialogContent className="max-w-6xl h-[85vh] flex flex-col gap-0 p-0">
           <DialogHeader className="border-b border-border px-6 py-4">
-            <DialogTitle className="font-paper text-lg">Coverage explorer</DialogTitle>
-            <DialogDescription className="text-xs">
-              {koLoGroups.length} Knowledge Outcomes · {paper.los.length - uncoveredLOs.length} / {paper.los.length} Learning Outcomes covered. Click a KO to see the LOs inside it.
-            </DialogDescription>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <DialogTitle className="font-paper text-lg">Coverage explorer</DialogTitle>
+                <DialogDescription className="text-xs">
+                  {koLoGroups.length} Knowledge Outcomes · {paper.los.length - uncoveredLOs.length} / {paper.los.length} Learning Outcomes covered.
+                </DialogDescription>
+              </div>
+              <div className="shrink-0 inline-flex rounded-md border border-border bg-background p-0.5">
+                {([
+                  { key: "matrix", label: "All at a glance" },
+                  { key: "drilldown", label: "Drill-down" },
+                ] as const).map((m) => (
+                  <button
+                    key={m.key}
+                    type="button"
+                    onClick={() => setExplorerMode(m.key)}
+                    className={`rounded-[4px] px-2.5 py-1 text-[11px] font-medium transition ${
+                      explorerMode === m.key
+                        ? "bg-foreground text-background"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {([
                 { key: "all", label: "All" },
