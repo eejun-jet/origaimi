@@ -1703,6 +1703,175 @@ function SegmentBar({ covered, total }: { covered: number; total: number }) {
   );
 }
 
+type OverviewStatus = "untested" | "under" | "thin" | "balanced" | "over";
+
+function classifyTopic(los: { covered: boolean; actual: number }[]): OverviewStatus {
+  const total = los.length;
+  if (total === 0) return "untested";
+  const covered = los.filter((l) => l.covered).length;
+  const maxActual = los.reduce((m, l) => Math.max(m, l.actual), 0);
+  const avgActual = los.reduce((s, l) => s + l.actual, 0) / total;
+  if (covered === 0) return "untested";
+  if (covered === total) {
+    if (maxActual >= 3 || avgActual > 2) return "over";
+    return "balanced";
+  }
+  if (total >= 3 && covered / total < 0.34) return "under";
+  return "thin";
+}
+
+const STATUS_META: Record<OverviewStatus, { label: string; chip: string; ring: string; sortKey: number }> = {
+  untested: { label: "Untested", chip: "bg-destructive/15 text-destructive border-destructive/30", ring: "border-destructive/40", sortKey: 0 },
+  under:    { label: "Under-tested", chip: "bg-destructive/10 text-destructive border-destructive/25", ring: "border-destructive/30", sortKey: 1 },
+  thin:     { label: "Thin", chip: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30", ring: "border-amber-500/30", sortKey: 2 },
+  over:     { label: "Over-tested", chip: "bg-warm/30 text-warm-foreground border-warm/50", ring: "border-warm/50", sortKey: 3 },
+  balanced: { label: "Balanced", chip: "bg-success/15 text-success border-success/30", ring: "border-success/30", sortKey: 4 },
+};
+
+function CoverageDonut({ covered, total }: { covered: number; total: number }) {
+  const r = 10;
+  const c = 2 * Math.PI * r;
+  const pct = total === 0 ? 0 : covered / total;
+  const dash = c * pct;
+  return (
+    <svg width="28" height="28" viewBox="0 0 28 28" className="shrink-0">
+      <circle cx="14" cy="14" r={r} fill="none" stroke="currentColor" strokeWidth="3" className="text-muted" />
+      <circle
+        cx="14" cy="14" r={r} fill="none" stroke="currentColor" strokeWidth="3"
+        strokeDasharray={`${dash} ${c - dash}`}
+        strokeDashoffset={c / 4}
+        strokeLinecap="round"
+        className={pct === 0 ? "text-destructive/40" : pct < 0.34 ? "text-destructive" : pct < 1 ? "text-amber-500" : "text-success"}
+        transform="rotate(-90 14 14)"
+      />
+    </svg>
+  );
+}
+
+function DensityBar({ los }: { los: { covered: boolean; actual: number }[] }) {
+  return (
+    <div className="flex items-center gap-[2px]">
+      {los.map((lo, i) => {
+        const cls =
+          lo.actual === 0 ? "bg-muted-foreground/20" :
+          lo.actual === 1 ? "bg-success/40" :
+          lo.actual === 2 ? "bg-success" :
+          "bg-warm";
+        return <span key={i} title={`${lo.actual}× tested`} className={`h-1.5 w-1.5 rounded-[1px] ${cls}`} />;
+      })}
+    </div>
+  );
+}
+
+function TopicsOverviewView({
+  map,
+  remarkCount,
+  setTarget,
+  paperLOs,
+}: {
+  map: TopicsMap;
+  remarkCount: (kind: "lo", value: string) => number;
+  setTarget: (t: CoverageTarget) => void;
+  paperLOs: Coverage["paper"]["los"];
+}) {
+  const loStats = new Map(paperLOs.map((l) => [l.text, l] as const));
+  const [expanded, setExpanded] = useState<string | null>(null);
+  if (map.disciplines.length === 0) {
+    return <p className="mt-3 text-xs text-muted-foreground">No Learning Outcomes targeted.</p>;
+  }
+  return (
+    <div className="mt-3 space-y-4">
+      {/* Legend */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5 text-[10px] text-muted-foreground">
+        <span className="font-medium text-foreground">Status:</span>
+        {(["under", "thin", "over", "balanced", "untested"] as OverviewStatus[]).map((s) => (
+          <span key={s} className="inline-flex items-center gap-1">
+            <span className={`inline-block h-2 w-2 rounded-sm border ${STATUS_META[s].chip}`} />
+            {STATUS_META[s].label}
+          </span>
+        ))}
+        <span className="ml-auto inline-flex items-center gap-1">
+          <span className="font-medium text-foreground">Density:</span>
+          <span className="h-1.5 w-1.5 rounded-[1px] bg-muted-foreground/20" />
+          <span className="h-1.5 w-1.5 rounded-[1px] bg-success/40" />
+          <span className="h-1.5 w-1.5 rounded-[1px] bg-success" />
+          <span className="h-1.5 w-1.5 rounded-[1px] bg-warm" />
+          <span>0×, 1×, 2×, 3+×</span>
+        </span>
+      </div>
+
+      {map.disciplines.map((disc) => {
+        const tiles = disc.topics
+          .map((t) => ({ topic: t, status: classifyTopic(t.los) }))
+          .sort((a, b) => {
+            const k = STATUS_META[a.status].sortKey - STATUS_META[b.status].sortKey;
+            if (k !== 0) return k;
+            return a.topic.title.localeCompare(b.topic.title);
+          });
+        return (
+          <div key={disc.name}>
+            <div className="mb-1.5 flex items-baseline justify-between">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{disc.name}</h4>
+              <span className="text-[10px] tabular-nums text-muted-foreground">{disc.coveredLOs} / {disc.totalLOs} LOs</span>
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {tiles.map(({ topic: t, status }) => {
+                const meta = STATUS_META[status];
+                const key = `${disc.name}::${t.title}`;
+                const isOpen = expanded === key;
+                return (
+                  <div key={key} className={`rounded-lg border bg-card transition ${meta.ring} ${isOpen ? "shadow-sm" : ""}`}>
+                    <button
+                      type="button"
+                      onClick={() => setExpanded(isOpen ? null : key)}
+                      className="flex w-full items-start gap-2 p-2.5 text-left hover:bg-muted/30"
+                    >
+                      <CoverageDonut covered={t.coveredLOs} total={t.totalLOs} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-1.5">
+                          <span className="truncate text-[11px] font-medium leading-tight" title={t.title}>{t.title}</span>
+                          <span className={`shrink-0 rounded border px-1 py-0 text-[9px] font-medium ${meta.chip}`}>{meta.label}</span>
+                        </div>
+                        <div className="mt-1 flex items-center justify-between gap-2">
+                          <span className="text-[10px] tabular-nums text-muted-foreground">{t.coveredLOs}/{t.totalLOs} LOs</span>
+                          <DensityBar los={t.los} />
+                        </div>
+                      </div>
+                    </button>
+                    {isOpen && (
+                      <div className="space-y-0.5 border-t border-border/60 px-2.5 py-1.5">
+                        {t.los.map((lo) => {
+                          const count = remarkCount("lo", lo.text);
+                          const stat = loStats.get(lo.text);
+                          return (
+                            <button
+                              key={lo.text}
+                              type="button"
+                              onClick={() => stat && setTarget({ kind: "lo", text: stat.text, actual: stat.actual, target: stat.target, covered: stat.covered })}
+                              className={`flex w-full items-start gap-1.5 rounded px-1.5 py-0.5 text-left text-[11px] leading-snug transition hover:bg-muted/50 ${lo.covered ? "text-foreground" : "text-muted-foreground"}`}
+                            >
+                              <span className={`mt-0.5 ${lo.covered ? "text-success" : "text-destructive"}`}>{lo.covered ? "✓" : "○"}</span>
+                              <span className="flex-1">{lo.text}</span>
+                              {lo.covered && lo.actual > 1 && (
+                                <span className="shrink-0 text-[9px] text-muted-foreground">×{lo.actual}</span>
+                              )}
+                              {count > 0 && <RemarkPill count={count} />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function TopicsMapView({
   map,
   remarkCount,
