@@ -723,6 +723,8 @@ function NewAssessment() {
                   globalAoCodes={selectedAoCodes}
                   globalKos={selectedKos}
                   globalLos={selectedLos}
+                  specimenMix={specimenMix}
+                  specimenLabel={specimenLabel}
                   onUpdate={(patch) => updateSection(s.id, patch)}
                   onRemove={() => removeSection(s.id)}
                   onMove={(d) => moveSection(s.id, d)}
