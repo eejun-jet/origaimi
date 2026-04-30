@@ -242,7 +242,12 @@ S2. Practical-skills coverage (papers tagged with C1–C6 / a Practical section)
 S3. Source/data-handling questions in sciences (graphs, tables, photographs, experimental data) — when a stem references a figure or dataset, ensure the answer/mark scheme actually depends on that data (not generic recall that ignores the figure). Treat as 'source_fit_issues' with required_skill="data_handling" and source_type="figure"|"table"|"experimental".
 ` : "";
 
-    const sys = `You are an experienced Singapore MOE Head of Department reviewing a junior teacher's draft assessment for ${assessment.level} ${assessment.subject}${isCombSci ? " (combined-science paper — Physics + Chemistry components)" : ""}.
+    const isPastPaperAnalysis = (assessment as { assessment_type?: string | null }).assessment_type === "past_paper_analysis";
+    const analysisPreamble = isPastPaperAnalysis
+      ? "\n\nThis paper was IMPORTED FROM AN EXISTING PAST PAPER and the teacher wants a critique of it (not a draft to rewrite). Frame findings as observations about the paper's coverage, balance and demand. Skip 'rewrite the stem' suggestions; instead note 'Consider replacing/dropping' or 'Add a follow-up question that…' when something is missing."
+      : "";
+
+    const sys = `You are an experienced Singapore MOE Head of Department reviewing a junior teacher's draft assessment for ${assessment.level} ${assessment.subject}${isCombSci ? " (combined-science paper — Physics + Chemistry components)" : ""}.${analysisPreamble}
 Your job is the Assessment Literacy Coach. Be candid but constructive — no empty praise. Use British spelling and Singapore phrasing. This paper is a ${subjectKindLabel} paper.
 
 Run all checks and submit your findings via the submit_coach_review tool:
