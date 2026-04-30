@@ -92,7 +92,7 @@ const COACH_TOOL = {
               rationale: { type: "string" },
               category: {
                 type: "string",
-                enum: ["ao", "command_word", "ko_lo", "bloom", "source_fit", "marks", "other"],
+                enum: ["ao", "ko_lo", "source_fit", "marks", "other"],
               },
             },
             required: ["rewrite", "rationale", "category"],
