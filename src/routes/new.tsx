@@ -745,9 +745,9 @@ function NewAssessment() {
           {step === 3 && (
             <div className="space-y-6">
               <div>
-                <h2 className="font-paper text-xl font-semibold">Objectives</h2>
+                <h2 className="font-paper text-xl font-semibold">Objectives & Sections</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Pick the AOs, KOs and LOs the <strong>whole paper</strong> must hit. You can refine each section's coverage in Step 4.
+                  Pick the AOs and LOs the <strong>whole paper</strong> must hit, then build each section. You can refine each section's coverage below.
                 </p>
               </div>
 
