@@ -1911,7 +1911,147 @@ function TopicsOverviewView({
   );
 }
 
-function TopicsMapView({
+// ── LOs grouped by KO/topic, each topic collapsible. The "at-a-glance" view ──
+function TopicsByKOView({
+  map,
+  remarkCount,
+  setTarget,
+  paperLOs,
+}: {
+  map: TopicsMap;
+  remarkCount: (kind: "lo", value: string) => number;
+  setTarget: (t: CoverageTarget) => void;
+  paperLOs: Coverage["paper"]["los"];
+}) {
+  const loStats = new Map(paperLOs.map((l) => [l.text, l] as const));
+  const [filter, setFilter] = useState<"all" | OverviewStatus>("all");
+  const [openTopics, setOpenTopics] = useState<Set<string>>(new Set());
+
+  if (map.disciplines.length === 0) {
+    return <p className="mt-3 text-xs text-muted-foreground">No Learning Outcomes targeted.</p>;
+  }
+
+  const allTopicKeys: string[] = [];
+  map.disciplines.forEach((d) => d.topics.forEach((t) => allTopicKeys.push(`${d.name}::${t.title}`)));
+
+  const expandAll = () => setOpenTopics(new Set(allTopicKeys));
+  const collapseAll = () => setOpenTopics(new Set());
+
+  const toggle = (key: string) => {
+    setOpenTopics((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const filterPills: ("all" | OverviewStatus)[] = ["all", "untested", "under", "thin", "balanced", "over"];
+
+  return (
+    <div className="mt-3 space-y-3">
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-border/60 bg-muted/20 px-2 py-1.5 text-[10px]">
+        <span className="font-medium text-foreground">Show:</span>
+        {filterPills.map((f) => (
+          <button
+            key={f}
+            type="button"
+            onClick={() => setFilter(f)}
+            className={`rounded-full border px-2 py-0.5 transition ${
+              filter === f
+                ? "border-primary/40 bg-primary/10 text-primary"
+                : "border-border bg-background text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {f === "all" ? "All topics" : STATUS_META[f].label}
+          </button>
+        ))}
+        <span className="ml-auto inline-flex items-center gap-2">
+          <button type="button" onClick={expandAll} className="text-muted-foreground hover:text-foreground">
+            Expand all
+          </button>
+          <span className="text-muted-foreground/40">·</span>
+          <button type="button" onClick={collapseAll} className="text-muted-foreground hover:text-foreground">
+            Collapse all
+          </button>
+        </span>
+      </div>
+
+      {map.disciplines.map((disc) => {
+        const tiles = disc.topics
+          .map((t) => ({ topic: t, status: classifyTopic(t.los) }))
+          .filter(({ status }) => filter === "all" || status === filter)
+          .sort((a, b) => {
+            const k = STATUS_META[a.status].sortKey - STATUS_META[b.status].sortKey;
+            if (k !== 0) return k;
+            return a.topic.title.localeCompare(b.topic.title);
+          });
+        if (tiles.length === 0) return null;
+        return (
+          <div key={disc.name}>
+            <div className="mb-1.5 flex items-baseline justify-between">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{disc.name}</h4>
+              <span className="text-[10px] tabular-nums text-muted-foreground">{disc.coveredLOs} / {disc.totalLOs} LOs</span>
+            </div>
+            <div className="space-y-1.5">
+              {tiles.map(({ topic: t, status }) => {
+                const meta = STATUS_META[status];
+                const key = `${disc.name}::${t.title}`;
+                const isOpen = openTopics.has(key);
+                return (
+                  <Collapsible key={key} open={isOpen} onOpenChange={() => toggle(key)}>
+                    <div className={`rounded-lg border bg-card transition ${meta.ring} ${isOpen ? "shadow-sm" : ""}`}>
+                      <CollapsibleTrigger className="group flex w-full items-center gap-2 p-2 text-left hover:bg-muted/30">
+                        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
+                        <CoverageDonut covered={t.coveredLOs} total={t.totalLOs} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-1.5">
+                            <span className="truncate text-[11px] font-medium leading-tight" title={t.title}>{t.title}</span>
+                            <span className={`shrink-0 rounded border px-1 py-0 text-[9px] font-medium ${meta.chip}`}>{meta.label}</span>
+                          </div>
+                          <div className="mt-1 flex items-center justify-between gap-2">
+                            <span className="text-[10px] tabular-nums text-muted-foreground">{t.coveredLOs}/{t.totalLOs} LOs</span>
+                            <DensityBar los={t.los} />
+                          </div>
+                        </div>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="space-y-0.5 border-t border-border/60 px-2.5 py-1.5">
+                          {t.los.map((lo) => {
+                            const count = remarkCount("lo", lo.text);
+                            const stat = loStats.get(lo.text);
+                            return (
+                              <button
+                                key={lo.text}
+                                type="button"
+                                onClick={() => stat && setTarget({ kind: "lo", text: stat.text, actual: stat.actual, target: stat.target, covered: stat.covered })}
+                                className={`flex w-full items-start gap-1.5 rounded px-1.5 py-0.5 text-left text-[11px] leading-snug transition hover:bg-muted/50 ${lo.covered ? "text-foreground" : "text-muted-foreground"}`}
+                              >
+                                <span className={`mt-0.5 ${lo.covered ? "text-success" : "text-destructive"}`}>{lo.covered ? "✓" : "○"}</span>
+                                <span className="flex-1">{lo.text}</span>
+                                {lo.covered && lo.actual > 1 && (
+                                  <span className="shrink-0 text-[9px] text-muted-foreground">×{lo.actual}</span>
+                                )}
+                                {count > 0 && <RemarkPill count={count} />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </CollapsibleContent>
+                    </div>
+                  </Collapsible>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+
   map,
   remarkCount,
   setTarget,
