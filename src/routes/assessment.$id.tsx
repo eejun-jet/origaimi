@@ -2408,6 +2408,16 @@ type CoachFindings = {
   source_fit_issues: { question_id: string; position: number; required_skill?: string; source_type?: string; severity: Severity; note: string }[];
   mark_scheme_flags: { question_id: string; position: number; marks_declared: number; marks_suggested?: number; severity: Severity; note: string }[];
   suggestions: { question_id?: string; position?: number; rewrite: string; rationale: string; category: string }[];
+  calibration?: {
+    has_specimen: boolean;
+    specimen_title?: string;
+    bloom_drift: { level: string; specimen_pct: number; observed_pct: number; delta: number; severity: Severity }[];
+    ao_drift: { ao: string; specimen_pct: number; observed_pct: number; delta: number; severity: Severity }[];
+    marks_shape_drift: { metric: string; specimen: number; observed: number; severity: Severity }[];
+    command_word_gaps: string[];
+    severity: Severity;
+    note: string;
+  };
 };
 
 type CoachRun = {
@@ -2660,6 +2670,9 @@ function collectFindings(f: CoachFindings): FlatFinding[] {
   f.mark_scheme_flags?.forEach((x, i) => out.push({ key: `ms:${i}`, severity: x.severity }));
   const u = f.unrealised_outcomes;
   if (u && (u.kos?.length || u.los?.length)) out.push({ key: "uo:0", severity: "warn" });
+  if (f.calibration?.has_specimen && f.calibration.severity !== "info") {
+    out.push({ key: "cal:0", severity: f.calibration.severity });
+  }
   return out;
 }
 
@@ -2842,6 +2855,62 @@ function CoachReviewBody({
             </FindingCard>
           );
         })}
+      </CoachSection>
+
+      <CoachSection
+        title="Calibration vs specimen"
+        count={findings.calibration?.has_specimen && findings.calibration.severity !== "info" && !dismissed.has("cal:0") ? 1 : 0}
+      >
+        {findings.calibration ? (
+          !findings.calibration.has_specimen ? (
+            <p className="text-[11px] text-muted-foreground">{findings.calibration.note}</p>
+          ) : !dismissed.has("cal:0") ? (
+            <FindingCard
+              severity={findings.calibration.severity}
+              onDismiss={() => onDismiss("cal:0")}
+              remarkCount={remarkCountFor("cal:0")}
+              onDiscuss={() => onDiscuss({
+                key: "cal:0",
+                title: "Calibration vs specimen",
+                subtitle: findings.calibration!.specimen_title,
+                severity: findings.calibration!.severity,
+                body: (
+                  <>
+                    <p>{findings.calibration!.note}</p>
+                    {findings.calibration!.bloom_drift.length > 0 && <p className="mt-2 font-medium">Bloom mix drift</p>}
+                    {findings.calibration!.bloom_drift.map((b) => (
+                      <p key={b.level} className="text-[11px] text-muted-foreground">
+                        {b.level}: specimen {b.specimen_pct}% · observed {b.observed_pct}% (Δ {b.delta > 0 ? "+" : ""}{b.delta})
+                      </p>
+                    ))}
+                    {findings.calibration!.ao_drift.length > 0 && <p className="mt-2 font-medium">AO mark-share drift</p>}
+                    {findings.calibration!.ao_drift.map((a) => (
+                      <p key={a.ao} className="text-[11px] text-muted-foreground">
+                        {a.ao}: specimen {a.specimen_pct}% · observed {a.observed_pct}% (Δ {a.delta > 0 ? "+" : ""}{a.delta})
+                      </p>
+                    ))}
+                    {findings.calibration!.marks_shape_drift.length > 0 && <p className="mt-2 font-medium">Marks shape</p>}
+                    {findings.calibration!.marks_shape_drift.map((m) => (
+                      <p key={m.metric} className="text-[11px] text-muted-foreground">
+                        {m.metric}: specimen {m.specimen} · observed {m.observed}
+                      </p>
+                    ))}
+                    {findings.calibration!.command_word_gaps.length > 0 && (
+                      <p className="mt-2 text-[11px]"><span className="font-medium">Command words missing vs specimen:</span> {findings.calibration!.command_word_gaps.join(", ")}</p>
+                    )}
+                  </>
+                ),
+              })}
+            >
+              <div className="font-medium">
+                {findings.calibration.specimen_title ? `vs ${findings.calibration.specimen_title}` : "vs specimen"}
+              </div>
+              <p className="mt-0.5 text-muted-foreground">{findings.calibration.note}</p>
+            </FindingCard>
+          ) : null
+        ) : (
+          <p className="text-[11px] text-muted-foreground">Calibration not available for this run.</p>
+        )}
       </CoachSection>
 
       <CoachSection

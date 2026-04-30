@@ -1,70 +1,96 @@
-# Add a true "Overview" map for LO coverage by KO
+# Peg paper difficulty to specimen papers
 
-## Problem
+Currently, specimen papers influence generation only as free-text exemplars dropped into the prompt. The model is told to "match difficulty norms" but nothing measures whether it actually did. This plan closes that loop in two places.
 
-In the LO Coverage card, the **Map** and **List** toggles look almost identical — both render a vertical, text-heavy list of LOs. Map just adds discipline/topic grouping with collapsibles. Neither gives the at-a-glance "where am I under- or over-testing?" picture the user wants across 10–20 KOs.
+## What changes for the user
 
-## Solution
+1. **Difficulty mix auto-suggested from the specimen** — when you start a new assessment for a subject + level that has a parsed Cambridge/MOE specimen, the Builder pre-fills the easy/medium/hard mix per section to mirror the specimen instead of a flat default.
+2. **New "Calibration vs specimen" Coach check** — after generation, the Coach compares the new paper's difficulty fingerprint (Bloom mix, AO mark share, marks-per-question shape, command-word register) against the specimen and flags drift.
 
-Replace the current two-mode toggle with a **three-mode toggle**: `Overview` · `Map` · `List`, where **Overview** is a new graphical heatmap-style layout that makes balance instantly visible.
+If no specimen is parsed for the subject + level, both features quietly no-op — no regressions.
 
-### Overview design
+## Technical changes
 
-A grid of KO tiles (one tile per Knowledge Outcome / topic in the paper), grouped under their discipline header (Physics / Chemistry / Biology, or just "Topics" for non-science). Each tile shows:
+### 1. Specimen fingerprint at parse time
 
-- **KO name** (truncated, full name on hover)
-- **Coverage ratio** `covered / total` LOs, big and tabular
-- **Donut or radial fill** showing % of LOs covered
-- **Density bar** below: 1 segment per LO in that KO, colored by how many times that LO is tested
-  - grey = uncovered (0×)
-  - light = covered once (1×)
-  - mid = 2×
-  - strong = 3+× (over-tested)
-- **Status chip** in the corner:
-  - `Under-tested` — `covered/total < 0.34` and total ≥ 3 (red)
-  - `Thin` — partial coverage (amber)
-  - `Balanced` — all covered, no LO tested >2× (green)
-  - `Over-tested` — any LO tested 3+ times OR avg actual per LO > 2 (purple/warm)
-  - `Untested` — 0 covered (destructive outline)
+Add column:
 
-Tiles are sorted by status severity (under-tested → thin → over-tested → balanced) so problems surface first. Clicking a tile expands it inline (or scrolls into Map view focused on that KO) to show its LOs with the existing per-LO drawer behavior.
-
-A small **legend** sits above the grid explaining the four status colors and the density-bar scale.
-
-```text
-Physics                                              8 / 14 LOs
-┌────────────────────┐  ┌────────────────────┐  ┌────────────────────┐
-│ Kinematics  [Under]│  │ Dynamics    [Thin] │  │ Energy    [Over×]  │
-│  ◐ 1/5             │  │  ◑ 3/5             │  │  ● 4/4             │
-│  ▪▫▫▫▫             │  │  ▪▪▪▫▫             │  │  ▪▪▪▪▪▪▪ (3×, 2×) │
-└────────────────────┘  └────────────────────┘  └────────────────────┘
+```sql
+ALTER TABLE public.past_papers
+  ADD COLUMN difficulty_fingerprint jsonb;
 ```
 
-### Map / List unchanged
+Fingerprint shape (computed in `parse-paper/index.ts` from `questions_json` after the AI returns):
 
-The existing collapsible Map and flat List views stay as-is for users who want to drill in. The toggle just gains a third option, defaulting to **Overview**.
+```json
+{
+  "version": 1,
+  "is_specimen": true,
+  "total_marks": 80,
+  "question_count": 12,
+  "marks_per_question": { "min": 2, "median": 6, "max": 12, "histogram": {"1-3": 4, "4-6": 5, "7-12": 3} },
+  "command_word_freq": { "explain": 4, "compare": 2, "calculate": 3, "describe": 2, "evaluate": 1 },
+  "bloom_mix_pct": { "remember": 10, "understand": 25, "apply": 35, "analyse": 20, "evaluate": 10 },
+  "ao_mark_share_pct": { "AO1": 30, "AO2": 50, "AO3": 20 },
+  "sub_part_depth_avg": 2.4
+}
+```
 
-## Technical details
+Bloom + AO are inferred from command-word + marks heuristics shared with `coverage-infer.ts`. `is_specimen` reuses the same regex check `exemplars.ts` already uses (title/notes/paper_number contains "specimen|sample|exemplar").
 
-**File:** `src/routes/assessment.$id.tsx`
+### 2. Auto-suggested difficulty mix in Builder
 
-1. Change the `loView` state type from `"map" | "list"` to `"overview" | "map" | "list"`, default `"overview"`.
-2. Add a third toggle button "Overview" to the existing pill-toggle (lines 2048–2063). Keep it visible whenever `paper.los.length > 0` (not just for science) — non-science assessments still benefit; they'll just show a single ungrouped section.
-3. Add a new `TopicsOverviewView` component near `TopicsMapView` (around line 1706). It receives the same `topicsMap`, `paperLOs`, `setTarget`, `remarkCount` props and renders the tile grid.
-4. Compute per-tile status from each topic's `los` array (already carries `covered` + `actual`):
-   - `untested`: coveredLOs === 0
-   - `under-tested`: 0 < coveredLOs/totalLOs < 0.34 (only when totalLOs ≥ 3)
-   - `thin`: coveredLOs < totalLOs (the rest)
-   - `over-tested`: coveredLOs === totalLOs AND (max(actual) ≥ 3 OR avg(actual) > 2)
-   - `balanced`: coveredLOs === totalLOs AND not over-tested
-5. Tile uses a small SVG donut (existing project has no chart helper for this use case; a 24px inline SVG is lightest — avoids pulling Recharts for a tiny widget).
-6. Density bar is a flex row of `1.5×6px` rounded segments; color steps via Tailwind utilities tied to the theme tokens (`bg-muted`, `bg-success/40`, `bg-success`, `bg-warm`).
-7. Clicking a tile sets `expandedKO` local state; the expanded panel reuses the existing LO button list from `TopicsMapView` (extract a tiny `LOList` subcomponent so both views share it — avoids duplication).
-8. For non-science papers (no discipline grouping), reuse the same tile grid by treating the whole paper as a single "Topics" group derived from the `bySection` KO list.
+`src/routes/new.tsx` — when subject + level change, query `past_papers` for the most recent `is_specimen=true` row and read `difficulty_fingerprint.bloom_mix_pct`. Collapse Bloom 6 categories into easy/medium/hard:
 
-No DB schema changes, no edge function changes. Pure UI.
+- easy = remember + understand
+- medium = apply + analyse
+- hard = evaluate + create
+
+Pre-fill each section's `difficulty_mix` with that mapping. User can still override. A small chip "Calibrated to <specimen title>" appears next to the mix slider.
+
+### 3. Coach calibration check
+
+Edge function `coach-review/index.ts`:
+
+- Add a deterministic pre-step (no AI cost): load the specimen fingerprint for the assessment's subject + level + paper number, compute the same fingerprint over the generated paper, diff each metric.
+- New finding category `calibration` added to `CoachFindings`:
+
+```ts
+calibration: {
+  has_specimen: boolean;
+  specimen_title?: string;
+  bloom_drift: { level: string; specimen_pct: number; observed_pct: number; delta: number }[];
+  ao_drift: { ao: string; specimen_pct: number; observed_pct: number; delta: number }[];
+  marks_shape_drift: { metric: "median"|"max"|"avg_subparts"; specimen: number; observed: number; severity: Severity }[];
+  command_word_gaps: string[]; // command words common in specimen but missing here
+  severity: Severity;
+  note: string;
+}
+```
+
+Severity rules: drift > 8pp → warn, > 15pp → fail (matching existing AO drift thresholds). The AI tool schema is unchanged for this section because the diff is computed locally — only `summary` and `suggestions` still come from the AI, and the calibration findings are merged into the response after the AI call.
+
+Frontend `src/routes/assessment.$id.tsx`:
+
+- Add a new `<CoachSection title="Calibration vs specimen">` rendering the diff as small comparison rows (specimen % vs observed %, with the same fail/warn chips used for AO drift).
+- If `has_specimen=false`, render a one-line muted note "No specimen parsed for this subject + level — upload one in Papers to enable calibration."
+
+### 4. Backfill
+
+For papers already parsed, add a one-shot backfill at the top of the migration that recomputes the fingerprint inline using the existing `questions_json`. New papers compute it during parse. No re-parse needed.
+
+## Files touched
+
+- `supabase/migrations/<new>.sql` — add column + backfill
+- `supabase/functions/parse-paper/index.ts` — write fingerprint
+- `supabase/functions/parse-paper/fingerprint.ts` — new shared helper (re-used by Coach)
+- `supabase/functions/coach-review/index.ts` — load specimen, compute observed, diff, merge into findings
+- `supabase/functions/coach-review/fingerprint.ts` — symlink/copy of the shared helper (edge functions don't share imports across folders)
+- `src/routes/new.tsx` — auto-suggest difficulty mix
+- `src/routes/assessment.$id.tsx` — render new Calibration section
+- `src/integrations/supabase/types.ts` — auto-regenerated
 
 ## Out of scope
 
-- No new data collection — uses existing `paper.los` + `topicsMap` only.
-- No changes to the KO Coverage card above (which is marks-based, not LO-coverage-based). If you also want the heatmap concept applied to that card, say so and I'll extend it.
+- Per-question pegging (e.g. forcing question 3 to match specimen Q3). Too brittle and pedagogically wrong.
+- Self-grading pass where the AI re-rates its own difficulty — separate, more expensive feature; revisit only if the calibration check shows persistent drift.

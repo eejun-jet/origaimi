@@ -6,6 +6,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.0";
 import { expandQuestionTags } from "./coverage-infer.ts";
+import { computeFingerprint, diffFingerprints, type DifficultyFingerprint, type FingerprintQuestion } from "./fingerprint.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -339,6 +340,60 @@ Return STRICTLY through the tool. Do not include prose outside the tool call. If
         status: 502,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // Calibration vs specimen — deterministic, no AI cost. Pull the most
+    // recent specimen paper for this subject + level (if any), compute the
+    // observed paper's fingerprint, and diff. Result merged into findings so
+    // the frontend can render it as a Coach section.
+    try {
+      const subj = (assessment as any).subject ?? null;
+      const lvl = (assessment as any).level ?? null;
+      let specimenFp: DifficultyFingerprint | null = null;
+      let specimenTitle: string | undefined;
+      if (subj && lvl) {
+        const { data: specRows } = await supabase
+          .from("past_papers")
+          .select("id, title, paper_number, notes, difficulty_fingerprint")
+          .eq("subject", subj)
+          .eq("level", lvl)
+          .eq("parse_status", "ready")
+          .not("difficulty_fingerprint", "is", null)
+          .limit(20);
+        const specimenMatch = (specRows ?? []).find((r: any) => {
+          const hay = `${r.title ?? ""} ${r.notes ?? ""} ${r.paper_number ?? ""}`.toLowerCase();
+          return /(specimen|sample|exemplar)/.test(hay);
+        }) ?? (specRows ?? [])[0] ?? null;
+        if (specimenMatch?.difficulty_fingerprint) {
+          specimenFp = specimenMatch.difficulty_fingerprint as DifficultyFingerprint;
+          specimenTitle = specimenMatch.title ?? undefined;
+        }
+      }
+      const observedQs: FingerprintQuestion[] = (questions as any[]).map((q) => ({
+        marks: q.marks ?? null,
+        command_word: null,
+        stem: q.stem ?? null,
+        bloom_level: q.bloom_level ?? null,
+        ao_codes: Array.isArray(q.ao_codes) ? q.ao_codes : [],
+        sub_parts: null,
+      }));
+      const observedFp = computeFingerprint(observedQs, {
+        title: assessment.title ?? null,
+        notes: null,
+        paper_number: null,
+      });
+      findings.calibration = diffFingerprints(specimenFp, observedFp, specimenTitle);
+    } catch (calErr) {
+      console.warn("coach-review: calibration step failed", calErr);
+      findings.calibration = {
+        has_specimen: false,
+        bloom_drift: [],
+        ao_drift: [],
+        marks_shape_drift: [],
+        command_word_gaps: [],
+        severity: "info",
+        note: "Calibration step skipped due to an error.",
+      };
     }
 
     const ranAt = new Date().toISOString();
