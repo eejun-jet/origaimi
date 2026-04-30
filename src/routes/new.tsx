@@ -667,24 +667,6 @@ function NewAssessment() {
                     From <span className="font-medium text-foreground">{selected!.paper.paperCode ?? selected!.doc.syllabusCode}</span>
                     {selected!.paper.componentName ? ` · ${selected!.paper.componentName}` : ""}.
                   </p>
-                  {availableSections.length > 1 && (
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Section</Label>
-                      <div className="flex flex-wrap gap-1.5">
-                        {availableSections.map((s) => (
-                          <button
-                            key={s}
-                            type="button"
-                            onClick={() => setActiveSection(s)}
-                            className={`rounded-full border px-3 py-1 text-xs transition-colors ${activeSection === s ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted"}`}
-                          >
-                            {s}
-                          </button>
-                        ))}
-                      </div>
-                      <p className="text-xs text-muted-foreground">This paper covers multiple disciplines — pick <span className="font-medium">All</span> to choose topics from every section, or filter to one.</p>
-                    </div>
-                  )}
                   {topicsLoading ? (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" /> Loading topics…
