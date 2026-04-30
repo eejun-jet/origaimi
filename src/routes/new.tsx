@@ -1502,52 +1502,57 @@ function SectionCard({
         )}
       </div>
 
-      {/* Per-section objectives — fully editable; pre-seeded from Step 3 picks */}
+      {/* Per-section objectives */}
       <div className="mt-4 rounded-md border border-dashed border-border bg-muted/20 p-3">
-        <div className="flex items-center justify-between">
-          <Label className="text-xs font-semibold uppercase tracking-wide">Objectives for this section</Label>
-          <span className="text-[11px] text-muted-foreground">Pre-seeded from Step 3 — edit freely per section</span>
-        </div>
+        <Label className="text-xs font-semibold uppercase tracking-wide">Objectives for this section</Label>
 
-        {/* AOs */}
-        <div className="mt-3">
+        {/* Assessment Objectives — grouped by main AO band, expandable to sub-AOs */}
+        <div className="mt-3 rounded-lg border border-border bg-muted/20 p-3">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-medium text-muted-foreground">
-              AOs ({sectionAos.length} / {aoCandidates.length})
-            </span>
+            <Label className="text-sm font-medium">Assessment Objectives (AOs)</Label>
             {aoCandidates.length > 0 && (
-              <button
-                type="button"
-                className="text-[11px] text-primary hover:underline"
-                onClick={() =>
-                  onUpdate({ ao_codes: allAoSelected ? [] : aoCandidates.map((a) => a.code) })
-                }
-              >
-                {allAoSelected ? "Clear all" : "Select all"}
-              </button>
+              <span className="text-xs text-muted-foreground">{sectionAos.length} / {aoCandidates.length} selected</span>
             )}
           </div>
           {aoCandidates.length === 0 ? (
-            <p className="mt-1 text-[11px] text-muted-foreground">No AOs available — add a custom one below.</p>
+            <p className="mt-2 text-xs text-muted-foreground">No AOs available — add a custom one below.</p>
           ) : (
-            <div className="mt-1.5 grid gap-1 sm:grid-cols-2">
-              {aoCandidates.map((ao) => {
-                const checked = sectionAos.includes(ao.code);
-                const isGlobal = globalAoCodes.includes(ao.code);
+            <>
+              {(() => {
+                const allCodes = aoCandidates.map((a) => a.code);
+                const allChecked = allCodes.length > 0 && allCodes.every((c) => sectionAos.includes(c));
+                const someChecked = allCodes.some((c) => sectionAos.includes(c)) && !allChecked;
                 return (
-                  <label key={ao.code} className={`flex cursor-pointer items-start gap-2 rounded border p-1.5 text-[12px] transition-colors ${checked ? "border-primary bg-primary-soft/40" : "border-border hover:bg-muted/40"}`}>
-                    <Checkbox checked={checked} onCheckedChange={() => toggleAo(ao.code)} />
-                    <span className="flex-1">
-                      <span className="font-mono">{ao.code}</span>
-                      {ao.title && <span className="ml-1 text-muted-foreground">{ao.title}</span>}
-                      {isGlobal && <span className="ml-1 text-[10px] text-muted-foreground">(global)</span>}
-                    </span>
+                  <label className="mt-3 flex cursor-pointer items-center gap-2 rounded-md border border-dashed border-border p-2 text-xs font-medium hover:bg-muted/40">
+                    <Checkbox
+                      checked={allChecked ? true : someChecked ? "indeterminate" : false}
+                      onCheckedChange={() => onUpdate({ ao_codes: allChecked ? [] : allCodes })}
+                    />
+                    <span>{allChecked ? "Deselect all AOs" : "Select all AOs"}</span>
                   </label>
                 );
-              })}
-            </div>
+              })()}
+              <AOGroupedSelector
+                aos={aoCandidates.map((a, idx) => ({
+                  id: `${section.id}-${a.code}-${idx}`,
+                  paperId: "",
+                  code: a.code,
+                  title: a.title ?? null,
+                  description: a.description ?? null,
+                  weightingPercent: null,
+                }))}
+                selected={sectionAos}
+                onToggle={(code) => toggleAo(code)}
+                onToggleMany={(codes, select) => {
+                  const next = select
+                    ? Array.from(new Set([...sectionAos, ...codes]))
+                    : sectionAos.filter((c) => !codes.includes(c));
+                  onUpdate({ ao_codes: next });
+                }}
+              />
+            </>
           )}
-          <div className="mt-1.5 flex gap-1.5">
+          <div className="mt-2 flex gap-1.5">
             <Input
               className="h-7 text-xs"
               placeholder="+ Add custom AO (e.g. AO4)"
@@ -1559,73 +1564,58 @@ function SectionCard({
           </div>
         </div>
 
-        {/* KOs */}
-        {koCandidates.length > 0 && (
-          <div className="mt-3 border-t border-border/50 pt-3">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium text-muted-foreground">
-                KOs ({sectionKos.length} / {koCandidates.length})
-              </span>
-              <button
-                type="button"
-                className="text-[11px] text-primary hover:underline"
-                onClick={() => onUpdate({ knowledge_outcomes: allKoSelected ? [] : koCandidates.slice() })}
-              >
-                {allKoSelected ? "Clear all" : "Select all"}
-              </button>
-            </div>
-            <div className="mt-1.5 max-h-48 space-y-1 overflow-y-auto rounded-md border border-border/60 bg-background p-1.5">
-              {koCandidates.map((ko) => {
-                const checked = sectionKos.includes(ko);
-                const isGlobal = globalKos.includes(ko);
-                const isShort = ko.length <= 40;
-                return (
-                  <label key={ko} className={`flex cursor-pointer items-start gap-1.5 rounded p-1 text-[11px] ${checked ? "bg-primary-soft/40" : "hover:bg-muted/40"}`}>
-                    <Checkbox checked={checked} onCheckedChange={() => toggleKo(ko)} />
-                    <span className={`flex-1 whitespace-pre-line ${isShort ? "capitalize" : ""}`}>{ko}{isGlobal && <span className="ml-1 text-[10px] text-muted-foreground normal-case">(global)</span>}</span>
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* LOs */}
-        <div className="mt-3 border-t border-border/50 pt-3">
+        {/* Learning Outcomes — grouped by topic, expandable */}
+        <div className="mt-3 rounded-lg border border-border bg-muted/20 p-3">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-medium text-muted-foreground">
-              LOs ({sectionLos.length} / {loCandidates.length})
-            </span>
-            {loCandidates.length > 0 && (
-              <button
-                type="button"
-                className="text-[11px] text-primary hover:underline"
-                onClick={() => onUpdate({ learning_outcomes: allLoSelected ? [] : loCandidates.slice() })}
-              >
-                {allLoSelected ? "Clear all" : "Select all"}
-              </button>
-            )}
+            <Label className="text-sm font-medium">Learning Outcomes (LOs)</Label>
+            <span className="text-xs text-muted-foreground">{sectionLos.length} / {loCandidates.length} selected</span>
           </div>
           {loCandidates.length === 0 ? (
-            <p className="mt-1 text-[11px] text-muted-foreground">No LOs available — add a custom one below.</p>
+            <p className="mt-2 text-xs text-muted-foreground">No LOs available — add a custom one below.</p>
           ) : (
-            <div className="mt-1.5 max-h-48 space-y-1 overflow-y-auto pr-1">
-              {loCandidates.map((lo) => {
-                const checked = sectionLos.includes(lo);
-                const isGlobal = globalLos.includes(lo);
+            <>
+              {(() => {
+                const allChecked = loCandidates.length > 0 && loCandidates.every((lo) => sectionLos.includes(lo));
+                const someChecked = loCandidates.some((lo) => sectionLos.includes(lo)) && !allChecked;
                 return (
-                  <label key={lo} className={`flex cursor-pointer items-start gap-2 rounded border p-1.5 text-[12px] transition-colors ${checked ? "border-primary bg-primary-soft/40" : "border-border hover:bg-muted/40"}`}>
-                    <Checkbox checked={checked} onCheckedChange={() => toggleLo(lo)} />
-                    <span className="flex-1 leading-snug">
-                      {lo}
-                      {isGlobal && <span className="ml-1 text-[10px] text-muted-foreground">(global)</span>}
-                    </span>
+                  <label className="mt-3 flex cursor-pointer items-center gap-2 rounded-md border border-dashed border-border p-2 text-xs font-medium hover:bg-muted/40">
+                    <Checkbox
+                      checked={allChecked ? true : someChecked ? "indeterminate" : false}
+                      onCheckedChange={() => onUpdate({ learning_outcomes: allChecked ? [] : loCandidates.slice() })}
+                    />
+                    <span>{allChecked ? "Deselect all LOs" : "Select all LOs"}</span>
                   </label>
                 );
-              })}
-            </div>
+              })()}
+              <LOGroupedSelector
+                topics={section.topic_pool.map((t, idx) => ({
+                  id: `${section.id}-topic-${idx}-${t.topic_code ?? t.topic}`,
+                  paperId: "",
+                  topicCode: t.topic_code ?? null,
+                  parentCode: null,
+                  title: t.topic,
+                  depth: 0,
+                  position: idx,
+                  strand: null,
+                  subStrand: null,
+                  learningOutcomes: t.learning_outcomes ?? [],
+                  suggestedBlooms: [],
+                  outcomeCategories: t.outcome_categories ?? [],
+                  aoCodes: t.ao_codes ?? [],
+                  section: t.section ?? null,
+                }))}
+                selected={sectionLos}
+                onToggle={(lo) => toggleLo(lo)}
+                onToggleMany={(los, select) => {
+                  const next = select
+                    ? Array.from(new Set([...sectionLos, ...los]))
+                    : sectionLos.filter((x) => !los.includes(x));
+                  onUpdate({ learning_outcomes: next });
+                }}
+              />
+            </>
           )}
-          <div className="mt-1.5 flex gap-1.5">
+          <div className="mt-2 flex gap-1.5">
             <Input
               className="h-7 text-xs"
               placeholder="+ Add custom LO for this section"
