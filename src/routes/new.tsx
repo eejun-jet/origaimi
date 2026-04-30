@@ -946,7 +946,7 @@ function NewAssessment() {
             </div>
           )}
 
-          {step === 6 && (
+          {step === 4 && (
             <div className="space-y-4">
               <h2 className="font-paper text-xl font-semibold">References & instructions</h2>
               <p className="text-sm text-muted-foreground">
