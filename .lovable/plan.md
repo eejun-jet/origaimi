@@ -1,96 +1,82 @@
-# Peg paper difficulty to specimen papers
 
-Currently, specimen papers influence generation only as free-text exemplars dropped into the prompt. The model is told to "match difficulty norms" but nothing measures whether it actually did. This plan closes that loop in two places.
+## Short answer
 
-## What changes for the user
+Yes — and most of the pipeline already exists. Today, when a user uploads a past paper on the Papers page, `parse-paper` extracts every question with marks, command word, sub-parts, attached diagrams, then classifies each one against the matching syllabus to assign **topic, learning outcomes, knowledge outcomes, AO codes, and Bloom level**. It also writes a difficulty fingerprint to the paper.
 
-1. **Difficulty mix auto-suggested from the specimen** — when you start a new assessment for a subject + level that has a parsed Cambridge/MOE specimen, the Builder pre-fills the easy/medium/hard mix per section to mirror the specimen instead of a flat default.
-2. **New "Calibration vs specimen" Coach check** — after generation, the Coach compares the new paper's difficulty fingerprint (Bloom mix, AO mark share, marks-per-question shape, command-word register) against the specimen and flags drift.
+What's missing is the **last-mile UI**: a single "Analyse this paper" action that turns those parsed questions into the same shape the rest of the app understands (an assessment with `assessment_questions`), so the Table of Specifications view, AO/KO/LO map, and Assessment Coach all work on it.
 
-If no specimen is parsed for the subject + level, both features quietly no-op — no regressions.
+## What the user will see
+
+On the Papers page, each parsed paper gets a new **"Analyse paper"** button (next to the existing exemplar-ready badge). Clicking it:
+
+1. Creates an assessment from the parsed paper (subject, level, total marks, duration inferred from syllabus paper if matched).
+2. Imports each parsed question into `assessment_questions` with its stem, marks, command word, AOs, KOs, LOs, topic, and Bloom level.
+3. Routes the user to `/assessment/$id`, which already renders:
+   - **Table of Specifications** — marks × topic × Bloom/AO grid (existing component on the assessment page).
+   - **AO / KO / LO coverage** — already computed per-question and shown in the assessment view.
+   - **Assessment Coach** — the user clicks "Run Coach" as usual; the existing calibration step compares the paper against specimen fingerprints.
+
+A second button, **"Send to bank"**, additionally writes each parsed question into `question_bank_items` so they become reusable exemplars (subject, level, topic, AOs, KOs, LOs, command word, marks, source year/paper, source excerpt, diagram paths).
 
 ## Technical changes
 
-### 1. Specimen fingerprint at parse time
+### 1. New server function: `analysePastPaper`
 
-Add column:
+`src/server/papers.functions.ts` (new) — authenticated `createServerFn` that takes `paperId`, reads `past_papers` + classified `questions_json`, and:
 
-```sql
-ALTER TABLE public.past_papers
-  ADD COLUMN difficulty_fingerprint jsonb;
-```
+- Inserts a row into `assessments` with:
+  - `title`: `"Analysis · " + paper.title`
+  - `subject`, `level` from the paper
+  - `assessment_type`: `"past_paper_analysis"` (new value, no enum to update)
+  - `total_marks`: sum of question marks
+  - `duration_minutes`: from matched `syllabus_papers.duration_minutes` if available, else null
+  - `syllabus_doc_id` / `syllabus_paper_id`: matched on subject+level+paper_number when possible
+  - `status`: `"draft"`
+- Inserts one `assessment_questions` row per parsed question with `stem`, `marks`, `question_type`, `topic`, `bloom_level`, `ao_codes`, `learning_outcomes`, `knowledge_outcomes`, `source_excerpt`, `diagram_url` (mapped from `past_paper_diagrams`), `notes` carrying the original question number/sub-parts.
+- Returns `{ assessmentId }`.
 
-Fingerprint shape (computed in `parse-paper/index.ts` from `questions_json` after the AI returns):
+A second function `importPaperToBank` writes each question into `question_bank_items` with `source: "past_paper"`, `past_paper_id`, `question_number`, `year`, `paper_number`, `exam_board`, plus the same AO/KO/LO/topic fields and any `diagram_paths`.
 
-```json
-{
-  "version": 1,
-  "is_specimen": true,
-  "total_marks": 80,
-  "question_count": 12,
-  "marks_per_question": { "min": 2, "median": 6, "max": 12, "histogram": {"1-3": 4, "4-6": 5, "7-12": 3} },
-  "command_word_freq": { "explain": 4, "compare": 2, "calculate": 3, "describe": 2, "evaluate": 1 },
-  "bloom_mix_pct": { "remember": 10, "understand": 25, "apply": 35, "analyse": 20, "evaluate": 10 },
-  "ao_mark_share_pct": { "AO1": 30, "AO2": 50, "AO3": 20 },
-  "sub_part_depth_avg": 2.4
-}
-```
+Both functions use `requireSupabaseAuth` and respect RLS.
 
-Bloom + AO are inferred from command-word + marks heuristics shared with `coverage-infer.ts`. `is_specimen` reuses the same regex check `exemplars.ts` already uses (title/notes/paper_number contains "specimen|sample|exemplar").
+### 2. Papers page UI (`src/routes/papers.tsx`)
 
-### 2. Auto-suggested difficulty mix in Builder
+For each paper where `parse_status = "ready"` and `questions_json` is non-empty:
 
-`src/routes/new.tsx` — when subject + level change, query `past_papers` for the most recent `is_specimen=true` row and read `difficulty_fingerprint.bloom_mix_pct`. Collapse Bloom 6 categories into easy/medium/hard:
+- Add an **"Analyse paper"** primary button → calls `analysePastPaper` → toast on success → `navigate({ to: "/assessment/$id", params: { id } })`.
+- Add a **"Send to bank"** secondary button → calls `importPaperToBank` → toast with count.
+- Disable both while parsing is pending; show spinner during the call.
 
-- easy = remember + understand
-- medium = apply + analyse
-- hard = evaluate + create
+### 3. Assessment view tweaks (`src/routes/assessment.$id.tsx`)
 
-Pre-fill each section's `difficulty_mix` with that mapping. User can still override. A small chip "Calibrated to <specimen title>" appears next to the mix slider.
+The existing TOS, AO/KO/LO coverage, and Coach panels already key off `assessment_questions`, so they "just work" for analysed papers. Two small touches:
 
-### 3. Coach calibration check
+- When `assessment_type === "past_paper_analysis"`, show a header chip "From past paper · {paper.title}" linking back to `/papers`.
+- Hide the "Generate questions" / "Regenerate" actions in this mode (the questions came from a real paper — no AI generation step needed).
+- Coach behaves normally: it loads the questions, runs the rubric, and runs the calibration step against the specimen fingerprint for that subject+level. For an analysed paper, this answers "how does this real paper score against our standards?".
 
-Edge function `coach-review/index.ts`:
+### 4. Coach prompt note
 
-- Add a deterministic pre-step (no AI cost): load the specimen fingerprint for the assessment's subject + level + paper number, compute the same fingerprint over the generated paper, diff each metric.
-- New finding category `calibration` added to `CoachFindings`:
+`coach-review` already reads any assessment regardless of how it was created, so no functional change is needed. Add one sentence to its system prompt: when `assessment_type === "past_paper_analysis"`, frame findings as a critique of the existing paper rather than suggested edits, and skip "rewrite the stem" type recommendations.
 
-```ts
-calibration: {
-  has_specimen: boolean;
-  specimen_title?: string;
-  bloom_drift: { level: string; specimen_pct: number; observed_pct: number; delta: number }[];
-  ao_drift: { ao: string; specimen_pct: number; observed_pct: number; delta: number }[];
-  marks_shape_drift: { metric: "median"|"max"|"avg_subparts"; specimen: number; observed: number; severity: Severity }[];
-  command_word_gaps: string[]; // command words common in specimen but missing here
-  severity: Severity;
-  note: string;
-}
-```
+### 5. Schema
 
-Severity rules: drift > 8pp → warn, > 15pp → fail (matching existing AO drift thresholds). The AI tool schema is unchanged for this section because the diff is computed locally — only `summary` and `suggestions` still come from the AI, and the calibration findings are merged into the response after the AI call.
+No migration required. Reuses existing tables and columns:
+- `assessments`, `assessment_questions` (already populated by the generator)
+- `past_papers.questions_json` (already populated by `parse-paper` with classifications)
+- `past_paper_diagrams` (already linked to questions)
+- `question_bank_items` already supports `source = "past_paper"` and `past_paper_id`.
 
-Frontend `src/routes/assessment.$id.tsx`:
+### 6. Edge cases
 
-- Add a new `<CoachSection title="Calibration vs specimen">` rendering the diff as small comparison rows (specimen % vs observed %, with the same fail/warn chips used for AO drift).
-- If `has_specimen=false`, render a one-line muted note "No specimen parsed for this subject + level — upload one in Papers to enable calibration."
+- **Paper not yet parsed / no syllabus match**: button disabled with tooltip "Parse paper first" or "No matching syllabus uploaded — AO/KO/LO will be empty". The analysis still runs; the TOS shows marks/topic/Bloom but AO columns will be sparse.
+- **Sub-parts**: each (a)(b)(i)(ii) becomes its own `assessment_questions` row, marks summed correctly, position preserved.
+- **Diagrams**: the first diagram referenced by the question is wired into `diagram_url` for the assessment question; bank import keeps the full `diagram_paths` array.
+- **Idempotency**: re-running "Analyse paper" creates a new assessment each time (cheap, lets the user compare runs); we surface the most recent one on the Papers card.
 
-### 4. Backfill
+## Files to add or edit
 
-For papers already parsed, add a one-shot backfill at the top of the migration that recomputes the fingerprint inline using the existing `questions_json`. New papers compute it during parse. No re-parse needed.
-
-## Files touched
-
-- `supabase/migrations/<new>.sql` — add column + backfill
-- `supabase/functions/parse-paper/index.ts` — write fingerprint
-- `supabase/functions/parse-paper/fingerprint.ts` — new shared helper (re-used by Coach)
-- `supabase/functions/coach-review/index.ts` — load specimen, compute observed, diff, merge into findings
-- `supabase/functions/coach-review/fingerprint.ts` — symlink/copy of the shared helper (edge functions don't share imports across folders)
-- `src/routes/new.tsx` — auto-suggest difficulty mix
-- `src/routes/assessment.$id.tsx` — render new Calibration section
-- `src/integrations/supabase/types.ts` — auto-regenerated
-
-## Out of scope
-
-- Per-question pegging (e.g. forcing question 3 to match specimen Q3). Too brittle and pedagogically wrong.
-- Self-grading pass where the AI re-rates its own difficulty — separate, more expensive feature; revisit only if the calibration check shows persistent drift.
+- `src/server/papers.functions.ts` (new) — `analysePastPaper`, `importPaperToBank`
+- `src/routes/papers.tsx` — add the two buttons and call sites
+- `src/routes/assessment.$id.tsx` — header chip + hide generation actions for `past_paper_analysis`
+- `supabase/functions/coach-review/index.ts` — one-paragraph prompt addition for analysis mode

@@ -9,8 +9,10 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SUBJECTS, LEVELS } from "@/lib/syllabus";
-import { Loader2, Upload, FileText, Trash2, RefreshCw } from "lucide-react";
+import { Loader2, Upload, FileText, Trash2, RefreshCw, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import { useNavigate } from "@tanstack/react-router";
+import { analysePastPaper } from "@/lib/analyse-past-paper";
 
 export const Route = createFileRoute("/papers")({
   component: PapersPage,
@@ -279,6 +281,9 @@ function PaperCard({
   paper: PaperRow; diagramCount: number; onChanged: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [analysing, setAnalysing] = useState(false);
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const remove = async () => {
     if (!confirm(`Delete "${paper.title}"? This will also remove its extracted bank items.`)) return;
     setBusy(true);
@@ -301,6 +306,21 @@ function PaperCard({
       toast.error(msg);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const analyse = async () => {
+    if (!user) { toast.error("Please sign in"); return; }
+    setAnalysing(true);
+    try {
+      const id = await analysePastPaper({ paperId: paper.id, userId: user.id });
+      toast.success("Paper imported — opening analysis");
+      navigate({ to: "/assessment/$id", params: { id } });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(msg);
+    } finally {
+      setAnalysing(false);
     }
   };
 
@@ -346,7 +366,13 @@ function PaperCard({
         </div>
       )}
       <div className="mt-3 flex flex-wrap gap-2">
-        <Button size="sm" variant="ghost" onClick={reparse} disabled={busy} className="gap-1">
+        {paper.parse_status === "ready" && Array.isArray(paper.questions_json) && (paper.questions_json as unknown[]).length > 0 && (
+          <Button size="sm" onClick={analyse} disabled={analysing || busy} className="gap-1">
+            {analysing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+            Analyse paper
+          </Button>
+        )}
+        <Button size="sm" variant="ghost" onClick={reparse} disabled={busy || analysing} className="gap-1">
           <RefreshCw className="h-3.5 w-3.5" /> Re-parse
         </Button>
         {paper.parse_status === "ready" && (
@@ -357,7 +383,7 @@ function PaperCard({
             View in bank
           </a>
         )}
-        <Button size="sm" variant="ghost" onClick={remove} disabled={busy} className="ml-auto gap-1 text-destructive">
+        <Button size="sm" variant="ghost" onClick={remove} disabled={busy || analysing} className="ml-auto gap-1 text-destructive">
           <Trash2 className="h-3.5 w-3.5" /> Delete
         </Button>
       </div>
