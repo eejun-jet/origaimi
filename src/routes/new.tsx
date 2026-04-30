@@ -756,7 +756,7 @@ function NewAssessment() {
             onClick={() => setStep((s) => Math.max(1, s - 1))} className="gap-1">
             <ChevronLeft className="h-4 w-4" /> Back
           </Button>
-          {step < 5 ? (
+          {step < 4 ? (
             <Button disabled={!canNext()} onClick={() => setStep((s) => s + 1)} className="gap-1">
               Next <ChevronRight className="h-4 w-4" />
             </Button>
