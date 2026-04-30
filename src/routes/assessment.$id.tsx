@@ -2111,6 +2111,7 @@ function CoveragePanel({
   const [explorerOpen, setExplorerOpen] = useState(false);
   const [explorerKO, setExplorerKO] = useState<string | null>(null);
   const [explorerFilter, setExplorerFilter] = useState<"all" | OverviewStatus>("all");
+  const [explorerMode, setExplorerMode] = useState<"drilldown" | "matrix">("matrix");
 
   // Build KO → list of LOs (with per-LO covered/actual) using questions as the
   // source of truth. Falls back to an "Unassigned" bucket for orphan LOs.
@@ -2543,10 +2544,33 @@ function CoveragePanel({
       <Dialog open={explorerOpen} onOpenChange={(o) => { setExplorerOpen(o); if (!o) setExplorerKO(null); }}>
         <DialogContent className="max-w-6xl h-[85vh] flex flex-col gap-0 p-0">
           <DialogHeader className="border-b border-border px-6 py-4">
-            <DialogTitle className="font-paper text-lg">Coverage explorer</DialogTitle>
-            <DialogDescription className="text-xs">
-              {koLoGroups.length} Knowledge Outcomes · {paper.los.length - uncoveredLOs.length} / {paper.los.length} Learning Outcomes covered. Click a KO to see the LOs inside it.
-            </DialogDescription>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <DialogTitle className="font-paper text-lg">Coverage explorer</DialogTitle>
+                <DialogDescription className="text-xs">
+                  {koLoGroups.length} Knowledge Outcomes · {paper.los.length - uncoveredLOs.length} / {paper.los.length} Learning Outcomes covered.
+                </DialogDescription>
+              </div>
+              <div className="shrink-0 inline-flex rounded-md border border-border bg-background p-0.5">
+                {([
+                  { key: "matrix", label: "All at a glance" },
+                  { key: "drilldown", label: "Drill-down" },
+                ] as const).map((m) => (
+                  <button
+                    key={m.key}
+                    type="button"
+                    onClick={() => setExplorerMode(m.key)}
+                    className={`rounded-[4px] px-2.5 py-1 text-[11px] font-medium transition ${
+                      explorerMode === m.key
+                        ? "bg-foreground text-background"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {([
                 { key: "all", label: "All" },
@@ -2578,6 +2602,86 @@ function CoveragePanel({
             </div>
           </DialogHeader>
 
+          {explorerMode === "matrix" ? (
+            <div className="min-h-0 flex-1 overflow-y-auto bg-muted/10 p-4">
+              {visibleKOs.length === 0 ? (
+                <p className="px-2 py-12 text-center text-xs text-muted-foreground">
+                  No Knowledge Outcomes match this filter.
+                </p>
+              ) : (
+                <>
+                  {/* Legend */}
+                  <div className="mb-3 flex flex-wrap items-center gap-3 px-1 text-[10px] text-muted-foreground">
+                    <span className="font-medium uppercase tracking-wide">Legend:</span>
+                    <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" />Covered (tested)</span>
+                    <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-700" />Tested ≥2×</span>
+                    <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm border border-border bg-background" />Not covered</span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                    {visibleKOs.map((g) => {
+                      const meta = STATUS_META[g.status];
+                      return (
+                        <div
+                          key={g.name}
+                          className="rounded-lg border border-border bg-card p-3"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <h4 className="text-xs font-semibold leading-snug">{g.name}</h4>
+                              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-medium ${meta.chip}`}>
+                                  {meta.label}
+                                </span>
+                                <span className="text-[10px] text-muted-foreground">
+                                  {g.coveredLOs}/{g.totalLOs} LOs · {g.actualMarks}{g.targetMarks ? `/${g.targetMarks}` : ""}m
+                                </span>
+                              </div>
+                            </div>
+                            <CoverageDonut covered={g.coveredLOs} total={g.totalLOs} />
+                          </div>
+                          {g.los.length === 0 ? (
+                            <p className="mt-2 text-[10px] italic text-muted-foreground">No LOs mapped.</p>
+                          ) : (
+                            <ul className="mt-2 space-y-0.5">
+                              {g.los.map((lo) => {
+                                const count = remarkCount("lo", lo.text);
+                                const fullStat = paper.los.find((l) => l.text === lo.text);
+                                const dotClass = !lo.covered
+                                  ? "border border-border bg-background"
+                                  : lo.actual >= 2
+                                    ? "bg-emerald-700"
+                                    : "bg-emerald-500";
+                                return (
+                                  <li key={lo.text}>
+                                    <button
+                                      type="button"
+                                      onClick={() => { if (fullStat) setTarget({ kind: "lo", ...fullStat }); }}
+                                      className={`flex w-full items-start gap-2 rounded px-1.5 py-1 text-left text-[11px] leading-snug transition hover:bg-muted/50 ${
+                                        lo.covered ? "text-foreground" : "text-muted-foreground"
+                                      }`}
+                                    >
+                                      <span className={`mt-1 h-2 w-2 shrink-0 rounded-sm ${dotClass}`} />
+                                      <span className="flex-1">{lo.text}</span>
+                                      {lo.actual > 0 && (
+                                        <span className="shrink-0 text-[10px] text-muted-foreground">
+                                          {lo.actual}×
+                                        </span>
+                                      )}
+                                      {count > 0 && <RemarkPill count={count} />}
+                                    </button>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
           <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[minmax(0,3fr)_minmax(0,4fr)]">
             {/* Left: KO grid */}
             <div className="overflow-y-auto border-r border-border bg-muted/20 p-4">
@@ -2682,6 +2786,7 @@ function CoveragePanel({
               )}
             </div>
           </div>
+          )}
         </DialogContent>
       </Dialog>
     </>
