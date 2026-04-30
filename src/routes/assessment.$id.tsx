@@ -522,6 +522,14 @@ function EditorPage() {
               <Badge variant="secondary">{assessment.level}</Badge>
               <Badge variant="secondary">{assessment.duration_minutes} min</Badge>
               <Badge variant="secondary">{totalActual} / {assessment.total_marks} marks</Badge>
+              {assessment.assessment_type === "past_paper_analysis" && (
+                <Link
+                  to="/papers"
+                  className="inline-flex items-center rounded-md bg-primary-soft px-2 py-0.5 text-[11px] font-medium text-primary hover:underline"
+                >
+                  Imported from past paper
+                </Link>
+              )}
             </div>
           </div>
           <div className="flex gap-2">
