@@ -144,6 +144,37 @@ function NewAssessment() {
     if (!filteredLibrary.some((d) => d.id === docId)) setSelectedPaperKey("");
   }, [filteredLibrary, selectedPaperKey]);
 
+  // Suggested difficulty mix derived from the most relevant specimen paper's
+  // fingerprint (Bloom mix → easy/medium/hard buckets). Pegs the builder to
+  // the calibrated specimens (e.g. Cambridge GCE) for the chosen subject+level.
+  const [specimenMix, setSpecimenMix] = useState<DifficultyMix | null>(null);
+  const [specimenLabel, setSpecimenLabel] = useState<string>("");
+  useEffect(() => {
+    let cancelled = false;
+    if (!isScienceSubject(subject)) { setSpecimenMix(null); setSpecimenLabel(""); return; }
+    (async () => {
+      const { data } = await supabase
+        .from("past_papers")
+        .select("title, year, level, subject, difficulty_fingerprint")
+        .ilike("subject", `%${subject}%`)
+        .ilike("level", `%${level}%`)
+        .not("difficulty_fingerprint", "is", null)
+        .order("year", { ascending: false })
+        .limit(1);
+      if (cancelled) return;
+      const row = data?.[0] as { title?: string; year?: number; difficulty_fingerprint?: { bloom_mix_pct?: Record<string, number> } } | undefined;
+      const bm = row?.difficulty_fingerprint?.bloom_mix_pct;
+      if (!bm) { setSpecimenMix(null); setSpecimenLabel(""); return; }
+      // Map Bloom → difficulty buckets.
+      const easy = Math.round((bm.remember ?? 0) + (bm.understand ?? 0) * 0.5);
+      const hard = Math.round((bm.analyse ?? 0) + (bm.evaluate ?? 0) + (bm.create ?? 0));
+      const medium = Math.max(0, 100 - easy - hard);
+      setSpecimenMix({ easy, medium, hard });
+      setSpecimenLabel(`${row?.title ?? "specimen"}${row?.year ? ` (${row.year})` : ""}`);
+    })();
+    return () => { cancelled = true; };
+  }, [subject, level]);
+
   const selected = useMemo(() => {
     if (!selectedPaperKey) return null;
     const [docId, paperId] = selectedPaperKey.split(":");
