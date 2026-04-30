@@ -188,7 +188,9 @@ export async function analysePastPaper(opts: {
     const CHUNK = 100;
     for (let i = 0; i < rows.length; i += CHUNK) {
       const slice = rows.slice(i, i + CHUNK);
-      const { error: qErr } = await supabase.from("assessment_questions").insert(slice);
+      const { error: qErr } = await supabase
+        .from("assessment_questions")
+        .insert(slice as unknown as never);
       if (qErr) {
         // Roll back the empty assessment so we don't leave an orphan.
         await supabase.from("assessments").delete().eq("id", assessmentId);
