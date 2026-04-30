@@ -1,19 +1,13 @@
 // Curated Singapore MOE syllabus topics (MVP set)
 export const SUBJECTS = [
-  "Mathematics",
-  "Science",
-  "English Language",
-  "Mother Tongue",
   "Humanities",
+  "Sciences",
 ] as const;
 
 export const LEVELS = [
-  "P1", "P2", "P3", "P4", "P5", "P6",
-  "P6 Foundation",
   "Sec 1", "Sec 2",
   "Sec 3", "Sec 4",
   "Sec 3N", "Sec 4N", "Sec 5N",
-  "JC1", "JC2",
 ] as const;
 
 export const ASSESSMENT_TYPES = [
