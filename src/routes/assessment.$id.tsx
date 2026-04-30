@@ -2087,10 +2087,12 @@ function RemarkPill({ count }: { count: number }) {
 }
 
 function CoveragePanel({
+  assessmentId,
   coverage, totalMarks, totalActual, questions, comments, identity, subject, sections,
   onAddComment, onSetCommentStatus, onDeleteComment, onScrollToQuestion,
   onRetag, retagBusy,
 }: {
+  assessmentId: string;
   coverage: Coverage;
   totalMarks: number;
   totalActual: number;
@@ -2105,8 +2107,16 @@ function CoveragePanel({
   const uncoveredLOs = paper.los.filter((l) => !l.covered);
   const [target, setTarget] = useState<CoverageTarget | null>(null);
   const isScience = isScienceSubject(subject);
-  const [loView, setLoView] = useState<"overview" | "map" | "list">(isScience ? "overview" : "list");
+  const [loView, setLoView] = useState<"topic" | "map" | "list">(isScience ? "topic" : "list");
   const topicsMap = useMemo(() => buildTopicsMap(paper.los, sections), [paper.los, sections]);
+
+  // Card-level open/closed state, persisted per assessment.
+  const cardOpen = useCardCollapseState(assessmentId, {
+    ao: true,
+    ko: false,
+    lo: true,
+    sections: false,
+  });
 
   // ── Coverage Explorer (full-screen KO → LO drill-down) ──
   const [explorerOpen, setExplorerOpen] = useState(false);
