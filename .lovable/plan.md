@@ -1,80 +1,70 @@
-## Goal
+# Add a true "Overview" map for LO coverage by KO
 
-When a user uploads a past paper, the AI parser should split it into individual reusable bank items — each with its own stem, sub-parts, marks, command word, accompanying diagrams, source/stimulus excerpts, and full syllabus tagging (Knowledge Outcome / Learning Outcome / Assessment Objective). Those items then appear as filterable, searchable rows on the `/bank` page and become available to pull into the Assessment Builder.
+## Problem
 
-## How it will work end-to-end
+In the LO Coverage card, the **Map** and **List** toggles look almost identical — both render a vertical, text-heavy list of LOs. Map just adds discipline/topic grouping with collapsibles. Neither gives the at-a-glance "where am I under- or over-testing?" picture the user wants across 10–20 KOs.
 
-1. **User uploads paper** on `/papers` (already works). They tag subject + level + year + paper number, and optionally pick a syllabus.
-2. **`parse-paper` edge function** (extended) runs once per paper and:
-   a. Extracts every numbered question + sub-part verbatim (stem, marks, command word) — already partly done.
-   b. **NEW:** Detects per-question stimulus/source material (passage, data table, equation, source A/B excerpts) and stores it as `source_excerpt` per question.
-   c. **NEW:** Links each detected diagram to the specific question(s) that reference it (instead of only to a page).
-   d. **NEW:** A second AI pass classifies each question against the chosen syllabus's `syllabus_topics` — picks topic_code, learning_outcome codes, knowledge outcomes, AO codes, and Bloom level. If no syllabus is selected, falls back to free-text topic tags.
-   e. Inserts each question (and each substantive sub-part) as a row in `question_bank_items` with `source = 'past_paper'` and rich tags.
-3. **`/bank` page** is upgraded with filters (subject, level, syllabus, topic, KO/LO, AO, source, year, marks, command word, question type) and full-text search. Each card shows the stem, attached diagram(s), source excerpt, and tags. Clicking a row reveals full detail + "use in new assessment".
-4. **Assessment Builder** gets a new "Pull from bank" affordance so generated papers can mix bank items with freshly generated ones (deferred wiring detail — surfaced as a button that filters bank items by current subject/level/syllabus).
+## Solution
 
-## Technical changes
+Replace the current two-mode toggle with a **three-mode toggle**: `Overview` · `Map` · `List`, where **Overview** is a new graphical heatmap-style layout that makes balance instantly visible.
 
-### Database (one migration)
+### Overview design
 
-Extend `question_bank_items` so each row can be a real past-paper question with attachments and full tagging:
+A grid of KO tiles (one tile per Knowledge Outcome / topic in the paper), grouped under their discipline header (Physics / Chemistry / Biology, or just "Topics" for non-science). Each tile shows:
 
-- `past_paper_id uuid` — link back to source paper (nullable for AI/manual items)
-- `question_number text` — e.g. "3a(ii)"
-- `command_word text`
-- `source_excerpt text` — passage / source / data block tied to the question
-- `diagram_paths text[]` — array of `diagrams` bucket keys for this question
-- `learning_outcomes text[]` — LO codes (e.g. `7.2.1`)
-- `knowledge_outcomes text[]` — KO codes
-- `ao_codes text[]` — Assessment Objective codes
-- `syllabus_doc_id uuid` — which syllabus this is mapped against
-- `topic_code text` — canonical syllabus topic code
-- `year int`, `paper_number text`, `exam_board text` — provenance
-- Index on `(subject, level, syllabus_doc_id)` and GIN on `learning_outcomes`, `knowledge_outcomes`, `ao_codes`, `tags` for filter speed.
-- RLS: keep existing trial-open policies (consistent with rest of project).
+- **KO name** (truncated, full name on hover)
+- **Coverage ratio** `covered / total` LOs, big and tabular
+- **Donut or radial fill** showing % of LOs covered
+- **Density bar** below: 1 segment per LO in that KO, colored by how many times that LO is tested
+  - grey = uncovered (0×)
+  - light = covered once (1×)
+  - mid = 2×
+  - strong = 3+× (over-tested)
+- **Status chip** in the corner:
+  - `Under-tested` — `covered/total < 0.34` and total ≥ 3 (red)
+  - `Thin` — partial coverage (amber)
+  - `Balanced` — all covered, no LO tested >2× (green)
+  - `Over-tested` — any LO tested 3+ times OR avg actual per LO > 2 (purple/warm)
+  - `Untested` — 0 covered (destructive outline)
 
-Also add `question_id uuid` to `past_paper_diagrams` so a diagram can be tied to a specific extracted question rather than just a page.
+Tiles are sorted by status severity (under-tested → thin → over-tested → balanced) so problems surface first. Clicking a tile expands it inline (or scrolls into Map view focused on that KO) to show its LOs with the existing per-LO drawer behavior.
 
-### `supabase/functions/parse-paper/index.ts`
+A small **legend** sits above the grid explaining the four status colors and the density-bar scale.
 
-- Expand the `save_paper_index` tool schema so each question now also returns:
-  - `command_word`, `marks`
-  - `source_excerpt` (verbatim source/stimulus tied to the question)
-  - `figure_refs` (list of figure indices the question depends on)
-  - `question_type` (mcq / structured / essay / source-based / data-response)
-  - `difficulty_hint`
-- After the figure rendering loop, build a map `figureIndex -> diagrams.image_path` so we can attach diagram paths to each question.
-- Add a **second AI call** (`classify-questions`) that takes the extracted questions plus the relevant syllabus's `syllabus_topics` rows (topic_code, title, learning_outcome_code, learning_outcomes, ao_codes) and returns per-question: `topic_code`, `learning_outcomes[]`, `knowledge_outcomes[]`, `ao_codes[]`, `bloom_level`. If `syllabus_doc_id` is null on the paper, skip and store free-text tags.
-- Insert one `question_bank_items` row per question (and per non-trivial sub-part), with `source = 'past_paper'`, all tags, attached `diagram_paths`, `source_excerpt`, and provenance. Idempotent: delete existing past-paper bank rows for this `past_paper_id` before re-inserting (so re-parse stays clean).
-- Keep existing behaviour (style summary, figures, questions_json on the paper) intact so the generator's exemplar-anchoring continues to work.
+```text
+Physics                                              8 / 14 LOs
+┌────────────────────┐  ┌────────────────────┐  ┌────────────────────┐
+│ Kinematics  [Under]│  │ Dynamics    [Thin] │  │ Energy    [Over×]  │
+│  ◐ 1/5             │  │  ◑ 3/5             │  │  ● 4/4             │
+│  ▪▫▫▫▫             │  │  ▪▪▪▫▫             │  │  ▪▪▪▪▪▪▪ (3×, 2×) │
+└────────────────────┘  └────────────────────┘  └────────────────────┘
+```
 
-### Frontend
+### Map / List unchanged
 
-- `src/routes/bank.tsx`: rebuild as a filterable list.
-  - Filter rail: subject, level, syllabus, topic, KO/LO, AO, source (mine / past_paper / ai), year, marks range, command word, question type.
-  - Search box (stem + topic + source excerpt).
-  - Item card: badges for subject/level/topic/LO/KO/AO/Bloom/marks, the stem, a "Source" expandable showing `source_excerpt` if any, and inline preview of attached diagrams (signed URLs from `diagrams` bucket).
-  - "View full" drawer with provenance (paper title, year, paper #, question number) and a "Use in new assessment" action that deep-links to `/new` with the item pre-selected.
-- `src/routes/papers.tsx`: after a successful parse, show a "X questions added to bank" badge and a "View in bank" link filtered to that paper.
-- Restore the `/bank` link in `AppHeader` and dashboard (we removed it earlier; with real content it's worth bringing back). Rename the page from "Curated Inspiration" to "Question bank".
+The existing collapsible Map and flat List views stay as-is for users who want to drill in. The toggle just gains a third option, defaulting to **Overview**.
 
-### Failure modes handled
+## Technical details
 
-- Paper has no syllabus selected → bank items still get created with free-text topic tags; KO/LO/AO arrays stay empty. UI shows "Untagged — link a syllabus to auto-tag".
-- Classifier AI fails or times out → questions are inserted with free-text topic only; a "Re-tag" button on the paper re-runs just the classifier.
-- Diagram render fails → fallback to PDF reference (existing behaviour) and the bank item shows a "diagram unavailable" placeholder.
-- Re-parse → previous past-paper bank rows for that paper are deleted first, so no duplicates.
+**File:** `src/routes/assessment.$id.tsx`
 
-## Out of scope for this pass (call out so user can decide)
+1. Change the `loView` state type from `"map" | "list"` to `"overview" | "map" | "list"`, default `"overview"`.
+2. Add a third toggle button "Overview" to the existing pill-toggle (lines 2048–2063). Keep it visible whenever `paper.los.length > 0` (not just for science) — non-science assessments still benefit; they'll just show a single ungrouped section.
+3. Add a new `TopicsOverviewView` component near `TopicsMapView` (around line 1706). It receives the same `topicsMap`, `paperLOs`, `setTarget`, `remarkCount` props and renders the tile grid.
+4. Compute per-tile status from each topic's `los` array (already carries `covered` + `actual`):
+   - `untested`: coveredLOs === 0
+   - `under-tested`: 0 < coveredLOs/totalLOs < 0.34 (only when totalLOs ≥ 3)
+   - `thin`: coveredLOs < totalLOs (the rest)
+   - `over-tested`: coveredLOs === totalLOs AND (max(actual) ≥ 3 OR avg(actual) > 2)
+   - `balanced`: coveredLOs === totalLOs AND not over-tested
+5. Tile uses a small SVG donut (existing project has no chart helper for this use case; a 24px inline SVG is lightest — avoids pulling Recharts for a tiny widget).
+6. Density bar is a flex row of `1.5×6px` rounded segments; color steps via Tailwind utilities tied to the theme tokens (`bg-muted`, `bg-success/40`, `bg-success`, `bg-warm`).
+7. Clicking a tile sets `expandedKO` local state; the expanded panel reuses the existing LO button list from `TopicsMapView` (extract a tiny `LOList` subcomponent so both views share it — avoids duplication).
+8. For non-science papers (no discipline grouping), reuse the same tile grid by treating the whole paper as a single "Topics" group derived from the `bySection` KO list.
 
-- Pulling bank items into the Assessment Builder (the "Use from bank" flow in `/new`) — I'll wire the button + deep-link, but full mix-and-match generation can be a follow-up.
-- Manual editing of extracted questions in the bank.
-- Bulk re-tagging across many papers at once.
+No DB schema changes, no edge function changes. Pure UI.
 
-## Deliverables
+## Out of scope
 
-- 1 migration (schema additions + indexes).
-- Updated `parse-paper` edge function with classifier pass and bank-item fan-out.
-- New filterable `/bank` page with diagrams + source excerpts.
-- Restored nav link, papers page badge linking to bank.
+- No new data collection — uses existing `paper.los` + `topicsMap` only.
+- No changes to the KO Coverage card above (which is marks-based, not LO-coverage-based). If you also want the heatmap concept applied to that card, say so and I'll extend it.
