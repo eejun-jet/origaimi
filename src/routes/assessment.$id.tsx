@@ -2286,31 +2286,44 @@ function CoveragePanel({
               {paper.los.length - uncoveredLOs.length} / {paper.los.length} learning outcomes covered
             </p>
           </div>
-          {isScience && paper.los.length > 0 && (
-            <div className="inline-flex shrink-0 rounded-md border border-border bg-muted/30 p-0.5 text-[10px]">
+          <div className="flex shrink-0 items-center gap-1.5">
+            {isScience && paper.los.length > 0 && (
+              <div className="inline-flex rounded-md border border-border bg-muted/30 p-0.5 text-[10px]">
+                <button
+                  type="button"
+                  onClick={() => setLoView("overview")}
+                  className={`rounded px-2 py-0.5 transition ${loView === "overview" ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  Overview
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLoView("map")}
+                  className={`rounded px-2 py-0.5 transition ${loView === "map" ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  Map
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLoView("list")}
+                  className={`rounded px-2 py-0.5 transition ${loView === "list" ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  List
+                </button>
+              </div>
+            )}
+            {paper.los.length > 0 && (
               <button
                 type="button"
-                onClick={() => setLoView("overview")}
-                className={`rounded px-2 py-0.5 transition ${loView === "overview" ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                onClick={() => { setExplorerOpen(true); setExplorerKO(null); }}
+                className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-[10px] font-medium text-foreground transition hover:bg-muted"
+                title="Open full Coverage Explorer"
               >
-                Overview
+                <Maximize2 className="h-3 w-3" />
+                Expand
               </button>
-              <button
-                type="button"
-                onClick={() => setLoView("map")}
-                className={`rounded px-2 py-0.5 transition ${loView === "map" ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-              >
-                Map
-              </button>
-              <button
-                type="button"
-                onClick={() => setLoView("list")}
-                className={`rounded px-2 py-0.5 transition ${loView === "list" ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-              >
-                List
-              </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
         {paper.los.length === 0 && (
           <p className="mt-3 text-xs text-muted-foreground">No Learning Outcomes targeted.</p>
