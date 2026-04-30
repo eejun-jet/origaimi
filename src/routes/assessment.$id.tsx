@@ -2670,6 +2670,9 @@ function collectFindings(f: CoachFindings): FlatFinding[] {
   f.mark_scheme_flags?.forEach((x, i) => out.push({ key: `ms:${i}`, severity: x.severity }));
   const u = f.unrealised_outcomes;
   if (u && (u.kos?.length || u.los?.length)) out.push({ key: "uo:0", severity: "warn" });
+  if (f.calibration?.has_specimen && f.calibration.severity !== "info") {
+    out.push({ key: "cal:0", severity: f.calibration.severity });
+  }
   return out;
 }
 
