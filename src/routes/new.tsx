@@ -898,23 +898,18 @@ function NewAssessment() {
 
               {/* KO selection removed — KOs are inferred from topics chosen in the previous step. */}
 
-              <p className="text-xs text-muted-foreground">
-                You can narrow these targets per section in the next step. Sections inherit your picks here.
-              </p>
-            </div>
-          )}
-
-          {step === 4 && (
-            <div className="space-y-5">
-              <h2 className="font-paper text-xl font-semibold">Sections</h2>
-              <p className="text-sm text-muted-foreground">
-                Build your paper section by section. Each section has its own question type, topic pool, and marks.
-                Total marks must equal {totalMarks}.
-              </p>
+              {/* ── Sections (merged from former Step 4) ── */}
+              <div className="pt-2">
+                <h3 className="font-paper text-lg font-semibold">Sections</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Build your paper section by section. Each section has its own question type, topic pool, and marks.
+                  Total marks must equal {totalMarks}.
+                </p>
+              </div>
 
               {sections.length === 0 && (
                 <div className="rounded-lg border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
-                  Pick topics in Step 2 first, then add a section here.
+                  Pick topics in the previous step first, then add a section here.
                 </div>
               )}
 
@@ -928,7 +923,7 @@ function NewAssessment() {
                   visibleQuestionTypes={visibleQuestionTypes}
                   subject={subject}
                   allAOs={docAOs}
-                  
+
                   globalAoCodes={selectedAoCodes}
                   globalKos={selectedKos}
                   globalLos={selectedLos}
