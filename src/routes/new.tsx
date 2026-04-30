@@ -144,6 +144,37 @@ function NewAssessment() {
     if (!filteredLibrary.some((d) => d.id === docId)) setSelectedPaperKey("");
   }, [filteredLibrary, selectedPaperKey]);
 
+  // Suggested difficulty mix derived from the most relevant specimen paper's
+  // fingerprint (Bloom mix → easy/medium/hard buckets). Pegs the builder to
+  // the calibrated specimens (e.g. Cambridge GCE) for the chosen subject+level.
+  const [specimenMix, setSpecimenMix] = useState<DifficultyMix | null>(null);
+  const [specimenLabel, setSpecimenLabel] = useState<string>("");
+  useEffect(() => {
+    let cancelled = false;
+    if (!isScienceSubject(subject)) { setSpecimenMix(null); setSpecimenLabel(""); return; }
+    (async () => {
+      const { data } = await supabase
+        .from("past_papers")
+        .select("title, year, level, subject, difficulty_fingerprint")
+        .ilike("subject", `%${subject}%`)
+        .ilike("level", `%${level}%`)
+        .not("difficulty_fingerprint", "is", null)
+        .order("year", { ascending: false })
+        .limit(1);
+      if (cancelled) return;
+      const row = data?.[0] as { title?: string; year?: number; difficulty_fingerprint?: { bloom_mix_pct?: Record<string, number> } } | undefined;
+      const bm = row?.difficulty_fingerprint?.bloom_mix_pct;
+      if (!bm) { setSpecimenMix(null); setSpecimenLabel(""); return; }
+      // Map Bloom → difficulty buckets.
+      const easy = Math.round((bm.remember ?? 0) + (bm.understand ?? 0) * 0.5);
+      const hard = Math.round((bm.analyse ?? 0) + (bm.evaluate ?? 0) + (bm.create ?? 0));
+      const medium = Math.max(0, 100 - easy - hard);
+      setSpecimenMix({ easy, medium, hard });
+      setSpecimenLabel(`${row?.title ?? "specimen"}${row?.year ? ` (${row.year})` : ""}`);
+    })();
+    return () => { cancelled = true; };
+  }, [subject, level]);
+
   const selected = useMemo(() => {
     if (!selectedPaperKey) return null;
     const [docId, paperId] = selectedPaperKey.split(":");
@@ -692,6 +723,8 @@ function NewAssessment() {
                   globalAoCodes={selectedAoCodes}
                   globalKos={selectedKos}
                   globalLos={selectedLos}
+                  specimenMix={specimenMix}
+                  specimenLabel={specimenLabel}
                   onUpdate={(patch) => updateSection(s.id, patch)}
                   onRemove={() => removeSection(s.id)}
                   onMove={(d) => moveSection(s.id, d)}
@@ -1136,6 +1169,8 @@ type SectionCardProps = {
   globalAoCodes: string[];
   globalKos: string[];
   globalLos: string[];
+  specimenMix?: DifficultyMix | null;
+  specimenLabel?: string;
   onUpdate: (patch: Partial<Section>) => void;
   onRemove: () => void;
   onMove: (dir: -1 | 1) => void;
@@ -1144,6 +1179,7 @@ type SectionCardProps = {
 function SectionCard({
   section, isFirst, isLast, masterPool, visibleQuestionTypes, subject,
   allAOs, globalAoCodes, globalKos, globalLos,
+  specimenMix, specimenLabel,
   onUpdate, onRemove, onMove,
 }: SectionCardProps) {
   const [customLo, setCustomLo] = useState("");
@@ -1378,18 +1414,31 @@ function SectionCard({
         };
         return (
           <div className="mt-3 rounded-md border border-primary/30 bg-primary-soft/20 p-3">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <Label className="text-xs font-medium">Difficulty mix</Label>
-              <button
-                type="button"
-                className="text-[11px] text-primary underline-offset-2 hover:underline"
-                onClick={() => setMix({ ...DEFAULT_DIFFICULTY_MIX })}
-              >
-                Reset to default (20 / 60 / 20)
-              </button>
+              <div className="flex items-center gap-3">
+                {specimenMix && (
+                  <button
+                    type="button"
+                    className="text-[11px] text-primary underline-offset-2 hover:underline"
+                    onClick={() => setMix({ ...specimenMix })}
+                    title={specimenLabel ? `From ${specimenLabel}` : undefined}
+                  >
+                    Apply specimen mix ({specimenMix.easy} / {specimenMix.medium} / {specimenMix.hard})
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="text-[11px] text-primary underline-offset-2 hover:underline"
+                  onClick={() => setMix({ ...DEFAULT_DIFFICULTY_MIX })}
+                >
+                  Reset to default (20 / 60 / 20)
+                </button>
+              </div>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
               Sets the proportion of easy / medium / hard questions across the {section.num_questions} question(s) in this section. Must total 100%.
+              {specimenMix && specimenLabel ? ` Suggested mix is calibrated against ${specimenLabel}.` : ""}
               </p>
             <div className="mt-2 grid gap-2 sm:grid-cols-3">
               <div>
