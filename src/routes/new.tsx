@@ -764,17 +764,38 @@ function NewAssessment() {
                     No AOs published for this syllabus. The generator will infer AOs from the topic metadata.
                   </p>
                 ) : (
-                  <AOGroupedSelector
-                    aos={docAOs}
-                    selected={selectedAoCodes}
-                    onToggle={(code) => setSelectedAoCodes((prev) => toggle(prev, code))}
-                    onToggleMany={(codes, select) =>
-                      setSelectedAoCodes((prev) => {
-                        if (select) return Array.from(new Set([...prev, ...codes]));
-                        return prev.filter((c) => !codes.includes(c));
-                      })
-                    }
-                  />
+                  <>
+                    {(() => {
+                      const allCodes = docAOs.map((a) => a.code);
+                      const allChecked = allCodes.length > 0 && allCodes.every((c) => selectedAoCodes.includes(c));
+                      const someChecked = allCodes.some((c) => selectedAoCodes.includes(c)) && !allChecked;
+                      return (
+                        <label className="mt-3 flex cursor-pointer items-center gap-2 rounded-md border border-dashed border-border p-2 text-xs font-medium hover:bg-muted/40">
+                          <Checkbox
+                            checked={allChecked ? true : someChecked ? "indeterminate" : false}
+                            onCheckedChange={() => {
+                              setSelectedAoCodes((prev) => {
+                                if (allChecked) return prev.filter((c) => !allCodes.includes(c));
+                                return Array.from(new Set([...prev, ...allCodes]));
+                              });
+                            }}
+                          />
+                          <span>{allChecked ? "Deselect all AOs" : "Select all AOs"}</span>
+                        </label>
+                      );
+                    })()}
+                    <AOGroupedSelector
+                      aos={docAOs}
+                      selected={selectedAoCodes}
+                      onToggle={(code) => setSelectedAoCodes((prev) => toggle(prev, code))}
+                      onToggleMany={(codes, select) =>
+                        setSelectedAoCodes((prev) => {
+                          if (select) return Array.from(new Set([...prev, ...codes]));
+                          return prev.filter((c) => !codes.includes(c));
+                        })
+                      }
+                    />
+                  </>
                 )}
               </div>
 
@@ -793,17 +814,37 @@ function NewAssessment() {
                 </p>
 
                 {derivedLos.length > 0 && (
-                  <LOGroupedSelector
-                    topics={selectableSyllabusTopics.filter((t) => selectedTopicIds.includes(t.id))}
-                    selected={selectedLos}
-                    onToggle={(lo) => setSelectedLos((prev) => toggle(prev, lo))}
-                    onToggleMany={(los, select) =>
-                      setSelectedLos((prev) => {
-                        if (select) return Array.from(new Set([...prev, ...los]));
-                        return prev.filter((x) => !los.includes(x));
-                      })
-                    }
-                  />
+                  <>
+                    {(() => {
+                      const allChecked = derivedLos.length > 0 && derivedLos.every((lo) => selectedLos.includes(lo));
+                      const someChecked = derivedLos.some((lo) => selectedLos.includes(lo)) && !allChecked;
+                      return (
+                        <label className="mt-3 flex cursor-pointer items-center gap-2 rounded-md border border-dashed border-border p-2 text-xs font-medium hover:bg-muted/40">
+                          <Checkbox
+                            checked={allChecked ? true : someChecked ? "indeterminate" : false}
+                            onCheckedChange={() => {
+                              setSelectedLos((prev) => {
+                                if (allChecked) return prev.filter((lo) => !derivedLos.includes(lo));
+                                return Array.from(new Set([...prev, ...derivedLos]));
+                              });
+                            }}
+                          />
+                          <span>{allChecked ? "Deselect all LOs" : "Select all LOs"}</span>
+                        </label>
+                      );
+                    })()}
+                    <LOGroupedSelector
+                      topics={selectableSyllabusTopics.filter((t) => selectedTopicIds.includes(t.id))}
+                      selected={selectedLos}
+                      onToggle={(lo) => setSelectedLos((prev) => toggle(prev, lo))}
+                      onToggleMany={(los, select) =>
+                        setSelectedLos((prev) => {
+                          if (select) return Array.from(new Set([...prev, ...los]));
+                          return prev.filter((x) => !los.includes(x));
+                        })
+                      }
+                    />
+                  </>
                 )}
 
                 <div className="mt-3">
@@ -855,63 +896,7 @@ function NewAssessment() {
                 })()}
               </div>
 
-              {/* Knowledge Outcomes (filtered from selected topics) */}
-              <div className="rounded-lg border border-border bg-muted/20 p-4">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm font-medium">Knowledge Outcomes (KOs)</Label>
-                  {availableKos.length > 0 && (
-                    <span className="text-xs text-muted-foreground">{selectedKos.length} / {availableKos.length} selected</span>
-                  )}
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Derived from the topics you picked in the previous step. Tick the ones the paper must exercise.
-                </p>
-                {availableKos.length === 0 ? (
-                  <p className="mt-3 text-xs text-muted-foreground">
-                    No KOs derived from the chosen topics — they'll be inferred from the topic metadata at generation time.
-                  </p>
-                ) : (
-                  <>
-                    {(() => {
-                      const allChecked = availableKos.length > 0 && availableKos.every((k) => selectedKos.includes(k));
-                      const someChecked = availableKos.some((k) => selectedKos.includes(k));
-                      return (
-                        <label className="mt-3 flex cursor-pointer items-center gap-2 rounded border-b border-dashed border-border p-1.5 text-xs font-medium hover:bg-muted/40">
-                          <Checkbox
-                            checked={allChecked ? true : someChecked ? "indeterminate" : false}
-                            onCheckedChange={() => {
-                              setSelectedKos((prev) => {
-                                if (allChecked) return prev.filter((k) => !availableKos.includes(k));
-                                const merged = new Set([...prev, ...availableKos]);
-                                return Array.from(merged);
-                              });
-                            }}
-                          />
-                          <span>{allChecked ? "Deselect all" : "Select all"}</span>
-                        </label>
-                      );
-                    })()}
-                    <div className="mt-2 max-h-72 space-y-1 overflow-auto rounded-md border border-border bg-background p-2">
-                      {availableKos.map((ko) => {
-                        const checked = selectedKos.includes(ko);
-                        const isShort = ko.length <= 40;
-                        return (
-                          <label
-                            key={ko}
-                            className={`flex cursor-pointer items-start gap-2 rounded p-1.5 text-xs ${checked ? "bg-primary-soft/40" : "hover:bg-muted/40"}`}
-                          >
-                            <Checkbox
-                              checked={checked}
-                              onCheckedChange={() => setSelectedKos((prev) => toggle(prev, ko))}
-                            />
-                            <span className={`flex-1 whitespace-pre-line ${isShort ? "capitalize" : ""}`}>{ko}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </>
-                )}
-              </div>
+              {/* KO selection removed — KOs are inferred from topics chosen in the previous step. */}
 
               <p className="text-xs text-muted-foreground">
                 You can narrow these targets per section in the next step. Sections inherit your picks here.
