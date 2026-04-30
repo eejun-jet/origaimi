@@ -1414,18 +1414,31 @@ function SectionCard({
         };
         return (
           <div className="mt-3 rounded-md border border-primary/30 bg-primary-soft/20 p-3">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <Label className="text-xs font-medium">Difficulty mix</Label>
-              <button
-                type="button"
-                className="text-[11px] text-primary underline-offset-2 hover:underline"
-                onClick={() => setMix({ ...DEFAULT_DIFFICULTY_MIX })}
-              >
-                Reset to default (20 / 60 / 20)
-              </button>
+              <div className="flex items-center gap-3">
+                {specimenMix && (
+                  <button
+                    type="button"
+                    className="text-[11px] text-primary underline-offset-2 hover:underline"
+                    onClick={() => setMix({ ...specimenMix })}
+                    title={specimenLabel ? `From ${specimenLabel}` : undefined}
+                  >
+                    Apply specimen mix ({specimenMix.easy} / {specimenMix.medium} / {specimenMix.hard})
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="text-[11px] text-primary underline-offset-2 hover:underline"
+                  onClick={() => setMix({ ...DEFAULT_DIFFICULTY_MIX })}
+                >
+                  Reset to default (20 / 60 / 20)
+                </button>
+              </div>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
               Sets the proportion of easy / medium / hard questions across the {section.num_questions} question(s) in this section. Must total 100%.
+              {specimenMix && specimenLabel ? ` Suggested mix is calibrated against ${specimenLabel}.` : ""}
               </p>
             <div className="mt-2 grid gap-2 sm:grid-cols-3">
               <div>
