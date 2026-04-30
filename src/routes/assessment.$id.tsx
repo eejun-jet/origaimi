@@ -104,6 +104,7 @@ function EditorPage() {
   const [identity, setIdentity] = useReviewerIdentity();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<"coverage" | "comments">("coverage");
+  const [retagBusy, setRetagBusy] = useState(false);
 
   const loadAll = async () => {
     const { data: a } = await supabase.from("assessments").select("*").eq("id", id).single();
@@ -408,6 +409,31 @@ function EditorPage() {
       .update({ diagram_url: null, diagram_source: null, diagram_citation: null, diagram_caption: null })
       .eq("id", qId);
     toast.success("Diagram removed");
+  };
+
+  const retagAllQuestions = async () => {
+    if (retagBusy) return;
+    if (!confirm(`Re-tag all ${questions.length} question${questions.length === 1 ? "" : "s"} with AI? This will overwrite existing AO / KO / LO tags based on each question's stem and the section's allowed pool.`)) return;
+    setRetagBusy(true);
+    const t = toast.loading("Re-tagging questions with AI…");
+    try {
+      const { data, error } = await supabase.functions.invoke("retag-questions", {
+        body: { assessmentId: id },
+      });
+      if (error) throw new Error(error.message);
+      const payload = data as { updated?: number; total?: number; errors?: { id: string; error: string }[]; error?: string };
+      if (payload?.error) throw new Error(payload.error);
+      await loadAll();
+      const failed = payload?.errors?.length ?? 0;
+      toast.success(
+        `Re-tagged ${payload?.updated ?? 0} / ${payload?.total ?? 0} questions${failed > 0 ? ` (${failed} skipped)` : ""}`,
+        { id: t },
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e), { id: t });
+    } finally {
+      setRetagBusy(false);
+    }
   };
 
   const saveQToBank = async (q: Question) => {
@@ -893,6 +919,8 @@ function EditorPage() {
                   onSetCommentStatus={setCommentStatus}
                   onDeleteComment={deleteComment}
                   onScrollToQuestion={scrollToQuestion}
+                  onRetag={retagAllQuestions}
+                  retagBusy={retagBusy}
                 />
 
                 <CoachPanel
@@ -2060,6 +2088,7 @@ function RemarkPill({ count }: { count: number }) {
 function CoveragePanel({
   coverage, totalMarks, totalActual, questions, comments, identity, subject, sections,
   onAddComment, onSetCommentStatus, onDeleteComment, onScrollToQuestion,
+  onRetag, retagBusy,
 }: {
   coverage: Coverage;
   totalMarks: number;
@@ -2068,6 +2097,8 @@ function CoveragePanel({
   subject: string;
   sections: Section[];
   onScrollToQuestion: (questionId: string) => void;
+  onRetag?: () => void | Promise<void>;
+  retagBusy?: boolean;
 } & CoverageCommentHandlers) {
   const { paper, bySection } = coverage;
   const uncoveredLOs = paper.los.filter((l) => !l.covered);
@@ -2215,10 +2246,26 @@ function CoveragePanel({
 
       {/* AO Coverage */}
       <div className="rounded-xl border border-border bg-card p-5">
-        <h3 className="font-medium">AO Coverage</h3>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Marks per Assessment Objective {paper.aos.some((a) => a.weighting != null) ? "(targets from syllabus weightings)" : ""}
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="font-medium">AO Coverage</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Marks per Assessment Objective {paper.aos.some((a) => a.weighting != null) ? "(targets from syllabus weightings)" : ""}
+            </p>
+          </div>
+          {onRetag && questions.length > 0 && (
+            <button
+              type="button"
+              onClick={() => onRetag()}
+              disabled={retagBusy}
+              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-[10px] font-medium text-foreground transition hover:bg-muted disabled:opacity-50"
+              title="Re-tag every question with AI based on its stem and the section's allowed AOs / KOs / LOs"
+            >
+              {retagBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+              Re-tag with AI
+            </button>
+          )}
+        </div>
         <p className="mt-1 text-[10px] text-muted-foreground">Click any row for detail and to leave a remark.</p>
         <div className="mt-3 space-y-2.5">
           {paper.aos.length === 0 && (
@@ -2321,6 +2368,18 @@ function CoveragePanel({
               >
                 <Maximize2 className="h-3 w-3" />
                 Expand
+              </button>
+            )}
+            {onRetag && questions.length > 0 && (
+              <button
+                type="button"
+                onClick={() => onRetag()}
+                disabled={retagBusy}
+                className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-[10px] font-medium text-foreground transition hover:bg-muted disabled:opacity-50"
+                title="Re-tag every question with AI based on its stem and the section's allowed AOs / KOs / LOs"
+              >
+                {retagBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                Re-tag
               </button>
             )}
           </div>
