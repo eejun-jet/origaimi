@@ -660,7 +660,7 @@ function NewAssessment() {
 
           {step === 2 && (
             <div className="space-y-5">
-              <h2 className="font-paper text-xl font-semibold">Topics</h2>
+              <h2 className="font-paper text-xl font-semibold">Topics / Knowledge Outcomes (KO)</h2>
               {useSyllabus ? (
                 <>
                   <p className="text-sm text-muted-foreground">
@@ -712,14 +712,9 @@ function NewAssessment() {
                                 {t.topicCode && (
                                   <span className="mr-2 font-mono text-xs text-muted-foreground">{t.topicCode}</span>
                                 )}
-                                <span>{t.title}</span>
-                              </div>
-                              {t.learningOutcomes.length > 0 && (
-                                <div className="mt-1 text-xs text-muted-foreground line-clamp-2">
-                                  {t.learningOutcomes.slice(0, 2).join(" · ")}
-                                </div>
-                              )}
+                              <span>{t.title}</span>
                             </div>
+                          </div>
                           </label>
                         );
                       })}
@@ -1087,7 +1082,7 @@ function paperLabel(p: SyllabusLibraryPaper) {
 }
 
 function Stepper({ step }: { step: number }) {
-  const labels = ["Basics", "Topics", "Objectives", "Sections", "References", "Generate"];
+  const labels = ["Basics", "Topics / KO", "Objectives", "Sections", "References", "Generate"];
   return (
     <div className="flex items-center gap-2">
       {labels.map((l, i) => {
