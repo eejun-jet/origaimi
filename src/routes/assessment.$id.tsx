@@ -80,6 +80,7 @@ type Assessment = {
   blueprint: unknown;
   instructions: string | null;
   syllabus_doc_id: string | null;
+  assessment_type?: string | null;
 };
 
 type AODef = { code: string; title: string | null; weighting_percent: number | null };
