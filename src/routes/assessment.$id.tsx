@@ -2408,6 +2408,16 @@ type CoachFindings = {
   source_fit_issues: { question_id: string; position: number; required_skill?: string; source_type?: string; severity: Severity; note: string }[];
   mark_scheme_flags: { question_id: string; position: number; marks_declared: number; marks_suggested?: number; severity: Severity; note: string }[];
   suggestions: { question_id?: string; position?: number; rewrite: string; rationale: string; category: string }[];
+  calibration?: {
+    has_specimen: boolean;
+    specimen_title?: string;
+    bloom_drift: { level: string; specimen_pct: number; observed_pct: number; delta: number; severity: Severity }[];
+    ao_drift: { ao: string; specimen_pct: number; observed_pct: number; delta: number; severity: Severity }[];
+    marks_shape_drift: { metric: string; specimen: number; observed: number; severity: Severity }[];
+    command_word_gaps: string[];
+    severity: Severity;
+    note: string;
+  };
 };
 
 type CoachRun = {
