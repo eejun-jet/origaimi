@@ -411,6 +411,31 @@ function EditorPage() {
     toast.success("Diagram removed");
   };
 
+  const retagAllQuestions = async () => {
+    if (retagBusy) return;
+    if (!confirm(`Re-tag all ${questions.length} question${questions.length === 1 ? "" : "s"} with AI? This will overwrite existing AO / KO / LO tags based on each question's stem and the section's allowed pool.`)) return;
+    setRetagBusy(true);
+    const t = toast.loading("Re-tagging questions with AI…");
+    try {
+      const { data, error } = await supabase.functions.invoke("retag-questions", {
+        body: { assessmentId: id },
+      });
+      if (error) throw new Error(error.message);
+      const payload = data as { updated?: number; total?: number; errors?: { id: string; error: string }[]; error?: string };
+      if (payload?.error) throw new Error(payload.error);
+      await loadAll();
+      const failed = payload?.errors?.length ?? 0;
+      toast.success(
+        `Re-tagged ${payload?.updated ?? 0} / ${payload?.total ?? 0} questions${failed > 0 ? ` (${failed} skipped)` : ""}`,
+        { id: t },
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e), { id: t });
+    } finally {
+      setRetagBusy(false);
+    }
+  };
+
   const saveQToBank = async (q: Question) => {
     if (!user || !assessment) return;
     await supabase.from("question_bank_items").insert({
