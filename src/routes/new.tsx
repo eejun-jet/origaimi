@@ -88,7 +88,7 @@ function NewAssessment() {
   // Step 1 / basics — auto-filled when a syllabus paper is selected
   const [title, setTitle] = useState("");
   const [subject, setSubject] = useState<string>(SUBJECTS[0]);
-  const [level, setLevel] = useState<string>("P5");
+  const [level, setLevel] = useState<string>("Sec 1");
   const [aType, setAType] = useState<string>("topical");
   const [duration, setDuration] = useState(60);
   const [totalMarks, setTotalMarks] = useState(50);
