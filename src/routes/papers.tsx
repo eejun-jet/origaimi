@@ -280,10 +280,13 @@ function PaperCard({
 }) {
   const [busy, setBusy] = useState(false);
   const remove = async () => {
-    if (!confirm(`Delete "${paper.title}"?`)) return;
+    if (!confirm(`Delete "${paper.title}"? This will also remove its extracted bank items.`)) return;
     setBusy(true);
+    // Cascade: remove bank items, diagrams, then the paper itself.
+    await supabase.from("question_bank_items").delete().eq("past_paper_id", paper.id);
+    await supabase.from("past_paper_diagrams").delete().eq("paper_id", paper.id);
     await supabase.from("past_papers").delete().eq("id", paper.id);
-    toast.success("Paper deleted");
+    toast.success("Paper and bank items deleted");
     onChanged();
   };
   const reparse = async () => {
@@ -342,10 +345,18 @@ function PaperCard({
           Topics: {paper.topics.slice(0, 6).join(", ")}
         </div>
       )}
-      <div className="mt-3 flex gap-2">
+      <div className="mt-3 flex flex-wrap gap-2">
         <Button size="sm" variant="ghost" onClick={reparse} disabled={busy} className="gap-1">
           <RefreshCw className="h-3.5 w-3.5" /> Re-parse
         </Button>
+        {paper.parse_status === "ready" && (
+          <a
+            href={`/bank?paper=${paper.id}`}
+            className="inline-flex h-8 items-center gap-1 rounded-md px-3 text-xs font-medium text-primary hover:bg-primary-soft"
+          >
+            View in bank
+          </a>
+        )}
         <Button size="sm" variant="ghost" onClick={remove} disabled={busy} className="ml-auto gap-1 text-destructive">
           <Trash2 className="h-3.5 w-3.5" /> Delete
         </Button>

@@ -294,6 +294,7 @@ export type Database = {
           image_path: string
           page_number: number | null
           paper_id: string
+          question_id: string | null
           topic_tags: string[] | null
         }
         Insert: {
@@ -304,6 +305,7 @@ export type Database = {
           image_path: string
           page_number?: number | null
           paper_id: string
+          question_id?: string | null
           topic_tags?: string[] | null
         }
         Update: {
@@ -314,6 +316,7 @@ export type Database = {
           image_path?: string
           page_number?: number | null
           paper_id?: string
+          question_id?: string | null
           topic_tags?: string[] | null
         }
         Relationships: [
@@ -428,60 +431,99 @@ export type Database = {
       question_bank_items: {
         Row: {
           answer: string | null
+          ao_codes: string[]
           bloom_level: string | null
+          command_word: string | null
           created_at: string
+          diagram_paths: string[]
           difficulty: string | null
+          exam_board: string | null
           id: string
+          knowledge_outcomes: string[]
+          learning_outcomes: string[]
           level: string
           mark_scheme: string | null
           marks: number
           options: Json | null
+          paper_number: string | null
+          past_paper_id: string | null
+          question_number: string | null
           question_type: string
           source: string | null
+          source_excerpt: string | null
           stem: string
           subject: string
+          syllabus_doc_id: string | null
           tags: string[] | null
           topic: string | null
+          topic_code: string | null
           updated_at: string
           user_id: string
+          year: number | null
         }
         Insert: {
           answer?: string | null
+          ao_codes?: string[]
           bloom_level?: string | null
+          command_word?: string | null
           created_at?: string
+          diagram_paths?: string[]
           difficulty?: string | null
+          exam_board?: string | null
           id?: string
+          knowledge_outcomes?: string[]
+          learning_outcomes?: string[]
           level: string
           mark_scheme?: string | null
           marks?: number
           options?: Json | null
+          paper_number?: string | null
+          past_paper_id?: string | null
+          question_number?: string | null
           question_type: string
           source?: string | null
+          source_excerpt?: string | null
           stem: string
           subject: string
+          syllabus_doc_id?: string | null
           tags?: string[] | null
           topic?: string | null
+          topic_code?: string | null
           updated_at?: string
           user_id: string
+          year?: number | null
         }
         Update: {
           answer?: string | null
+          ao_codes?: string[]
           bloom_level?: string | null
+          command_word?: string | null
           created_at?: string
+          diagram_paths?: string[]
           difficulty?: string | null
+          exam_board?: string | null
           id?: string
+          knowledge_outcomes?: string[]
+          learning_outcomes?: string[]
           level?: string
           mark_scheme?: string | null
           marks?: number
           options?: Json | null
+          paper_number?: string | null
+          past_paper_id?: string | null
+          question_number?: string | null
           question_type?: string
           source?: string | null
+          source_excerpt?: string | null
           stem?: string
           subject?: string
+          syllabus_doc_id?: string | null
           tags?: string[] | null
           topic?: string | null
+          topic_code?: string | null
           updated_at?: string
           user_id?: string
+          year?: number | null
         }
         Relationships: []
       }
