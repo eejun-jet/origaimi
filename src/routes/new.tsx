@@ -785,7 +785,7 @@ function paperLabel(p: SyllabusLibraryPaper) {
 }
 
 function Stepper({ step }: { step: number }) {
-  const labels = ["Basics", "Topics / KO", "Sections", "References", "Generate"];
+  const labels = ["Basics", "Assessment Builder", "References", "Generate"];
   return (
     <div className="flex items-center gap-2">
       {labels.map((l, i) => {
