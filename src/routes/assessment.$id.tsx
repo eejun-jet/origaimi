@@ -2779,52 +2779,6 @@ function CoachReviewBody({
           </FindingCard>
         ) : null}
       </CoachSection>
-
-      <CoachSection
-        title="Bloom & difficulty"
-        count={findings.bloom_curve?.filter((_, i) => !dismissed.has(`bc:${i}`)).length ?? 0}
-      >
-        {findings.bloom_curve?.map((d, i) => {
-          const key = `bc:${i}`;
-          if (dismissed.has(key)) return null;
-          return (
-            <FindingCard
-              key={key}
-              severity={d.severity}
-              onDismiss={() => onDismiss(key)}
-              remarkCount={remarkCountFor(key)}
-              onDiscuss={() => onDiscuss({
-                key,
-                title: `Bloom & difficulty · Section ${d.section_letter}`,
-                severity: d.severity,
-                body: (
-                  <>
-                    <p>{d.note}</p>
-                    {(d.expected_progression || d.observed_progression) && (
-                      <p className="mt-1 text-[11px] text-muted-foreground">
-                        {d.expected_progression && <>Expected: {d.expected_progression}</>}
-                        {d.expected_progression && d.observed_progression && " · "}
-                        {d.observed_progression && <>Observed: {d.observed_progression}</>}
-                      </p>
-                    )}
-                  </>
-                ),
-              })}
-            >
-              <div className="font-medium">Section {d.section_letter}</div>
-              <p className="mt-0.5 text-muted-foreground">{d.note}</p>
-              {(d.expected_progression || d.observed_progression) && (
-                <p className="mt-0.5 text-[10px] text-muted-foreground">
-                  {d.expected_progression && <>Expected: {d.expected_progression}</>}
-                  {d.expected_progression && d.observed_progression && " · "}
-                  {d.observed_progression && <>Observed: {d.observed_progression}</>}
-                </p>
-              )}
-            </FindingCard>
-          );
-        })}
-      </CoachSection>
-
       <CoachSection
         title="Source fit"
         count={findings.source_fit_issues?.filter((_, i) => !dismissed.has(`sf:${i}`)).length ?? 0}
