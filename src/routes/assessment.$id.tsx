@@ -2088,6 +2088,7 @@ function RemarkPill({ count }: { count: number }) {
 function CoveragePanel({
   coverage, totalMarks, totalActual, questions, comments, identity, subject, sections,
   onAddComment, onSetCommentStatus, onDeleteComment, onScrollToQuestion,
+  onRetag, retagBusy,
 }: {
   coverage: Coverage;
   totalMarks: number;
@@ -2096,6 +2097,8 @@ function CoveragePanel({
   subject: string;
   sections: Section[];
   onScrollToQuestion: (questionId: string) => void;
+  onRetag?: () => void | Promise<void>;
+  retagBusy?: boolean;
 } & CoverageCommentHandlers) {
   const { paper, bySection } = coverage;
   const uncoveredLOs = paper.los.filter((l) => !l.covered);
