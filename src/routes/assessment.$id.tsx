@@ -2479,6 +2479,152 @@ function CoveragePanel({
           </div>
         </DetailDrawer>
       )}
+
+      {/* ── Coverage Explorer (full-screen KO → LO drill-down) ─────────── */}
+      <Dialog open={explorerOpen} onOpenChange={(o) => { setExplorerOpen(o); if (!o) setExplorerKO(null); }}>
+        <DialogContent className="max-w-6xl h-[85vh] flex flex-col gap-0 p-0">
+          <DialogHeader className="border-b border-border px-6 py-4">
+            <DialogTitle className="font-paper text-lg">Coverage explorer</DialogTitle>
+            <DialogDescription className="text-xs">
+              {koLoGroups.length} Knowledge Outcomes · {paper.los.length - uncoveredLOs.length} / {paper.los.length} Learning Outcomes covered. Click a KO to see the LOs inside it.
+            </DialogDescription>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {([
+                { key: "all", label: "All" },
+                { key: "untested", label: "Untested" },
+                { key: "under", label: "Under-tested" },
+                { key: "thin", label: "Thin" },
+                { key: "balanced", label: "Balanced" },
+                { key: "over", label: "Over-tested" },
+              ] as const).map((f) => {
+                const count = f.key === "all"
+                  ? koLoGroups.length
+                  : koLoGroups.filter((g) => g.status === f.key).length;
+                const active = explorerFilter === f.key;
+                return (
+                  <button
+                    key={f.key}
+                    type="button"
+                    onClick={() => setExplorerFilter(f.key)}
+                    className={`rounded-full border px-2.5 py-0.5 text-[10px] font-medium transition ${
+                      active
+                        ? "border-foreground bg-foreground text-background"
+                        : "border-border bg-background text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {f.label} <span className="opacity-60">({count})</span>
+                  </button>
+                );
+              })}
+            </div>
+          </DialogHeader>
+
+          <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[minmax(0,3fr)_minmax(0,4fr)]">
+            {/* Left: KO grid */}
+            <div className="overflow-y-auto border-r border-border bg-muted/20 p-4">
+              {visibleKOs.length === 0 ? (
+                <p className="px-2 py-8 text-center text-xs text-muted-foreground">
+                  No Knowledge Outcomes match this filter.
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {visibleKOs.map((g) => {
+                    const meta = STATUS_META[g.status];
+                    const active = selectedKO?.name === g.name;
+                    return (
+                      <button
+                        key={g.name}
+                        type="button"
+                        onClick={() => setExplorerKO(g.name)}
+                        className={`rounded-lg border bg-card p-3 text-left transition hover:shadow-sm ${
+                          active ? "border-primary ring-2 ring-primary/30" : "border-border"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <h4 className="line-clamp-2 text-xs font-semibold leading-snug">{g.name}</h4>
+                          <CoverageDonut covered={g.coveredLOs} total={g.totalLOs} />
+                        </div>
+                        <div className="mt-2 flex items-center justify-between gap-2">
+                          <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-medium ${meta.chip}`}>
+                            {meta.label}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">
+                            {g.coveredLOs}/{g.totalLOs} LOs
+                          </span>
+                        </div>
+                        <div className="mt-2 flex items-center justify-between gap-2">
+                          <DensityBar los={g.los} />
+                          <span className="text-[10px] text-muted-foreground">
+                            {g.actualMarks}{g.targetMarks ? ` / ${g.targetMarks}` : ""}m
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Right: LO detail for selected KO */}
+            <div className="flex min-h-0 flex-col overflow-hidden">
+              {!selectedKO ? (
+                <div className="flex h-full items-center justify-center px-6 py-10 text-center">
+                  <p className="max-w-xs text-xs text-muted-foreground">
+                    Pick a Knowledge Outcome on the left to see every Learning Outcome inside it, with coverage status and remarks.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="border-b border-border px-5 py-3">
+                    <h4 className="font-paper text-sm font-semibold">{selectedKO.name}</h4>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                      {selectedKO.coveredLOs} / {selectedKO.totalLOs} LOs covered · {selectedKO.actualMarks}{selectedKO.targetMarks ? ` / ${selectedKO.targetMarks}` : ""} marks
+                    </p>
+                    <span className={`mt-1.5 inline-flex rounded-full border px-1.5 py-0.5 text-[9px] font-medium ${STATUS_META[selectedKO.status].chip}`}>
+                      {STATUS_META[selectedKO.status].label}
+                    </span>
+                  </div>
+                  <div className="flex-1 overflow-y-auto px-3 py-2">
+                    {selectedKO.los.length === 0 ? (
+                      <p className="px-2 py-6 text-center text-xs text-muted-foreground">
+                        No Learning Outcomes are mapped under this KO.
+                      </p>
+                    ) : (
+                      <ul className="space-y-1">
+                        {selectedKO.los.map((lo) => {
+                          const count = remarkCount("lo", lo.text);
+                          const fullStat = paper.los.find((l) => l.text === lo.text);
+                          return (
+                            <li key={lo.text}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (!fullStat) return;
+                                  setTarget({ kind: "lo", ...fullStat });
+                                }}
+                                className={`flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-xs leading-snug transition hover:bg-muted/50 ${
+                                  lo.covered ? "text-foreground" : "text-destructive"
+                                }`}
+                              >
+                                <span className="mt-0.5 shrink-0">{lo.covered ? "✓" : "○"}</span>
+                                <span className="flex-1">{lo.text}</span>
+                                <span className="shrink-0 text-[10px] text-muted-foreground">
+                                  {lo.actual > 0 ? `${lo.actual}× tested` : "—"}
+                                </span>
+                                {count > 0 && <RemarkPill count={count} />}
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
