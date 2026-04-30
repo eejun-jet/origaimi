@@ -713,7 +713,7 @@ function NewAssessment() {
 
           {step === 3 && (
             <div className="space-y-4">
-              <h2 className="font-paper text-xl font-semibold">Special instructions</h2>
+              <h2 className="font-paper text-xl font-semibold">Special Instructions</h2>
               <p className="text-sm text-muted-foreground">
                 Optional: describe any style cues, past-paper patterns, or special instructions for the AI.
               </p>
@@ -785,7 +785,7 @@ function paperLabel(p: SyllabusLibraryPaper) {
 }
 
 function Stepper({ step }: { step: number }) {
-  const labels = ["Basics", "Assessment Builder", "Special instructions", "Generate"];
+  const labels = ["Basics", "Assessment Builder", "Special Instructions", "Generate"];
   return (
     <div className="w-full">
       <div className="flex items-center">
