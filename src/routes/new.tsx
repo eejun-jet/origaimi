@@ -793,42 +793,17 @@ function NewAssessment() {
                 </p>
 
                 {derivedLos.length > 0 && (
-                  <div className="mt-3 max-h-72 space-y-1 overflow-auto rounded-md border border-border bg-background p-2">
-                    {(() => {
-                      const allChecked = derivedLos.length > 0 && derivedLos.every((lo) => selectedLos.includes(lo));
-                      const someChecked = derivedLos.some((lo) => selectedLos.includes(lo));
-                      return (
-                        <label className="flex cursor-pointer items-center gap-2 rounded border-b border-dashed border-border p-1.5 text-xs font-medium hover:bg-muted/40">
-                          <Checkbox
-                            checked={allChecked ? true : someChecked ? "indeterminate" : false}
-                            onCheckedChange={() => {
-                              setSelectedLos((prev) => {
-                                if (allChecked) return prev.filter((lo) => !derivedLos.includes(lo));
-                                const merged = new Set([...prev, ...derivedLos]);
-                                return Array.from(merged);
-                              });
-                            }}
-                          />
-                          <span>{allChecked ? "Deselect all derived" : "Select all derived"}</span>
-                        </label>
-                      );
-                    })()}
-                    {derivedLos.map((lo) => {
-                      const checked = selectedLos.includes(lo);
-                      return (
-                        <label
-                          key={lo}
-                          className={`flex cursor-pointer items-start gap-2 rounded p-1.5 text-xs ${checked ? "bg-primary-soft/40" : "hover:bg-muted/40"}`}
-                        >
-                          <Checkbox
-                            checked={checked}
-                            onCheckedChange={() => setSelectedLos((prev) => toggle(prev, lo))}
-                          />
-                          <span className="flex-1">{lo}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
+                  <LOGroupedSelector
+                    topics={selectableSyllabusTopics.filter((t) => selectedTopicIds.includes(t.id))}
+                    selected={selectedLos}
+                    onToggle={(lo) => setSelectedLos((prev) => toggle(prev, lo))}
+                    onToggleMany={(los, select) =>
+                      setSelectedLos((prev) => {
+                        if (select) return Array.from(new Set([...prev, ...los]));
+                        return prev.filter((x) => !los.includes(x));
+                      })
+                    }
+                  />
                 )}
 
                 <div className="mt-3">
