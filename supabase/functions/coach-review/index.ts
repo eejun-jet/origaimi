@@ -39,23 +39,6 @@ const COACH_TOOL = {
             additionalProperties: false,
           },
         },
-        command_word_issues: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              question_id: { type: "string" },
-              position: { type: "number" },
-              detected_verb: { type: "string" },
-              declared_ao: { type: "string" },
-              expected_aos: { type: "array", items: { type: "string" } },
-              severity: { type: "string", enum: ["info", "warn", "fail"] },
-              note: { type: "string" },
-            },
-            required: ["question_id", "position", "severity", "note"],
-            additionalProperties: false,
-          },
-        },
         unrealised_outcomes: {
           type: "object",
           properties: {
