@@ -2614,7 +2614,7 @@ function CoveragePanel({
             {paper.los.length > 0 && (
               <button
                 type="button"
-                onClick={() => { setExplorerOpen(true); setExplorerKO(null); }}
+                onClick={() => { setExplorerOpen(true); setExplorerKO(null); setExplorerMode("overview"); }}
                 className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-[10px] font-medium text-foreground transition hover:bg-muted"
                 title="Open full Coverage Explorer"
               >
