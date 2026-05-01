@@ -279,6 +279,11 @@ function SyllabusAdmin() {
                       {parsingId === d.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
                       Re-parse
                     </Button>
+                    {d.parse_status === "parsing" && (
+                      <Button variant="ghost" size="sm" onClick={() => resetStuck(d.id)} title="Parser appears stuck — reset to Pending">
+                        Reset
+                      </Button>
+                    )}
                     <Button variant="ghost" size="sm" onClick={() => removeDoc(d.id, d.file_path)}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
