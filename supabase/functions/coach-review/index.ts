@@ -317,9 +317,13 @@ Submit your findings via the submit_coach_review tool. Run these checks:
 
 4. Mark-scheme realism — for each question, judge whether marks_declared matches the cognitive demand. Suggest marks_suggested when it is off by ≥ 1.${isSci ? " For science calculations, also penalise mark schemes that lump method + accuracy into one mark, omit units, or quote the final answer to too many / too few significant figures." : ""}
 
-5. Suggestions — for every fail or warn, attach at most ONE one-line "Try: …" rewrite that the teacher can apply. Keep rewrites in the same question type and within ±1 mark of the original.${sciencePackBlock}
+5. Suggestions — for every fail or warn, attach at most ONE one-line "Try: …" rewrite that the teacher can apply. Keep rewrites in the same question type and within ±1 mark of the original. Skip suggestions whose value is marginal — silence is better than filler.
 
-Return STRICTLY through the tool. Do not include prose outside the tool call. If a check has no findings, return an empty array (not omitted).`;
+6. Cognitive demand (optional, single observation) — if the recall / application / analysis spread is materially skewed, populate \`cognitive_demand\` with a calm one-liner. Omit the field entirely if the spread is reasonable.
+
+7. Question variety (optional, single observation) — if command-verb diversity, item-format mix or reading load is notably narrow or heavy, populate \`question_variety\` with one observation. Omit if varied.${sciencePackBlock}
+
+Return STRICTLY through the tool. Do not include prose outside the tool call. For required array fields, return an empty array when there is nothing material — do not invent findings.`;
 
     const userPayload = {
       assessment: {
