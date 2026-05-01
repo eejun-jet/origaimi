@@ -73,8 +73,8 @@ const STREAMS_FOR_BAND: Record<Band, { id: Stream; label: string }[]> = {
     { id: "foundation", label: "Foundation" },
   ],
   secondary: [
-    { id: "g3", label: "G3 / Express" },
-    { id: "g2", label: "G2 / N(A)" },
+    { id: "g3", label: "G3" },
+    { id: "g2", label: "G2" },
   ],
 };
 
