@@ -60,9 +60,9 @@ const AdminSyllabusIndexRoute = AdminSyllabusIndexRouteImport.update({
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminSyllabusIdRoute = AdminSyllabusIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => AdminSyllabusRoute,
+  id: '/admin/syllabus/$id',
+  path: '/admin/syllabus/$id',
+  getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -143,6 +143,7 @@ export interface RootRouteChildren {
   NewRoute: typeof NewRoute
   PapersRoute: typeof PapersRoute
   AssessmentIdRoute: typeof AssessmentIdRoute
+  AdminSyllabusIdRoute: typeof AdminSyllabusIdRoute
   AdminSyllabusIndexRoute: typeof AdminSyllabusIndexRoute
 }
 
@@ -206,10 +207,10 @@ declare module '@tanstack/react-router' {
     }
     '/admin/syllabus/$id': {
       id: '/admin/syllabus/$id'
-      path: '/$id'
+      path: '/admin/syllabus/$id'
       fullPath: '/admin/syllabus/$id'
       preLoaderRoute: typeof AdminSyllabusIdRouteImport
-      parentRoute: typeof AdminSyllabusRoute
+      parentRoute: typeof rootRouteImport
     }
   }
 }
@@ -222,6 +223,7 @@ const rootRouteChildren: RootRouteChildren = {
   NewRoute: NewRoute,
   PapersRoute: PapersRoute,
   AssessmentIdRoute: AssessmentIdRoute,
+  AdminSyllabusIdRoute: AdminSyllabusIdRoute,
   AdminSyllabusIndexRoute: AdminSyllabusIndexRoute,
 }
 export const routeTree = rootRouteImport
