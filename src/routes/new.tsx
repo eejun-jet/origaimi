@@ -550,7 +550,8 @@ function NewAssessment() {
 
         <Stepper step={step} />
 
-        <div className="mt-8 rounded-2xl border border-border bg-card p-6 sm:p-8">
+        <div className={step === 1 ? "" : "mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]"}>
+        <div className={step === 1 ? "mt-8 rounded-2xl border border-border bg-card p-6 sm:p-8" : "rounded-2xl border border-border bg-card p-6 sm:p-8"}>
           {step === 1 && (
             <div className="space-y-5">
               <h2 className="font-paper text-xl font-semibold">Basics</h2>
