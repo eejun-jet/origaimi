@@ -200,7 +200,7 @@ function SignalCard({
       <div className="flex items-start gap-2">
         <span
           className={`mt-1 inline-block h-1.5 w-1.5 shrink-0 rounded-full ${
-            severity === "warn" ? "bg-warning" : "bg-muted-foreground/60"
+            severity === "warn" ? "bg-warm" : "bg-muted-foreground/60"
           }`}
           aria-hidden
         />
