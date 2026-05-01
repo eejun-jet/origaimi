@@ -759,8 +759,9 @@ export async function fetchGroundedSource(
 
   // Vocabulary used for relevance gating: the topic plus ALL learning outcomes.
   const topicVocab = syllabusKeywordsFor(topic, learningOutcomes);
-  const MIN_RELEVANCE = 0.25;
-  const MIN_RELEVANCE_HITS = 2;
+  // Topic anchors = identifying keywords (proper nouns + LO subjects). Used by
+  // the layered gate to reject same-era-but-different-episode pages.
+  const anchors = subjectKind === "humanities" ? topicAnchors(topic, learningOutcomes) : [];
   const tier2Exhausted = (): boolean =>
     !!tierBudget && tierBudget.tier2Used >= tierBudget.maxTier2;
 
@@ -794,10 +795,26 @@ export async function fetchGroundedSource(
         const excerpt = extractExcerpt(scraped.markdown);
         if (!excerpt) continue;
 
-        const { score, hits, matched } = relevanceMetrics(excerpt, topicVocab);
-        if (score < MIN_RELEVANCE || hits < MIN_RELEVANCE_HITS) {
-          console.warn(`[sources] dropped off-topic excerpt (score=${score.toFixed(2)}, hits=${hits}, matched=[${matched.join(",")}]) from ${url}`);
-          continue;
+        if (subjectKind === "humanities") {
+          const reason = relevanceVerdict(excerpt, topic, topicVocab, anchors);
+          if (reason) {
+            console.warn(`[sources] dropped off-topic excerpt (${reason}) from ${url}`);
+            continue;
+          }
+        } else {
+          // English: keep the lighter overlap check (curated allow-list already
+          // filters out unrelated material). Inline so we don't reintroduce
+          // relevanceMetrics globally.
+          const lc = excerpt.toLowerCase();
+          let hits = 0;
+          for (const kw of topicVocab) {
+            if (kw.length >= 3 && lc.includes(kw)) hits++;
+          }
+          const score = hits / Math.max(1, topicVocab.length);
+          if (score < 0.25 || hits < 2) {
+            console.warn(`[sources] dropped off-topic excerpt (score=${score.toFixed(2)}, hits=${hits}) from ${url}`);
+            continue;
+          }
         }
 
         const poor = richnessReason(excerpt);
