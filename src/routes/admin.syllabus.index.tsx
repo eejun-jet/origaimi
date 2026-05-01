@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { SUBJECTS, LEVELS } from "@/lib/syllabus";
 import { Upload, FileText, Loader2, Eye, Trash2, RefreshCw } from "lucide-react";
 
-export const Route = createFileRoute("/admin/syllabus")({
+export const Route = createFileRoute("/admin/syllabus/")({
   component: SyllabusAdmin,
   head: () => ({ meta: [{ title: "Syllabus Library · Joy of Assessment" }] }),
 });
