@@ -1,80 +1,55 @@
-## Goal
+## Why "Review" looks like a refresh
 
-Bring the existing post-generation Assessment Coach (`coach-review` edge function + the Coach panel inside `assessment.$id.tsx`) in line with your "Assessment Review Coach" spec. The current pipeline already does the structural heavy-lifting (AO drift, KO/LO realisation, source-fit, mark-scheme realism, suggestions, and specimen calibration). What's missing is the *voice*, the *prioritisation*, and a few analytical lenses your spec calls out explicitly.
+In TanStack Router, when a file like `src/routes/admin.syllabus.$id.tsx` exists alongside `src/routes/admin.syllabus.tsx`, the latter automatically becomes a **parent layout** for the former. A parent layout MUST render `<Outlet />` for the child route to appear.
 
-The plan is small and focused: revise the system prompt, extend the tool schema with two lightweight lenses, add a top-level `priority_insights` array, and lightly retune the UI so the headline insight reads first and reads calm.
+`src/routes/admin.syllabus.tsx` does not render `<Outlet />` — it returns a self-contained list view. So when you click Review:
 
----
+- The URL silently changes to `/admin/syllabus/<id>` (you can confirm this in the address bar).
+- TanStack Router activates the child route in memory…
+- …but the parent keeps rendering the upload form + library list, so the child screen is never shown.
 
-## What changes
+That is exactly the "nothing happens / page just refreshes" symptom.
 
-### 1. Rewrite the system prompt (`supabase/functions/coach-review/index.ts`)
+There is also a secondary issue surfaced by the database: one syllabus (`Combined Science 5086`) is stuck in `parse_status = 'parsing'` (the parser was killed mid-run, likely by the earlier "AI error 402 Not enough credits" / "connection closed" entries in the edge logs). It has no papers/topics, so even once Review works it will look empty for that doc.
 
-Replace the current "Assessment Literacy Coach" preamble with a prompt that adopts your spec verbatim in spirit:
+## Changes
 
-- **Identity**: "Assessment Review Coach. You are reviewing the assessment, not the teacher."
-- **Tone rules** baked in as hard constraints:
-  - No praise language ("great", "excellent", "fantastic", "well done").
-  - No verdicts ("weak", "lacks rigour", "not rigorous").
-  - Calm, quietly competent, British spelling, Singapore phrasing.
-  - One excellent insight beats ten average ones — if a check has nothing material, return an empty array rather than padding.
-- **Prioritisation rule**: rank findings by impact on the *teacher's next decision*, not by check order. Surface the top 1–3 as `priority_insights`.
-- **Syllabus-as-philosophy layer**: when AO definitions are present, treat them as a cognitive framework, not a checklist. Infer command-term expectations and reasoning balance; don't quote syllabus prose.
-- **Phrasing exemplars** seeded directly from your spec ("Most questions currently assess direct retrieval", "Adding one unfamiliar application task may better distinguish stronger students").
+### 1. Fix the routing — split the list page out from the layout
 
-### 2. Extend the tool schema with two lenses your spec names explicitly
+Rename `src/routes/admin.syllabus.tsx` → `src/routes/admin.syllabus.index.tsx`. In flat-file routing, `admin.syllabus.index.tsx` claims exactly the path `/admin/syllabus`, while `admin.syllabus.$id.tsx` claims `/admin/syllabus/$id` — neither becomes the other's parent, so no `<Outlet />` is needed and the child review page renders normally.
 
-Today's schema covers AO drift, KO/LO realisation, source-fit, mark-scheme, and suggestions. Add:
+(Alternative considered: keep the file and add `<Outlet />` plus a conditional that renders the list only when no `$id` is present. Cleaner to split.)
 
-- **`cognitive_demand`** — one short observation on the recall/application/analysis spread, with a single optional nudge. Replaces the current implicit hand-waving inside `suggestions`.
-- **`question_variety`** — one short observation on command-verb diversity, item-format mix, and reading load (e.g. "Six of eight stems exceed 80 words; consider one short-form item to vary load"). Optional.
+### 2. Make the Review screen visually distinct
 
-Both are **single-object, optional fields** — not arrays — to enforce "one excellent insight" rather than a giant report. Each has `{ severity, note, suggestion? }`.
+In `src/routes/admin.syllabus.$id.tsx`:
 
-Also add a top-level **`priority_insights: string[]`** (max 3) — the calm headline the panel renders first.
+- Add a clearer page heading under the sticky bar: "Review & publish syllabus" with a subtitle line explaining what this screen is for ("Edit parsed papers, topics, and assessment objectives, then Publish to make this syllabus available to the assessment coach").
+- When `papers.length === 0 && topics.length === 0`, render an explicit empty state card: "No papers or topics were extracted. Re-parse from the library, or check that the uploaded PDF is text-based (not a scanned image)." with a "Back to library" button.
+- When `parse_status === 'parsing'`, show a yellow info banner: "Parsing in progress — refresh in a minute. If it stays in this state, the parser likely failed mid-run; re-parse from the library."
 
-### 3. Tone-guard the existing `summary`
+### 3. Recover the stuck "parsing" doc
 
-Keep `summary` but tighten the contract: "2 sentences max, neutral, observation-led, no praise, no verdicts." This pairs with `priority_insights` so the panel can lead with insight, not with a generic recap.
+Add a small safety net to `src/routes/admin.syllabus.tsx` (the list page, soon `admin.syllabus.index.tsx`):
 
-### 4. UI: lead with priority insights, soften visual weight (`src/routes/assessment.$id.tsx`)
+- A "Reset to pending" action on rows whose status is `parsing` and whose `updated_at` is older than ~5 minutes. This flips the row back to `pending` so the user can click Re-parse cleanly. (Pure UI + a single update query — no schema change.)
 
-Small, surgical changes inside the existing Coach panel:
+Plus a one-time DB update (via migration) to flip the currently stuck `Combined Science 5086` row from `parsing` → `pending` so the user can immediately re-parse it.
 
-- Render `priority_insights` (if present) as a short bulleted block above the `summary` — same calm card styling as today, no new colours.
-- Add two new collapsible sections — "Cognitive demand" and "Question variety" — using the existing `FindingSection` pattern. They appear only when populated.
-- Update the `CoachFindings` TypeScript type to match the extended schema.
-- No layout, colour, or routing changes. No new dependencies.
+### 4. Diagnose why some parses produce nothing
 
-### 5. Leave alone
+For the syllabi already in `parse_status = 'parsed'` but the user still feels there's "nothing to review", check via SQL once the routing fix is in: count papers / topics / AOs per doc. If a parsed doc has zero topics, it usually means the AI extraction hit a token cap or the PDF pages were image-only. The empty-state card from step 2 will surface that clearly to the user, with a Re-parse path.
 
-- `intent-coach.ts` and `BuilderCoachPanel.tsx` (pre-generation coach) — different prompt, different lifecycle, already aligned.
-- The fingerprint/calibration code path — it's already deterministic and on-tone.
-- The persistence model (`assessment_versions` snapshot) — extra fields are additive and JSON-safe.
+No changes to the parser itself in this round — once the user can actually open the Review screen, we'll know whether parsing quality is the next thing to tackle.
 
----
+## Files to change
 
-## Files touched
+- Rename `src/routes/admin.syllabus.tsx` → `src/routes/admin.syllabus.index.tsx` (no logic change beyond filename + add the "Reset to pending" row action).
+- Edit `src/routes/admin.syllabus.$id.tsx` — add page heading, empty state, and "parsing" banner.
+- New migration: `UPDATE syllabus_documents SET parse_status='pending' WHERE id='c5c857bf-c95b-4d43-b317-4589f872c77b' AND parse_status='parsing';`
 
-- `supabase/functions/coach-review/index.ts` — new system prompt, extended tool schema (`cognitive_demand`, `question_variety`, `priority_insights`).
-- `src/routes/assessment.$id.tsx` — extend `CoachFindings` type; render `priority_insights` and the two new sections in the Coach panel.
+## What you'll see after this
 
-## Files NOT touched
-
-- `src/lib/intent-coach.ts`
-- `src/components/BuilderCoachPanel.tsx`
-- `supabase/functions/coach-intent/index.ts`
-- `supabase/functions/coach-review/fingerprint.ts` and `coverage-infer.ts`
-- DB schema — none required.
-
----
-
-## Why this is the right shape
-
-Your spec's biggest delta vs what we ship today isn't the *checks* — those are mostly there. It's three things:
-
-1. **Prioritisation** — teachers see whatever the model emits in check-order. Adding `priority_insights` forces the model to pick what matters and lets the UI lead with it.
-2. **Tone** — the current prompt says "candid but constructive"; your spec is stricter ("calm and quietly competent, no AI enthusiasm"). The new prompt encodes that as hard rules with explicit anti-patterns.
-3. **Lenses your spec names but we don't surface** — cognitive demand spread and question variety / reading load. Adding them as optional single observations (not arrays) keeps the panel from turning into the "giant report" your spec warns against.
-
-No infra change, no migrations, no new dependencies. Behaviour change is concentrated in the prompt and a handful of UI lines.
+- Clicking Review actually opens the review screen with metadata, papers, topics, AOs, Save, and Publish.
+- Docs that parsed cleanly show their content; docs that produced nothing show a clear "no content extracted" card instead of a confusingly empty page.
+- The stuck `5086` syllabus becomes re-parsable from the library.
