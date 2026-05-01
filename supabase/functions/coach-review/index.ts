@@ -137,6 +137,7 @@ const COACH_TOOL = {
       },
       required: [
         "summary",
+        "priority_insights",
         "ao_drift",
         "unrealised_outcomes",
         "source_fit_issues",
