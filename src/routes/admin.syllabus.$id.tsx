@@ -296,6 +296,36 @@ function SyllabusReview() {
       </div>
 
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+        <div className="mb-5">
+          <h1 className="text-xl font-semibold tracking-tight">Review &amp; publish syllabus</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Edit parsed papers, topics, and assessment objectives, then click <span className="font-medium">Publish</span> to make this syllabus available to the assessment coach and the wizard.
+          </p>
+        </div>
+
+        {doc.parse_status === "parsing" && (
+          <Card className="mb-4 border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+            <p className="font-medium">Parsing in progress</p>
+            <p className="mt-1 opacity-90">
+              Refresh in a minute. If it stays in this state, the parser likely failed mid-run — go back to the library and click <span className="font-medium">Reset</span>, then <span className="font-medium">Re-parse</span>.
+            </p>
+          </Card>
+        )}
+
+        {doc.parse_status !== "parsing" && papers.length === 0 && topics.length === 0 && aos.length === 0 && (
+          <Card className="mb-4 p-6 text-sm">
+            <p className="font-medium">No papers, topics, or assessment objectives were extracted.</p>
+            <p className="mt-2 text-muted-foreground">
+              The parser ran but produced no structured content. This usually means the PDF is scanned/image-only, or the AI extraction hit a token limit. Go back to the library and click <span className="font-medium">Re-parse</span>. If it keeps failing, try uploading a text-based PDF (not a scan).
+            </p>
+            <div className="mt-4">
+              <Button asChild variant="outline" size="sm">
+                <Link to="/admin/syllabus"><ArrowLeft className="mr-2 h-4 w-4" />Back to library</Link>
+              </Button>
+            </div>
+          </Card>
+        )}
+
         <Card className="mb-6 p-4">
           <h2 className="mb-3 text-sm font-medium text-muted-foreground">Document metadata</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
