@@ -3032,6 +3032,9 @@ type Severity = "info" | "warn" | "fail";
 
 type CoachFindings = {
   summary: string;
+  priority_insights?: string[];
+  cognitive_demand?: { severity: "info" | "warn"; note: string; suggestion?: string };
+  question_variety?: { severity: "info" | "warn"; note: string; suggestion?: string };
   ao_drift: { ao_code: string; declared_pct?: number; observed_pct: number; delta_pct?: number; severity: Severity; note: string }[];
   unrealised_outcomes: { kos: string[]; los: string[]; note: string };
   source_fit_issues: { question_id: string; position: number; required_skill?: string; source_type?: string; severity: Severity; note: string }[];
