@@ -3032,6 +3032,9 @@ type Severity = "info" | "warn" | "fail";
 
 type CoachFindings = {
   summary: string;
+  priority_insights?: string[];
+  cognitive_demand?: { severity: "info" | "warn"; note: string; suggestion?: string };
+  question_variety?: { severity: "info" | "warn"; note: string; suggestion?: string };
   ao_drift: { ao_code: string; declared_pct?: number; observed_pct: number; delta_pct?: number; severity: Severity; note: string }[];
   unrealised_outcomes: { kos: string[]; los: string[]; note: string };
   source_fit_issues: { question_id: string; position: number; required_skill?: string; source_type?: string; severity: Severity; note: string }[];
@@ -3341,9 +3344,45 @@ function CoachReviewBody({
 }) {
   return (
     <div className="mt-3 space-y-2 text-xs">
+      {findings.priority_insights && findings.priority_insights.length > 0 && (
+        <div className="rounded-md border border-border bg-card p-2.5">
+          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            Top observations
+          </p>
+          <ul className="mt-1.5 space-y-1">
+            {findings.priority_insights.map((p, i) => (
+              <li key={i} className="flex gap-1.5 text-[11px] leading-snug">
+                <span className="mt-1 inline-block h-1 w-1 shrink-0 rounded-full bg-foreground/60" aria-hidden />
+                <span>{p}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {findings.summary && (
         <div className="rounded-md bg-muted/50 p-2 text-[11px] leading-relaxed text-foreground">
           {findings.summary}
+        </div>
+      )}
+
+      {findings.cognitive_demand && (
+        <div className="rounded-md border border-border bg-card p-2.5">
+          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Cognitive demand</div>
+          <p className="mt-1 text-[11px] leading-snug">{findings.cognitive_demand.note}</p>
+          {findings.cognitive_demand.suggestion && (
+            <p className="mt-1 text-[11px] italic text-muted-foreground">{findings.cognitive_demand.suggestion}</p>
+          )}
+        </div>
+      )}
+
+      {findings.question_variety && (
+        <div className="rounded-md border border-border bg-card p-2.5">
+          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Question variety</div>
+          <p className="mt-1 text-[11px] leading-snug">{findings.question_variety.note}</p>
+          {findings.question_variety.suggestion && (
+            <p className="mt-1 text-[11px] italic text-muted-foreground">{findings.question_variety.suggestion}</p>
+          )}
         </div>
       )}
 

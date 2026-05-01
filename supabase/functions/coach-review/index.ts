@@ -23,7 +23,41 @@ const COACH_TOOL = {
     parameters: {
       type: "object",
       properties: {
-        summary: { type: "string", description: "2-3 sentence headline verdict for the teacher." },
+        summary: {
+          type: "string",
+          description:
+            "At most 2 sentences. Neutral, observation-led. No praise words ('great', 'excellent'), no verdicts ('weak', 'lacks rigour'). May be empty if priority_insights already says it.",
+        },
+        priority_insights: {
+          type: "array",
+          description:
+            "1–3 short, calm headline insights, ranked by impact on the teacher's next decision. Each ≤ 25 words. Plain observation, not praise. Empty array if nothing material.",
+          items: { type: "string" },
+        },
+        cognitive_demand: {
+          type: "object",
+          description:
+            "Optional. ONE observation on the recall vs application vs analysis spread. Omit if balanced.",
+          properties: {
+            severity: { type: "string", enum: ["info", "warn"] },
+            note: { type: "string" },
+            suggestion: { type: "string", description: "Optional one-line nudge." },
+          },
+          required: ["severity", "note"],
+          additionalProperties: false,
+        },
+        question_variety: {
+          type: "object",
+          description:
+            "Optional. ONE observation on command-verb diversity, item-format mix, or reading load. Omit if varied.",
+          properties: {
+            severity: { type: "string", enum: ["info", "warn"] },
+            note: { type: "string" },
+            suggestion: { type: "string", description: "Optional one-line nudge." },
+          },
+          required: ["severity", "note"],
+          additionalProperties: false,
+        },
         ao_drift: {
           type: "array",
           items: {
@@ -103,6 +137,7 @@ const COACH_TOOL = {
       },
       required: [
         "summary",
+        "priority_insights",
         "ao_drift",
         "unrealised_outcomes",
         "source_fit_issues",
@@ -247,10 +282,26 @@ S3. Source/data-handling questions in sciences (graphs, tables, photographs, exp
       ? "\n\nThis paper was IMPORTED FROM AN EXISTING PAST PAPER and the teacher wants a critique of it (not a draft to rewrite). Frame findings as observations about the paper's coverage, balance and demand. Skip 'rewrite the stem' suggestions; instead note 'Consider replacing/dropping' or 'Add a follow-up question that…' when something is missing."
       : "";
 
-    const sys = `You are an experienced Singapore MOE Head of Department reviewing a junior teacher's draft assessment for ${assessment.level} ${assessment.subject}${isCombSci ? " (combined-science paper — Physics + Chemistry components)" : ""}.${analysisPreamble}
-Your job is the Assessment Literacy Coach. Be candid but constructive — no empty praise. Use British spelling and Singapore phrasing. This paper is a ${subjectKindLabel} paper.
+    const sys = `You are the Assessment Review Coach for a Singapore secondary teacher reviewing a draft ${assessment.level} ${assessment.subject}${isCombSci ? " (combined-science paper — Physics + Chemistry components)" : ""} paper.${analysisPreamble}
 
-Run all checks and submit your findings via the submit_coach_review tool:
+You are reviewing the assessment, not the teacher. Behave like a thoughtful moderation partner — calm, quietly competent, grounded. Not an examiner writing evaluation comments.
+
+VOICE — hard rules:
+- No praise language. Never write "great", "excellent", "fantastic", "well done", "good job", "strong assessment".
+- No verdicts. Never write "weak", "lacks rigour", "not rigorous", "poor", "lacks higher-order thinking".
+- Prefer observations over judgements. e.g. "Most questions currently assess direct retrieval." / "Adding one unfamiliar application task may better distinguish stronger students." / "This paper covers content knowledge well; data interpretation is lighter."
+- British spelling. Singapore phrasing. Plain language. No AI enthusiasm.
+- One excellent insight beats ten average ones. If a check has nothing material, return an empty array — do not pad.
+
+PRIORITISATION:
+- Rank findings by impact on the teacher's next decision, not by check order.
+- Populate \`priority_insights\` with the top 1–3 calm one-liners (≤ 25 words each). These are the headline. If everything is in shape, return an empty array.
+- Keep \`summary\` to at most 2 sentences, observation-led. May be empty when priority_insights already carries the signal.
+
+SYLLABUS-AS-PHILOSOPHY:
+When AO definitions are present, treat the syllabus as a cognitive framework — assessment objectives, command-term expectations, intended reasoning balance, expected disciplinary practices — not a topic checklist. Sound grounded, not preachy. Do not quote syllabus prose.
+
+Submit your findings via the submit_coach_review tool. Run these checks:
 
 1. AO drift — for each declared AO, compare its syllabus weighting % against the actual mark share of questions tagged with it. Flag deltas > 8 pp as warn and > 15 pp as fail. Also flag questions whose AO tag is too generous (stem only requires AO1 recall but tagged AO2/AO3).
 
@@ -266,9 +317,13 @@ Run all checks and submit your findings via the submit_coach_review tool:
 
 4. Mark-scheme realism — for each question, judge whether marks_declared matches the cognitive demand. Suggest marks_suggested when it is off by ≥ 1.${isSci ? " For science calculations, also penalise mark schemes that lump method + accuracy into one mark, omit units, or quote the final answer to too many / too few significant figures." : ""}
 
-5. Suggestions — for every fail or warn, attach at most ONE one-line "Try: …" rewrite that the teacher can apply. Keep rewrites in the same question type and within ±1 mark of the original.${sciencePackBlock}
+5. Suggestions — for every fail or warn, attach at most ONE one-line "Try: …" rewrite that the teacher can apply. Keep rewrites in the same question type and within ±1 mark of the original. Skip suggestions whose value is marginal — silence is better than filler.
 
-Return STRICTLY through the tool. Do not include prose outside the tool call. If a check has no findings, return an empty array (not omitted).`;
+6. Cognitive demand (optional, single observation) — if the recall / application / analysis spread is materially skewed, populate \`cognitive_demand\` with a calm one-liner. Omit the field entirely if the spread is reasonable.
+
+7. Question variety (optional, single observation) — if command-verb diversity, item-format mix or reading load is notably narrow or heavy, populate \`question_variety\` with one observation. Omit if varied.${sciencePackBlock}
+
+Return STRICTLY through the tool. Do not include prose outside the tool call. For required array fields, return an empty array when there is nothing material — do not invent findings.`;
 
     const userPayload = {
       assessment: {
