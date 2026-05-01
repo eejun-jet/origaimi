@@ -7,7 +7,6 @@ export const SUBJECTS = [
 export const LEVELS = [
   "Sec 1", "Sec 2",
   "Sec 3", "Sec 4",
-  "Sec 3N", "Sec 4N", "Sec 5N",
 ] as const;
 
 export const ASSESSMENT_TYPES = [
