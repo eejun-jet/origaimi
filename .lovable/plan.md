@@ -1,103 +1,80 @@
-# Pre-generation Assessment Intent Coach
+## Goal
 
-Extend the existing Coach (currently only on the post-generation paper view) into the assessment builder so teachers get sparse, high-leverage guidance **before** the paper is generated.
+Bring the existing post-generation Assessment Coach (`coach-review` edge function + the Coach panel inside `assessment.$id.tsx`) in line with your "Assessment Review Coach" spec. The current pipeline already does the structural heavy-lifting (AO drift, KO/LO realisation, source-fit, mark-scheme realism, suggestions, and specimen calibration). What's missing is the *voice*, the *prioritisation*, and a few analytical lenses your spec calls out explicitly.
 
-## Where it appears
+The plan is small and focused: revise the system prompt, extend the tool schema with two lightweight lenses, add a top-level `priority_insights` array, and lightly retune the UI so the headline insight reads first and reads calm.
 
-In `src/routes/new.tsx`, on steps 2–4:
+---
 
-- Step 2 — Assessment Builder
-- Step 3 — Special Instructions
-- Step 4 — Generate
+## What changes
 
-(Skipped on Step 1 Basics — nothing meaningful to coach until subject/level/syllabus are picked and sections start to take shape.)
+### 1. Rewrite the system prompt (`supabase/functions/coach-review/index.ts`)
 
-## Layout
+Replace the current "Assessment Literacy Coach" preamble with a prompt that adopts your spec verbatim in spirit:
 
-Convert the builder page from a single centred 3xl column to a 2-column layout on `lg+` screens:
+- **Identity**: "Assessment Review Coach. You are reviewing the assessment, not the teacher."
+- **Tone rules** baked in as hard constraints:
+  - No praise language ("great", "excellent", "fantastic", "well done").
+  - No verdicts ("weak", "lacks rigour", "not rigorous").
+  - Calm, quietly competent, British spelling, Singapore phrasing.
+  - One excellent insight beats ten average ones — if a check has nothing material, return an empty array rather than padding.
+- **Prioritisation rule**: rank findings by impact on the *teacher's next decision*, not by check order. Surface the top 1–3 as `priority_insights`.
+- **Syllabus-as-philosophy layer**: when AO definitions are present, treat them as a cognitive framework, not a checklist. Infer command-term expectations and reasoning balance; don't quote syllabus prose.
+- **Phrasing exemplars** seeded directly from your spec ("Most questions currently assess direct retrieval", "Adding one unfamiliar application task may better distinguish stronger students").
 
-```text
-┌─────────────────────────────────┬──────────────────┐
-│  Stepper + step card  (main)    │  Coach sidebar   │
-│  Back / Next                    │  (sticky, lg+)   │
-└─────────────────────────────────┴──────────────────┘
-```
+### 2. Extend the tool schema with two lenses your spec names explicitly
 
-- `lg`: main `max-w-3xl`, sidebar `w-80`, sticky `top-20`.
-- `<lg`: sidebar collapses into a small "Coach" button at the top of the step card that opens a `Sheet` (matches the pattern users expect on mobile).
-- On Step 1 the sidebar is hidden so the basics page stays as-is.
+Today's schema covers AO drift, KO/LO realisation, source-fit, mark-scheme, and suggestions. Add:
 
-## Coach behaviour (the prompt the user gave)
+- **`cognitive_demand`** — one short observation on the recall/application/analysis spread, with a single optional nudge. Replaces the current implicit hand-waving inside `suggestions`.
+- **`question_variety`** — one short observation on command-verb diversity, item-format mix, and reading load (e.g. "Six of eight stems exceed 80 words; consider one short-form item to vary load"). Optional.
 
-The coach must feel like a thoughtful instructional leader — *sparse, contextual, optional*. "Silence is often better than low-value commentary." Concrete rules baked into the UI and prompt:
+Both are **single-object, optional fields** — not arrays — to enforce "one excellent insight" rather than a giant report. Each has `{ severity, note, suggestion? }`.
 
-- At most **1–2 prompts visible at a time**.
-- Each prompt is **dismissible** (per session) and **optional** — never blocks Next/Generate.
-- No forms, no Bloom jargon, no lecturing. Plain teacher language, British spelling.
-- Suggestions are one-liners with an optional "Apply" affordance where it makes sense (e.g. append to Special Instructions).
-- If the coach has nothing useful to say, the panel shows a quiet "Looking good — no notes." line, not filler.
+Also add a top-level **`priority_insights: string[]`** (max 3) — the calm headline the panel renders first.
 
-## Two interaction modes
+### 3. Tone-guard the existing `summary`
 
-1. **Auto-observations** (passive, no AI call needed) — deterministic checks on the current builder state. Cheap, instant, run on every state change. Examples:
-  - Step 2: only one question type across all sections → "Mostly MCQ — would one short open-response question add reasoning depth?" (Instructions must NOT contradict the user or syllabus defined specifications, for example, a Paper 1 that is purely MCQ has to be purely MCQ)
-  - Step 2: marks don't sum to total → quiet nudge (already shown elsewhere; coach stays silent).
-  - Step 2: AOs concentrated on AO1 → "Heavy on recall (AO1). Consider one AO2/AO3 item for application."
-  - Step 2: KO/LO coverage very narrow vs picked topics → "Three topics selected, only one is being tested. Is that intentional?"
-  - Step 3: empty special instructions on a humanities/science paper → "Want one unfamiliar context question to improve transfer?"
-2. **Ask the Coach** (active, one AI call) — a single button "Get Coach review" on Step 4 (and available on 2–3). Sends the current builder state to a new edge function `coach-intent` and returns 2–4 short observations + suggestions in the same panel format.
+Keep `summary` but tighten the contract: "2 sentences max, neutral, observation-led, no praise, no verdicts." This pairs with `priority_insights` so the panel can lead with insight, not with a generic recap.
 
-The Step 4 generate page also surfaces a dim "Run Coach before generating?" hint — optional, one click, never required.
+### 4. UI: lead with priority insights, soften visual weight (`src/routes/assessment.$id.tsx`)
 
-## New edge function: `coach-intent`
+Small, surgical changes inside the existing Coach panel:
 
-`supabase/functions/coach-intent/index.ts`, modelled on `coach-review`:
+- Render `priority_insights` (if present) as a short bulleted block above the `summary` — same calm card styling as today, no new colours.
+- Add two new collapsible sections — "Cognitive demand" and "Question variety" — using the existing `FindingSection` pattern. They appear only when populated.
+- Update the `CoachFindings` TypeScript type to match the extended schema.
+- No layout, colour, or routing changes. No new dependencies.
 
-- Input: `{ subject, level, syllabusCode, paperCode, totalMarks, duration, blueprint (sections), specialInstructions, aoDefs (optional, fetched server-side from syllabus_assessment_objectives like coach-review does) }`.
-- Calls Lovable AI (`google/gemini-2.5-flash`) via tool-calling so output is structured:
-  ```ts
-  submit_intent_review({
-    summary: string,           // 1 sentence, optional
-    observations: [{ severity: "info"|"warn", note: string, category: "intent"|"ao_balance"|"cognitive_demand"|"coverage"|"context"|"instructions" }],
-    suggestions: [{ rewrite: string, rationale: string, target: "instructions"|"sections"|"general" }]
-  })
-  ```
-- System prompt is the exact "Assessment Intent Coach" brief the user supplied (sparse, optional, no jargon, 1–2 high-leverage prompts, etc.). The prompt is in the edge function only — never on the client.
-- Same 429 / 402 handling pattern as `coach-review`.
-- Not persisted — pre-generation coach runs are ephemeral (no `assessment_versions` row to attach to). Cached in component state for the session.
+### 5. Leave alone
 
-## New client component: `BuilderCoachPanel`
+- `intent-coach.ts` and `BuilderCoachPanel.tsx` (pre-generation coach) — different prompt, different lifecycle, already aligned.
+- The fingerprint/calibration code path — it's already deterministic and on-tone.
+- The persistence model (`assessment_versions` snapshot) — extra fields are additive and JSON-safe.
 
-`src/components/BuilderCoachPanel.tsx`. Props:
+---
 
-```ts
-{
-  step: 2 | 3 | 4;
-  builderState: { subject, level, syllabusCode, paperCode, totalMarks,
-                  duration, sections, referenceNote, paperAOs };
-  onApplyToInstructions: (text: string) => void;  // append to referenceNote
-}
-```
+## Files touched
 
-Internals:
+- `supabase/functions/coach-review/index.ts` — new system prompt, extended tool schema (`cognitive_demand`, `question_variety`, `priority_insights`).
+- `src/routes/assessment.$id.tsx` — extend `CoachFindings` type; render `priority_insights` and the two new sections in the Coach panel.
 
-- Computes auto-observations locally (pure function `computeIntentSignals(builderState)` in `src/lib/intent-coach.ts`).
-- Merges them with any AI observations from the last `coach-intent` run.
-- Renders at most 2 cards at a time (rest in a "show more" disclosure).
-- Each card: severity dot, one-liner, optional "Apply" button (e.g. appends suggestion to Special Instructions for `target: "instructions"`).
-- "Get Coach review" button at the top — calls `supabase.functions.invoke("coach-intent", { body: builderState })`. Disabled while running, shows a small `Loader2`.
+## Files NOT touched
 
-## Files to change
+- `src/lib/intent-coach.ts`
+- `src/components/BuilderCoachPanel.tsx`
+- `supabase/functions/coach-intent/index.ts`
+- `supabase/functions/coach-review/fingerprint.ts` and `coverage-infer.ts`
+- DB schema — none required.
 
-- **edit** `src/routes/new.tsx` — restructure layout to grid with sidebar slot for steps 2–4; pass builder state and `setReferenceNote` setter into the panel.
-- **new** `src/components/BuilderCoachPanel.tsx` — the sidebar UI.
-- **new** `src/lib/intent-coach.ts` — pure deterministic checks (no network).
-- **new** `supabase/functions/coach-intent/index.ts` — Lovable AI tool-calling edge function with the Intent Coach system prompt.
+---
 
-No DB migrations. No changes to the existing post-generation `CoachPanel` or `coach-review` function.
+## Why this is the right shape
 
-## Out of scope (deliberately)
+Your spec's biggest delta vs what we ship today isn't the *checks* — those are mostly there. It's three things:
 
-- No new tables, no persisted history of pre-gen coach runs.
-- No mandatory blocking of "Generate" — the coach is always optional.
-- No re-styling of Step 1 Basics.
+1. **Prioritisation** — teachers see whatever the model emits in check-order. Adding `priority_insights` forces the model to pick what matters and lets the UI lead with it.
+2. **Tone** — the current prompt says "candid but constructive"; your spec is stricter ("calm and quietly competent, no AI enthusiasm"). The new prompt encodes that as hard rules with explicit anti-patterns.
+3. **Lenses your spec names but we don't surface** — cognitive demand spread and question variety / reading load. Adding them as optional single observations (not arrays) keeps the panel from turning into the "giant report" your spec warns against.
+
+No infra change, no migrations, no new dependencies. Behaviour change is concentrated in the prompt and a handful of UI lines.
