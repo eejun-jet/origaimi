@@ -23,7 +23,41 @@ const COACH_TOOL = {
     parameters: {
       type: "object",
       properties: {
-        summary: { type: "string", description: "2-3 sentence headline verdict for the teacher." },
+        summary: {
+          type: "string",
+          description:
+            "At most 2 sentences. Neutral, observation-led. No praise words ('great', 'excellent'), no verdicts ('weak', 'lacks rigour'). May be empty if priority_insights already says it.",
+        },
+        priority_insights: {
+          type: "array",
+          description:
+            "1–3 short, calm headline insights, ranked by impact on the teacher's next decision. Each ≤ 25 words. Plain observation, not praise. Empty array if nothing material.",
+          items: { type: "string" },
+        },
+        cognitive_demand: {
+          type: "object",
+          description:
+            "Optional. ONE observation on the recall vs application vs analysis spread. Omit if balanced.",
+          properties: {
+            severity: { type: "string", enum: ["info", "warn"] },
+            note: { type: "string" },
+            suggestion: { type: "string", description: "Optional one-line nudge." },
+          },
+          required: ["severity", "note"],
+          additionalProperties: false,
+        },
+        question_variety: {
+          type: "object",
+          description:
+            "Optional. ONE observation on command-verb diversity, item-format mix, or reading load. Omit if varied.",
+          properties: {
+            severity: { type: "string", enum: ["info", "warn"] },
+            note: { type: "string" },
+            suggestion: { type: "string", description: "Optional one-line nudge." },
+          },
+          required: ["severity", "note"],
+          additionalProperties: false,
+        },
         ao_drift: {
           type: "array",
           items: {
