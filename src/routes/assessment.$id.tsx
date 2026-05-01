@@ -2809,7 +2809,7 @@ function CoveragePanel({
               </div>
               <div className="shrink-0 inline-flex rounded-md border border-border bg-background p-0.5">
                 {([
-                  { key: "matrix", label: "All at a glance" },
+                  { key: "overview", label: "KO overview" },
                   { key: "drilldown", label: "Drill-down" },
                 ] as const).map((m) => (
                   <button
