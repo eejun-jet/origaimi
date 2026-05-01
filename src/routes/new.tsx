@@ -540,7 +540,7 @@ function NewAssessment() {
   return (
     <div className="min-h-screen bg-background">
       <AppHeader />
-      <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
+      <main className={`mx-auto px-4 py-8 sm:px-6 ${step === 1 ? "max-w-3xl" : "max-w-6xl"}`}>
         <div className="mb-6 flex items-center justify-between">
           <h1 className="font-paper text-2xl font-semibold tracking-tight">
             New assessment
