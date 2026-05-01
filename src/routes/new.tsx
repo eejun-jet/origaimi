@@ -623,7 +623,7 @@ function NewAssessment() {
                     <SelectContent>
                       {filteredLibrary.length === 0 ? (
                         <div className="px-3 py-2 text-xs italic text-muted-foreground">
-                          No syllabuses uploaded for this subject + level + stream yet.
+                          No syllabuses uploaded for this subject + level + posting group yet.
                         </div>
                       ) : filteredLibrary.map((doc) => (
                         <div key={doc.id}>
