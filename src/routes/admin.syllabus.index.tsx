@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { SUBJECTS, LEVELS } from "@/lib/syllabus";
 import { Upload, FileText, Loader2, Eye, Trash2, RefreshCw } from "lucide-react";
 
-export const Route = createFileRoute("/admin/syllabus")({
+export const Route = createFileRoute("/admin/syllabus/")({
   component: SyllabusAdmin,
   head: () => ({ meta: [{ title: "Syllabus Library · Joy of Assessment" }] }),
 });
@@ -133,6 +133,16 @@ function SyllabusAdmin() {
     } finally {
       setParsingId(null);
     }
+  };
+
+  const resetStuck = async (id: string) => {
+    const { error } = await supabase
+      .from("syllabus_documents")
+      .update({ parse_status: "pending" })
+      .eq("id", id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Reset — you can now Re-parse");
+    await load();
   };
 
   const removeDoc = async (id: string, path: string) => {
@@ -269,6 +279,11 @@ function SyllabusAdmin() {
                       {parsingId === d.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
                       Re-parse
                     </Button>
+                    {d.parse_status === "parsing" && (
+                      <Button variant="ghost" size="sm" onClick={() => resetStuck(d.id)} title="Parser appears stuck — reset to Pending">
+                        Reset
+                      </Button>
+                    )}
                     <Button variant="ghost" size="sm" onClick={() => removeDoc(d.id, d.file_path)}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
