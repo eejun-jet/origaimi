@@ -26,6 +26,8 @@ import {
 import { ChevronLeft, ChevronRight, Sparkles, Loader2, BookOpen, Upload, Plus, Trash2, ChevronUp, ChevronDown } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
+import { BuilderCoachPanel } from "@/components/BuilderCoachPanel";
+import type { BuilderSnapshot } from "@/lib/intent-coach";
 
 export const Route = createFileRoute("/new")({
   component: NewAssessment,
@@ -538,7 +540,7 @@ function NewAssessment() {
   return (
     <div className="min-h-screen bg-background">
       <AppHeader />
-      <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
+      <main className={`mx-auto px-4 py-8 sm:px-6 ${step === 1 ? "max-w-3xl" : "max-w-6xl"}`}>
         <div className="mb-6 flex items-center justify-between">
           <h1 className="font-paper text-2xl font-semibold tracking-tight">
             New assessment
@@ -548,7 +550,8 @@ function NewAssessment() {
 
         <Stepper step={step} />
 
-        <div className="mt-8 rounded-2xl border border-border bg-card p-6 sm:p-8">
+        <div className={step === 1 ? "" : "mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]"}>
+        <div className={step === 1 ? "mt-8 rounded-2xl border border-border bg-card p-6 sm:p-8" : "rounded-2xl border border-border bg-card p-6 sm:p-8"}>
           {step === 1 && (
             <div className="space-y-5">
               <h2 className="font-paper text-xl font-semibold">Basics</h2>
@@ -781,6 +784,34 @@ function NewAssessment() {
               </Button>
             </div>
           )}
+        </div>
+
+        {step >= 2 && (
+          <aside className="lg:sticky lg:top-20 lg:self-start">
+            <BuilderCoachPanel
+              snapshot={{
+                step: step as 2 | 3 | 4,
+                subject,
+                level,
+                syllabusCode: selected?.doc.syllabusCode ?? null,
+                paperCode: selected?.paper.paperCode ?? null,
+                assessmentMode: selected?.paper.assessmentMode ?? "written",
+                totalMarks,
+                duration,
+                sections,
+                referenceNote,
+                paperAOs: docAOs,
+                selectedAoCodes,
+                selectedKos,
+                selectedLos,
+                topicPoolSize: useSyllabus ? selectedTopicIds.length : topics.length,
+              } satisfies BuilderSnapshot}
+              onAppendInstructions={(text) =>
+                setReferenceNote((prev) => (prev.trim() ? `${prev.trim()}\n${text}` : text))
+              }
+            />
+          </aside>
+        )}
         </div>
 
         <div className="mt-6 flex items-center justify-between">
