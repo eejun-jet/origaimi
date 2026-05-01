@@ -183,7 +183,7 @@ export function snapshotForAI(snap: BuilderSnapshot) {
     paper_ao_definitions: snap.paperAOs.map((a) => ({
       code: a.code,
       title: a.title ?? null,
-      weighting_percent: a.weighting_percent ?? null,
+      weighting_percent: a.weightingPercent ?? null,
     })),
     sections: snap.sections.map((s) => ({
       letter: s.letter,
