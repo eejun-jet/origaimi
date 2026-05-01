@@ -2858,7 +2858,7 @@ function CoveragePanel({
             </div>
           </DialogHeader>
 
-          {explorerMode === "matrix" ? (
+          {explorerMode === "overview" ? (
             <div className="min-h-0 flex-1 overflow-y-auto bg-muted/10 p-4">
               {visibleKOs.length === 0 ? (
                 <p className="px-2 py-12 text-center text-xs text-muted-foreground">
@@ -2866,71 +2866,48 @@ function CoveragePanel({
                 </p>
               ) : (
                 <>
-                  {/* Legend */}
-                  <div className="mb-3 flex flex-wrap items-center gap-3 px-1 text-[10px] text-muted-foreground">
-                    <span className="font-medium uppercase tracking-wide">Legend:</span>
-                    <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" />Covered (tested)</span>
-                    <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-700" />Tested ≥2×</span>
-                    <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm border border-border bg-background" />Not covered</span>
+                  {/* Hint */}
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2 px-1 text-[10px] text-muted-foreground">
+                    <span>
+                      <span className="font-medium text-foreground">{koLoGroups.length}</span> Knowledge Outcomes ·
+                      tap any tile to see its Learning Outcomes.
+                    </span>
+                    <span className="inline-flex items-center gap-2">
+                      <span className="font-medium uppercase tracking-wide">Density:</span>
+                      <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-[1px] bg-muted-foreground/25" />0×</span>
+                      <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-[1px] bg-success/40" />1×</span>
+                      <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-[1px] bg-success" />2×</span>
+                      <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-[1px] bg-warm" />3+×</span>
+                    </span>
                   </div>
-                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                     {visibleKOs.map((g) => {
                       const meta = STATUS_META[g.status];
                       return (
-                        <div
+                        <button
                           key={g.name}
-                          className="rounded-lg border border-border bg-card p-3"
+                          type="button"
+                          onClick={() => { setExplorerMode("drilldown"); setExplorerKO(g.name); }}
+                          className={`group flex aspect-square flex-col justify-between rounded-lg border bg-card p-2.5 text-left transition hover:shadow-md hover:-translate-y-0.5 ${meta.ring}`}
+                          title={`${g.name} — ${meta.label}`}
                         >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0 flex-1">
-                              <h4 className="text-xs font-semibold leading-snug">{g.name}</h4>
-                              <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                                <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-medium ${meta.chip}`}>
-                                  {meta.label}
-                                </span>
-                                <span className="text-[10px] text-muted-foreground">
-                                  {g.coveredLOs}/{g.totalLOs} LOs · {g.actualMarks}{g.targetMarks ? `/${g.targetMarks}` : ""}m
-                                </span>
-                              </div>
-                            </div>
+                          <div className="flex items-start justify-between gap-1.5">
+                            <h4 className="line-clamp-3 flex-1 text-[11px] font-semibold leading-snug">{g.name}</h4>
                             <CoverageDonut covered={g.coveredLOs} total={g.totalLOs} />
                           </div>
-                          {g.los.length === 0 ? (
-                            <p className="mt-2 text-[10px] italic text-muted-foreground">No LOs mapped.</p>
-                          ) : (
-                            <ul className="mt-2 space-y-0.5">
-                              {g.los.map((lo) => {
-                                const count = remarkCount("lo", lo.text);
-                                const fullStat = paper.los.find((l) => l.text === lo.text);
-                                const dotClass = !lo.covered
-                                  ? "border border-border bg-background"
-                                  : lo.actual >= 2
-                                    ? "bg-emerald-700"
-                                    : "bg-emerald-500";
-                                return (
-                                  <li key={lo.text}>
-                                    <button
-                                      type="button"
-                                      onClick={() => { if (fullStat) setTarget({ kind: "lo", ...fullStat }); }}
-                                      className={`flex w-full items-start gap-2 rounded px-1.5 py-1 text-left text-[11px] leading-snug transition hover:bg-muted/50 ${
-                                        lo.covered ? "text-foreground" : "text-muted-foreground"
-                                      }`}
-                                    >
-                                      <span className={`mt-1 h-2 w-2 shrink-0 rounded-sm ${dotClass}`} />
-                                      <span className="flex-1">{lo.text}</span>
-                                      {lo.actual > 0 && (
-                                        <span className="shrink-0 text-[10px] text-muted-foreground">
-                                          {lo.actual}×
-                                        </span>
-                                      )}
-                                      {count > 0 && <RemarkPill count={count} />}
-                                    </button>
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                          )}
-                        </div>
+                          <div className="space-y-1.5">
+                            <DensityBar los={g.los} />
+                            <div className="flex items-center justify-between gap-1">
+                              <span className={`truncate rounded-full border px-1.5 py-0.5 text-[9px] font-medium ${meta.chip}`}>
+                                {meta.label}
+                              </span>
+                              <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+                                {g.coveredLOs}/{g.totalLOs}
+                                {g.targetMarks ? <> · {g.actualMarks}/{g.targetMarks}m</> : g.actualMarks ? <> · {g.actualMarks}m</> : null}
+                              </span>
+                            </div>
+                          </div>
+                        </button>
                       );
                     })}
                   </div>
