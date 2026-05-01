@@ -2351,7 +2351,7 @@ function CoveragePanel({
   const [explorerOpen, setExplorerOpen] = useState(false);
   const [explorerKO, setExplorerKO] = useState<string | null>(null);
   const [explorerFilter, setExplorerFilter] = useState<"all" | OverviewStatus>("all");
-  const [explorerMode, setExplorerMode] = useState<"drilldown" | "matrix">("matrix");
+  const [explorerMode, setExplorerMode] = useState<"overview" | "drilldown">("overview");
 
   // Build KO → list of LOs (with per-LO covered/actual) using questions as the
   // source of truth. Falls back to an "Unassigned" bucket for orphan LOs.
