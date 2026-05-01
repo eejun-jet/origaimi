@@ -1,55 +1,52 @@
-## Why "Review" looks like a refresh
+## What's actually wrong
 
-In TanStack Router, when a file like `src/routes/admin.syllabus.$id.tsx` exists alongside `src/routes/admin.syllabus.tsx`, the latter automatically becomes a **parent layout** for the former. A parent layout MUST render `<Outlet />` for the child route to appear.
+Two independent issues are conspiring on your Nazi-Germany SBQ:
 
-`src/routes/admin.syllabus.tsx` does not render `<Outlet />` — it returns a self-contained list view. So when you click Review:
+**1. The domain allow-list is too narrow for niche History topics.**
+For Humanities, `fetchGroundedSource` calls Tavily with `include_domains: ALLOW_DOMAINS_HUMANITIES` (a fixed list of ~30 archives + a generic `.gov / .edu / .ac.* / .mil / .org` TLD rule). On a topic like *Life in Nazi Germany* — where the richest material lives on `.de` archives (e.g. `dhm.de`, `bundesarchiv.de`), university course pages, museum sites with non-`.org` TLDs, project sites like `alphahistory.com`, and curated educator portals — the search returns very few candidates. The fetcher then walks DOWN the query chain into more generic queries ("nazi germany primary source") and grabs whatever .org/.edu page mentions Germany — which is how Munich-Treaty and Paris-Peace-Conference pages slip in: same era, same .org/.gov TLD, passes the allow-list, weakly passes the keyword gate.
 
-- The URL silently changes to `/admin/syllabus/<id>` (you can confirm this in the address bar).
-- TanStack Router activates the child route in memory…
-- …but the parent keeps rendering the upload form + library list, so the child screen is never shown.
+**2. The relevance gate is too lenient.**
+`relevanceMetrics` accepts an excerpt if it overlaps ≥25% of the syllabus vocabulary AND has ≥2 keyword hits. For *Life in Nazi Germany* the topic vocabulary likely reduces to {nazi, germany, hitler, youth, propaganda, women, gestapo, …}. A Munich Treaty page mentions "Germany", "Hitler", "appeasement" — that's 2 hits and ~25%, so it passes. The gate doesn't distinguish "a few generic words shared" from "this excerpt is actually about the topic."
 
-That is exactly the "nothing happens / page just refreshes" symptom.
+You wanted a third thing too: **drop the hard reputable-only restriction for History/SS specifically**, while still preferring authoritative sources.
 
-There is also a secondary issue surfaced by the database: one syllabus (`Combined Science 5086`) is stuck in `parse_status = 'parsing'` (the parser was killed mid-run, likely by the earlier "AI error 402 Not enough credits" / "connection closed" entries in the edge logs). It has no papers/topics, so even once Review works it will look empty for that doc.
+## What the change does
 
-## Changes
+Three coordinated changes in `supabase/functions/generate-assessment/sources.ts`, all Humanities-only (English allow-list stays unchanged):
 
-### 1. Fix the routing — split the list page out from the layout
+### A. Open the search, keep the preference
 
-Rename `src/routes/admin.syllabus.tsx` → `src/routes/admin.syllabus.index.tsx`. In flat-file routing, `admin.syllabus.index.tsx` claims exactly the path `/admin/syllabus`, while `admin.syllabus.$id.tsx` claims `/admin/syllabus/$id` — neither becomes the other's parent, so no `<Outlet />` is needed and the child review page renders normally.
+- For `subjectKind === "humanities"`, **stop passing `include_domains` to Tavily** (and stop applying the strict allow-list filter to Firecrawl results). Search the open web.
+- Keep `DENY_DOMAINS` as a hard block (Wikipedia, Reddit, essay mills, Quora, blogspot, etc. — these were the original "junk" list and stay banned).
+- Keep `humanitiesTier()` as a *ranking* signal, not a *gating* signal. Tier-1 (gov/archive/museum) gets a big boost, Tier-2 (JSTOR, History Today, HistoryExtra) a smaller one, everything else passes through with a small penalty. Per-pool Tier-2 budget stays in place so we don't fill an SBQ with five historiography essays.
+- Add a soft **publisher quality floor**: reject hosts that look like content farms or shopping/affiliate domains (heuristic on TLD + path patterns like `/products/`, `/shop/`, `/cart/`), plus the existing data-endpoint regex. This is cheap and catches the obvious junk that opening the web invites.
 
-(Alternative considered: keep the file and add `<Outlet />` plus a conditional that renders the list only when no `$id` is present. Cleaner to split.)
+### B. Make the relevance gate strict enough to catch "Munich Treaty in a Nazi Germany pool"
 
-### 2. Make the Review screen visually distinct
+Replace the single proportion-AND-hits gate with a layered check. An excerpt must satisfy ALL of:
 
-In `src/routes/admin.syllabus.$id.tsx`:
+1. **Topic-anchor hit (NEW, hard requirement).** At least one *topic-anchor* keyword (drawn from the topic title + LO subjects, NOT verbs/adjectives) must appear ≥ 2 times in the excerpt. For *Life in Nazi Germany* anchors would include `nazi`, `germany`, `hitler youth`, `gestapo`, `propaganda`, `volksgemeinschaft`. The Munich Treaty page mentions "Hitler" once and "Germany" once — fails.
+2. **Anchor density.** Anchor-keyword occurrences per 100 words must be ≥ 1.0. This is what separates "a passage about Nazi Germany" from "a passage about 1930s Europe that names Germany twice."
+3. **Existing proportional overlap** of the full topic + LO vocabulary, but the threshold rises to **≥ 35%** AND **≥ 3 distinct keywords matched** (was 25% / 2). The old numbers were tuned for the curated allow-list; with the open web they're too generous.
+4. **Negative-topic guard for Humanities.** When the topic clearly belongs to one well-known historical episode, build a small list of *adjacent-but-distinct* episodes from a hand-curated map and reject excerpts whose anchor density for an *adjacent* topic exceeds the chosen topic's density. The map covers the half-dozen confusable Sec 3/4 History pairs that actually cause this problem (Life in Nazi Germany ↔ Treaty of Versailles / Munich Agreement / Paris Peace Conference / Appeasement; Cold War origins ↔ WWII end; Singapore independence ↔ Malayan Emergency). Small, explicit, easy to extend later.
 
-- Add a clearer page heading under the sticky bar: "Review & publish syllabus" with a subtitle line explaining what this screen is for ("Edit parsed papers, topics, and assessment objectives, then Publish to make this syllabus available to the assessment coach").
-- When `papers.length === 0 && topics.length === 0`, render an explicit empty state card: "No papers or topics were extracted. Re-parse from the library, or check that the uploaded PDF is text-based (not a scanned image)." with a "Back to library" button.
-- When `parse_status === 'parsing'`, show a yellow info banner: "Parsing in progress — refresh in a minute. If it stays in this state, the parser likely failed mid-run; re-parse from the library."
+### C. Tighten the queries so the search engine has a fighting chance
 
-### 3. Recover the stuck "parsing" doc
+The current chain dilutes specific topics with generic suffixes ("primary source document archive"). Two changes:
 
-Add a small safety net to `src/routes/admin.syllabus.tsx` (the list page, soon `admin.syllabus.index.tsx`):
+- For Humanities, prepend the **full topic title as a quoted phrase** to the first 3 queries (e.g. `"life in Nazi Germany" hitler youth propaganda primary source`). Tavily and Firecrawl both honour quoted phrases; this alone removes the bulk of off-topic returns.
+- Stop emitting the most generic two-word query (`topicKw.slice(0,2).join(" ") primary source`) for Humanities — it's the one that surfaces the Paris Peace Conference. Replace it with a focused fallback: `"<topic title>" archive document`.
 
-- A "Reset to pending" action on rows whose status is `parsing` and whose `updated_at` is older than ~5 minutes. This flips the row back to `pending` so the user can click Re-parse cleanly. (Pure UI + a single update query — no schema change.)
+Curated topic-anchor extraction lives in a small new helper `topicAnchors(topic, learningOutcomes)` in the same file: drops STOPWORDS, drops generic history vocabulary (`century`, `period`, `era`, `empire`, `government`, `treaty`, `agreement`, `world`, `war`, `policy` when used alone), preserves multi-word proper nouns from the topic title.
 
-Plus a one-time DB update (via migration) to flip the currently stuck `Combined Science 5086` row from `parsing` → `pending` so the user can immediately re-parse it.
+## What you'll see
 
-### 4. Diagnose why some parses produce nothing
-
-For the syllabi already in `parse_status = 'parsed'` but the user still feels there's "nothing to review", check via SQL once the routing fix is in: count papers / topics / AOs per doc. If a parsed doc has zero topics, it usually means the AI extraction hit a token cap or the PDF pages were image-only. The empty-state card from step 2 will surface that clearly to the user, with a Re-parse path.
-
-No changes to the parser itself in this round — once the user can actually open the Review screen, we'll know whether parsing quality is the next thing to tackle.
+- For *Life in Nazi Germany*: the source pool draws from museums (USHMM, IWM, DHM), Bundesarchiv, university course pages, BBC History, History Today, plus open-web educator sites like `alphahistory.com` — and stops returning Munich-Treaty / Paris-Peace-Conference excerpts because they fail the anchor-density gate.
+- For other humanities topics: same broadening of accepted publishers, plus fewer "weakly on-topic" excerpts in general.
+- Logs include the new gate reasons (`anchor-density-too-low`, `adjacent-topic-stronger=<x>`) so when you see a confusing pool you can read the edge logs and tell exactly why a candidate was kept or dropped.
 
 ## Files to change
 
-- Rename `src/routes/admin.syllabus.tsx` → `src/routes/admin.syllabus.index.tsx` (no logic change beyond filename + add the "Reset to pending" row action).
-- Edit `src/routes/admin.syllabus.$id.tsx` — add page heading, empty state, and "parsing" banner.
-- New migration: `UPDATE syllabus_documents SET parse_status='pending' WHERE id='c5c857bf-c95b-4d43-b317-4589f872c77b' AND parse_status='parsing';`
+- `supabase/functions/generate-assessment/sources.ts` — only file. Changes are scoped to: Humanities branch of `searchUrls` / `firecrawlSearch` / `tavilySearch` call sites, `relevanceMetrics` (replaced by `relevanceVerdict`), `buildQueryChain`, plus two new pure helpers (`topicAnchors`, `ADJACENT_TOPICS`).
 
-## What you'll see after this
-
-- Clicking Review actually opens the review screen with metadata, papers, topics, AOs, Save, and Publish.
-- Docs that parsed cleanly show their content; docs that produced nothing show a clear "no content extracted" card instead of a confusingly empty page.
-- The stuck `5086` syllabus becomes re-parsable from the library.
+No DB changes, no UI changes, no new secrets. English allow-list and pictorial-image flow are untouched.

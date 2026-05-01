@@ -251,27 +251,35 @@ export function buildQueryChain(
     if (topicKw.length > 0) chain.push(`${topicKw.join(" ")} ${suffix}${hintSuffix}`);
     if (topicKw.length >= 2) chain.push(`${topicKw.slice(0, 2).join(" ")} ${suffix}`);
   } else {
-    // Humanities: HEAVILY bias toward primary sources. We emit ~4 primary-source
-    // queries for every 1 historian-perspective query so the search engine
-    // surfaces archives, contemporary reportage, speeches and treaties first.
-    // Historiography / scholar perspectives are allowed but capped per pool by
-    // the caller's tierBudget (see fetchGroundedSource).
+    // Humanities: anchor every query on the FULL topic title as a quoted phrase
+    // so the search engine returns pages actually about the chosen episode,
+    // rather than any page sharing a couple of keywords (e.g. "Munich Treaty"
+    // showing up in a "Life in Nazi Germany" pool). The quoted topic title is
+    // honoured by both Tavily and Firecrawl.
+    const quotedTopic = topic.trim() ? `"${topic.trim()}"` : "";
     const base = topicKw.join(" ");
     const baseWithLo = [...topicKw, ...loKw].join(" ");
-    if (topicKw.length > 0 && loKw.length > 0) {
+    if (quotedTopic && loKw.length > 0) {
+      chain.push(`${quotedTopic} ${loKw.join(" ")} primary source${hintSuffix}`);
+      chain.push(`${quotedTopic} ${loKw.slice(0, 3).join(" ")} archival document${hintSuffix}`);
+    }
+    if (quotedTopic) {
+      chain.push(`${quotedTopic} contemporary newspaper account${hintSuffix}`);
+      chain.push(`${quotedTopic} speech treaty official record${hintSuffix}`);
+      chain.push(`${quotedTopic} eyewitness account memoir${hintSuffix}`);
+      // Single historiography query, last among specific ones.
+      chain.push(`${quotedTopic} historian analysis scholarly${hintSuffix}`);
+      // Focused fallback (replaces the old generic two-word "primary source"
+      // query that surfaced unrelated same-era pages).
+      chain.push(`${quotedTopic} archive document`);
+    }
+    // Unquoted keyword fallback for cases where the topic title itself is too
+    // generic to quote usefully (e.g. very short topic strings).
+    if (!quotedTopic && topicKw.length > 0 && loKw.length > 0) {
       chain.push(`${baseWithLo} primary source document archive${hintSuffix}`);
-      chain.push(`${baseWithLo} archival document${hintSuffix}`);
     }
-    if (topicKw.length > 0) {
-      chain.push(`${base} contemporary newspaper account${hintSuffix}`);
-      chain.push(`${base} speech treaty official record${hintSuffix}`);
+    if (!quotedTopic && topicKw.length > 0) {
       chain.push(`${base} primary source document${hintSuffix}`);
-      chain.push(`${base} eyewitness account memoir${hintSuffix}`);
-      // Single historiography query, deliberately last among the specific ones.
-      chain.push(`${base} historian analysis scholarly${hintSuffix}`);
-    }
-    if (topicKw.length >= 2) {
-      chain.push(`${topicKw.slice(0, 2).join(" ")} primary source`);
     }
   }
   return Array.from(new Set(chain));
@@ -302,28 +310,34 @@ function hostnameOf(url: string): string {
 const DATA_PATH_RE = /\.(csv|json|xml|tsv|rss|atom)(\?|#|$)/i;
 const DATA_HOST_RE = /^(analytics|api|data|feeds?|raw)\./i;
 
+// Path patterns that signal commerce / affiliate / store pages — never a
+// usable historical source excerpt. Cheap regex applied AFTER the deny-list
+// so the open-web humanities mode doesn't pull in product / shop pages.
+const COMMERCE_PATH_RE = /\/(shop|store|cart|checkout|product|products|pricing|buy|order)(\/|$|\?)/i;
+
 function isAllowed(url: string, allowList: string[], allowGenericTlds = false): boolean {
   const h = hostnameOf(url);
   if (!h) return false;
   if (DENY_DOMAINS.some((d) => h.endsWith(d) || h.includes(d))) return false;
   // Reject data endpoints early so they never enter the candidate pool.
   if (DATA_HOST_RE.test(h)) return false;
+  let pathLc = "";
   try {
-    const path = new URL(url).pathname;
-    if (DATA_PATH_RE.test(path)) return false;
+    pathLc = new URL(url).pathname;
+    if (DATA_PATH_RE.test(pathLc)) return false;
   } catch { /* ignore */ }
-  if (allowList.some((d) => h === d || h.endsWith("." + d) || h.endsWith(d))) return true;
-  // For humanities, also allow any .gov, .edu, .ac.uk, .mil, or .org host as
-  // a Tier-1 primary publisher (gated by DENY_DOMAINS + downstream
-  // relevance/richness checks). Generic TLD rule is off for English.
+
+  // Humanities (allowGenericTlds=true) runs in OPEN-WEB mode: anything not
+  // explicitly denied is allowed in. The allow-list / TLD lists are kept
+  // only as RANKING signals (see humanitiesTier + rankUrlsForSubject).
+  // We additionally drop obvious commerce paths.
   if (allowGenericTlds) {
-    if (HUMANITIES_TLD_TIER_1.some((tld) => h.endsWith(tld) || h.endsWith(tld + ".sg") || h.endsWith(tld + ".au") || h.endsWith(tld + ".uk") || h.endsWith(tld + ".nz") || h.endsWith(tld + ".ca"))) {
-      return true;
-    }
-    if (HUMANITIES_TLD_TIER_1_SUFFIXES.some((sfx) => h.endsWith(sfx))) {
-      return true;
-    }
+    if (COMMERCE_PATH_RE.test(pathLc)) return false;
+    return true;
   }
+
+  // Non-humanities (English) keeps the strict curated allow-list.
+  if (allowList.some((d) => h === d || h.endsWith("." + d) || h.endsWith(d))) return true;
   return false;
 }
 
@@ -392,28 +406,160 @@ function isJunkSentence(s: string): boolean {
   return JUNK_PATTERNS.some((re) => re.test(t));
 }
 
-/** Compute simple keyword-overlap relevance between an excerpt and the syllabus
- *  topic + learning outcomes. Used to drop scrapes that have nothing to do with
- *  the topic the teacher actually selected. Returns both the proportional score
- *  and the number of distinct keywords matched so callers can apply a strict
- *  AND-gate (proportion AND raw hits) rather than the previous OR-gate which
- *  let off-topic but keyword-dense pages slip through. */
-function relevanceMetrics(
+/** Generic history vocabulary that is too weak to anchor a topic on its own.
+ *  These words are used to *describe* episodes, not to *identify* them, so we
+ *  exclude them from the topic-anchor list (they may still appear in the
+ *  broader proportional-overlap score). */
+const GENERIC_HISTORY_NOISE = new Set([
+  "century", "period", "era", "empire", "kingdom", "dynasty",
+  "government", "policy", "policies", "treaty", "agreement", "conference",
+  "nation", "state", "country", "people", "society", "world", "war",
+  "history", "historical", "modern", "ancient", "year", "years",
+  "international", "national", "regional", "european", "asian", "american",
+  "life", "living", "society", "culture", "social", "political", "economic",
+]);
+
+/** Topic anchors are the *identifying* keywords for an episode — proper nouns
+ *  and topic-specific terms drawn from the topic title and LO subjects. The
+ *  topic title's words win first, with a synonym/expansion bump from common
+ *  educator vocabulary. Multi-word anchors (e.g. "hitler youth") are detected
+ *  in the title via simple bigram extraction. */
+function extractAnchorBigrams(text: string): string[] {
+  const cleaned = text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const words = cleaned.split(" ").filter(Boolean);
+  const out: string[] = [];
+  for (let i = 0; i < words.length - 1; i++) {
+    const a = words[i];
+    const b = words[i + 1];
+    if (STOPWORDS.has(a) || STOPWORDS.has(b)) continue;
+    if (GENERIC_HISTORY_NOISE.has(a) && GENERIC_HISTORY_NOISE.has(b)) continue;
+    if (a.length < 3 || b.length < 3) continue;
+    out.push(`${a} ${b}`);
+  }
+  return out;
+}
+
+export function topicAnchors(topic: string, learningOutcomes: string[] = []): string[] {
+  const titleKw = extractKeywords(topic, 8).filter((w) => !GENERIC_HISTORY_NOISE.has(w));
+  const loKw = extractKeywords(learningOutcomes.join(" "), 8).filter((w) => !GENERIC_HISTORY_NOISE.has(w));
+  // Multi-word anchors take priority — "hitler youth" is a far stronger
+  // indicator than "hitler" alone.
+  const bigrams = extractAnchorBigrams(topic);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const a of [...bigrams, ...titleKw, ...loKw]) {
+    if (seen.has(a)) continue;
+    seen.add(a);
+    out.push(a);
+    if (out.length >= 10) break;
+  }
+  return out;
+}
+
+/** Curated map of confusable Sec 3/4 History/SS topic pairs. When the chosen
+ *  topic matches a key, an excerpt whose anchor density for any value exceeds
+ *  the chosen topic's density is dropped. Keep small and explicit — easier to
+ *  audit and extend than an ML classifier. */
+const ADJACENT_TOPICS: Array<{ match: RegExp; adjacent: string[][] }> = [
+  {
+    // Life in Nazi Germany ↔ inter-war diplomacy episodes.
+    match: /\b(nazi\s+germany|life\s+in\s+nazi|hitler('s)?\s+germany|third\s+reich)\b/i,
+    adjacent: [
+      ["treaty", "versailles"],
+      ["paris", "peace", "conference"],
+      ["munich", "agreement"],
+      ["munich", "treaty"],
+      ["appeasement"],
+      ["league", "of", "nations"],
+    ],
+  },
+  {
+    // Cold War origins ↔ end of WWII / Pacific War.
+    match: /\b(cold\s+war|origins\s+of\s+the\s+cold\s+war|containment|truman\s+doctrine)\b/i,
+    adjacent: [
+      ["pearl", "harbor"], ["pacific", "war"], ["d-day"], ["normandy"], ["holocaust"],
+    ],
+  },
+  {
+    // Singapore independence (1965) ↔ Malayan Emergency / Konfrontasi.
+    match: /\b(singapore.*independence|merger.*malaysia|separation.*1965|road\s+to\s+independence)\b/i,
+    adjacent: [
+      ["malayan", "emergency"], ["konfrontasi"], ["confrontation"], ["communist", "party", "of", "malaya"],
+    ],
+  },
+];
+
+function countOccurrences(haystackLc: string, needle: string): number {
+  if (!needle) return 0;
+  const n = needle.toLowerCase();
+  let i = 0;
+  let count = 0;
+  while ((i = haystackLc.indexOf(n, i)) !== -1) {
+    count++;
+    i += n.length;
+  }
+  return count;
+}
+
+/** Layered relevance verdict. Returns null when the excerpt passes; otherwise
+ *  returns a short reason string for logs. */
+function relevanceVerdict(
   excerpt: string,
+  topic: string,
   topicKeywords: string[],
-): { score: number; hits: number; matched: string[] } {
-  if (topicKeywords.length === 0) return { score: 1, hits: 0, matched: [] };
+  anchors: string[],
+): string | null {
+  if (topicKeywords.length === 0) return null;
   const lc = excerpt.toLowerCase();
+  const wordCount = countWords(excerpt);
+
+  // 1. At least one anchor must appear ≥2 times.
+  let anchorOccurrences = 0;
+  let topAnchorHits = 0;
+  for (const a of anchors) {
+    const c = countOccurrences(lc, a);
+    anchorOccurrences += c;
+    if (c > topAnchorHits) topAnchorHits = c;
+  }
+  if (anchors.length > 0 && topAnchorHits < 2) {
+    return `weak-anchor(top=${topAnchorHits})`;
+  }
+
+  // 2. Anchor density per 100 words must be ≥ 1.0.
+  const density = (anchorOccurrences / Math.max(1, wordCount)) * 100;
+  if (anchors.length > 0 && density < 1.0) {
+    return `anchor-density-too-low(${density.toFixed(2)}/100w)`;
+  }
+
+  // 3. Proportional overlap of full topic vocabulary: ≥35% AND ≥3 distinct hits.
   const matched: string[] = [];
   for (const kw of topicKeywords) {
     if (kw.length < 3) continue;
     if (lc.includes(kw)) matched.push(kw);
   }
-  return {
-    score: matched.length / Math.max(1, topicKeywords.length),
-    hits: matched.length,
-    matched,
-  };
+  const score = matched.length / Math.max(1, topicKeywords.length);
+  if (matched.length < 3 || score < 0.35) {
+    return `low-overlap(score=${score.toFixed(2)},hits=${matched.length})`;
+  }
+
+  // 4. Adjacent-topic guard.
+  const rule = ADJACENT_TOPICS.find((r) => r.match.test(topic));
+  if (rule) {
+    for (const adj of rule.adjacent) {
+      let adjOccs = 0;
+      for (const w of adj) adjOccs += countOccurrences(lc, w);
+      const adjDensity = (adjOccs / Math.max(1, wordCount)) * 100;
+      if (adjDensity > density) {
+        return `adjacent-topic-stronger(${adj.join(" ")}@${adjDensity.toFixed(2)}>own@${density.toFixed(2)})`;
+      }
+    }
+  }
+
+  return null;
 }
 
 /** Heuristic richness check: a "rich" excerpt for source-based analysis must
@@ -613,8 +759,9 @@ export async function fetchGroundedSource(
 
   // Vocabulary used for relevance gating: the topic plus ALL learning outcomes.
   const topicVocab = syllabusKeywordsFor(topic, learningOutcomes);
-  const MIN_RELEVANCE = 0.25;
-  const MIN_RELEVANCE_HITS = 2;
+  // Topic anchors = identifying keywords (proper nouns + LO subjects). Used by
+  // the layered gate to reject same-era-but-different-episode pages.
+  const anchors = subjectKind === "humanities" ? topicAnchors(topic, learningOutcomes) : [];
   const tier2Exhausted = (): boolean =>
     !!tierBudget && tierBudget.tier2Used >= tierBudget.maxTier2;
 
@@ -648,10 +795,26 @@ export async function fetchGroundedSource(
         const excerpt = extractExcerpt(scraped.markdown);
         if (!excerpt) continue;
 
-        const { score, hits, matched } = relevanceMetrics(excerpt, topicVocab);
-        if (score < MIN_RELEVANCE || hits < MIN_RELEVANCE_HITS) {
-          console.warn(`[sources] dropped off-topic excerpt (score=${score.toFixed(2)}, hits=${hits}, matched=[${matched.join(",")}]) from ${url}`);
-          continue;
+        if (subjectKind === "humanities") {
+          const reason = relevanceVerdict(excerpt, topic, topicVocab, anchors);
+          if (reason) {
+            console.warn(`[sources] dropped off-topic excerpt (${reason}) from ${url}`);
+            continue;
+          }
+        } else {
+          // English: keep the lighter overlap check (curated allow-list already
+          // filters out unrelated material). Inline so we don't reintroduce
+          // relevanceMetrics globally.
+          const lc = excerpt.toLowerCase();
+          let hits = 0;
+          for (const kw of topicVocab) {
+            if (kw.length >= 3 && lc.includes(kw)) hits++;
+          }
+          const score = hits / Math.max(1, topicVocab.length);
+          if (score < 0.25 || hits < 2) {
+            console.warn(`[sources] dropped off-topic excerpt (score=${score.toFixed(2)}, hits=${hits}) from ${url}`);
+            continue;
+          }
         }
 
         const poor = richnessReason(excerpt);
