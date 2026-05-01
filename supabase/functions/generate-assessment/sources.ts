@@ -251,27 +251,35 @@ export function buildQueryChain(
     if (topicKw.length > 0) chain.push(`${topicKw.join(" ")} ${suffix}${hintSuffix}`);
     if (topicKw.length >= 2) chain.push(`${topicKw.slice(0, 2).join(" ")} ${suffix}`);
   } else {
-    // Humanities: HEAVILY bias toward primary sources. We emit ~4 primary-source
-    // queries for every 1 historian-perspective query so the search engine
-    // surfaces archives, contemporary reportage, speeches and treaties first.
-    // Historiography / scholar perspectives are allowed but capped per pool by
-    // the caller's tierBudget (see fetchGroundedSource).
+    // Humanities: anchor every query on the FULL topic title as a quoted phrase
+    // so the search engine returns pages actually about the chosen episode,
+    // rather than any page sharing a couple of keywords (e.g. "Munich Treaty"
+    // showing up in a "Life in Nazi Germany" pool). The quoted topic title is
+    // honoured by both Tavily and Firecrawl.
+    const quotedTopic = topic.trim() ? `"${topic.trim()}"` : "";
     const base = topicKw.join(" ");
     const baseWithLo = [...topicKw, ...loKw].join(" ");
-    if (topicKw.length > 0 && loKw.length > 0) {
+    if (quotedTopic && loKw.length > 0) {
+      chain.push(`${quotedTopic} ${loKw.join(" ")} primary source${hintSuffix}`);
+      chain.push(`${quotedTopic} ${loKw.slice(0, 3).join(" ")} archival document${hintSuffix}`);
+    }
+    if (quotedTopic) {
+      chain.push(`${quotedTopic} contemporary newspaper account${hintSuffix}`);
+      chain.push(`${quotedTopic} speech treaty official record${hintSuffix}`);
+      chain.push(`${quotedTopic} eyewitness account memoir${hintSuffix}`);
+      // Single historiography query, last among specific ones.
+      chain.push(`${quotedTopic} historian analysis scholarly${hintSuffix}`);
+      // Focused fallback (replaces the old generic two-word "primary source"
+      // query that surfaced unrelated same-era pages).
+      chain.push(`${quotedTopic} archive document`);
+    }
+    // Unquoted keyword fallback for cases where the topic title itself is too
+    // generic to quote usefully (e.g. very short topic strings).
+    if (!quotedTopic && topicKw.length > 0 && loKw.length > 0) {
       chain.push(`${baseWithLo} primary source document archive${hintSuffix}`);
-      chain.push(`${baseWithLo} archival document${hintSuffix}`);
     }
-    if (topicKw.length > 0) {
-      chain.push(`${base} contemporary newspaper account${hintSuffix}`);
-      chain.push(`${base} speech treaty official record${hintSuffix}`);
+    if (!quotedTopic && topicKw.length > 0) {
       chain.push(`${base} primary source document${hintSuffix}`);
-      chain.push(`${base} eyewitness account memoir${hintSuffix}`);
-      // Single historiography query, deliberately last among the specific ones.
-      chain.push(`${base} historian analysis scholarly${hintSuffix}`);
-    }
-    if (topicKw.length >= 2) {
-      chain.push(`${topicKw.slice(0, 2).join(" ")} primary source`);
     }
   }
   return Array.from(new Set(chain));
