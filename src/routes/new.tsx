@@ -786,6 +786,34 @@ function NewAssessment() {
           )}
         </div>
 
+        {step >= 2 && (
+          <aside className="lg:sticky lg:top-20 lg:self-start">
+            <BuilderCoachPanel
+              snapshot={{
+                step: step as 2 | 3 | 4,
+                subject,
+                level,
+                syllabusCode: selected?.doc.syllabusCode ?? null,
+                paperCode: selected?.paper.paperCode ?? null,
+                assessmentMode: selected?.paper.assessmentMode ?? "written",
+                totalMarks,
+                duration,
+                sections,
+                referenceNote,
+                paperAOs: docAOs,
+                selectedAoCodes,
+                selectedKos,
+                selectedLos,
+                topicPoolSize: useSyllabus ? selectedTopicIds.length : topics.length,
+              } satisfies BuilderSnapshot}
+              onAppendInstructions={(text) =>
+                setReferenceNote((prev) => (prev.trim() ? `${prev.trim()}\n${text}` : text))
+              }
+            />
+          </aside>
+        )}
+        </div>
+
         <div className="mt-6 flex items-center justify-between">
           <Button variant="ghost" disabled={step === 1 || busy}
             onClick={() => setStep((s) => Math.max(1, s - 1))} className="gap-1">
