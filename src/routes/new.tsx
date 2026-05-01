@@ -26,6 +26,8 @@ import {
 import { ChevronLeft, ChevronRight, Sparkles, Loader2, BookOpen, Upload, Plus, Trash2, ChevronUp, ChevronDown } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
+import { BuilderCoachPanel } from "@/components/BuilderCoachPanel";
+import type { BuilderSnapshot } from "@/lib/intent-coach";
 
 export const Route = createFileRoute("/new")({
   component: NewAssessment,
