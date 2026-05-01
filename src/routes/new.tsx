@@ -581,9 +581,9 @@ function NewAssessment() {
                 </div>
               </div>
 
-              {/* 2. Stream — narrows within the band derived from Level */}
+              {/* 2. Posting Group — narrows within the band derived from Level */}
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border bg-muted/20 p-2.5">
-                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Stream</span>
+                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">POSTING GROUP</span>
                 <SegmentedFilter
                   options={STREAMS_FOR_BAND[userBand]}
                   value={streamFilter}
