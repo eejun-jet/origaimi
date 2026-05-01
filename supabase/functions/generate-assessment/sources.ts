@@ -310,28 +310,34 @@ function hostnameOf(url: string): string {
 const DATA_PATH_RE = /\.(csv|json|xml|tsv|rss|atom)(\?|#|$)/i;
 const DATA_HOST_RE = /^(analytics|api|data|feeds?|raw)\./i;
 
+// Path patterns that signal commerce / affiliate / store pages — never a
+// usable historical source excerpt. Cheap regex applied AFTER the deny-list
+// so the open-web humanities mode doesn't pull in product / shop pages.
+const COMMERCE_PATH_RE = /\/(shop|store|cart|checkout|product|products|pricing|buy|order)(\/|$|\?)/i;
+
 function isAllowed(url: string, allowList: string[], allowGenericTlds = false): boolean {
   const h = hostnameOf(url);
   if (!h) return false;
   if (DENY_DOMAINS.some((d) => h.endsWith(d) || h.includes(d))) return false;
   // Reject data endpoints early so they never enter the candidate pool.
   if (DATA_HOST_RE.test(h)) return false;
+  let pathLc = "";
   try {
-    const path = new URL(url).pathname;
-    if (DATA_PATH_RE.test(path)) return false;
+    pathLc = new URL(url).pathname;
+    if (DATA_PATH_RE.test(pathLc)) return false;
   } catch { /* ignore */ }
-  if (allowList.some((d) => h === d || h.endsWith("." + d) || h.endsWith(d))) return true;
-  // For humanities, also allow any .gov, .edu, .ac.uk, .mil, or .org host as
-  // a Tier-1 primary publisher (gated by DENY_DOMAINS + downstream
-  // relevance/richness checks). Generic TLD rule is off for English.
+
+  // Humanities (allowGenericTlds=true) runs in OPEN-WEB mode: anything not
+  // explicitly denied is allowed in. The allow-list / TLD lists are kept
+  // only as RANKING signals (see humanitiesTier + rankUrlsForSubject).
+  // We additionally drop obvious commerce paths.
   if (allowGenericTlds) {
-    if (HUMANITIES_TLD_TIER_1.some((tld) => h.endsWith(tld) || h.endsWith(tld + ".sg") || h.endsWith(tld + ".au") || h.endsWith(tld + ".uk") || h.endsWith(tld + ".nz") || h.endsWith(tld + ".ca"))) {
-      return true;
-    }
-    if (HUMANITIES_TLD_TIER_1_SUFFIXES.some((sfx) => h.endsWith(sfx))) {
-      return true;
-    }
+    if (COMMERCE_PATH_RE.test(pathLc)) return false;
+    return true;
   }
+
+  // Non-humanities (English) keeps the strict curated allow-list.
+  if (allowList.some((d) => h === d || h.endsWith("." + d) || h.endsWith(d))) return true;
   return false;
 }
 
