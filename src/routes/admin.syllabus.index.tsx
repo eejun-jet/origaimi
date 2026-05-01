@@ -135,6 +135,16 @@ function SyllabusAdmin() {
     }
   };
 
+  const resetStuck = async (id: string) => {
+    const { error } = await supabase
+      .from("syllabus_documents")
+      .update({ parse_status: "pending" })
+      .eq("id", id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Reset — you can now Re-parse");
+    await load();
+  };
+
   const removeDoc = async (id: string, path: string) => {
     if (!confirm("Delete this syllabus and all its extracted topics?")) return;
     await supabase.storage.from("syllabi").remove([path]);
