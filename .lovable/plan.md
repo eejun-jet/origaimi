@@ -1,52 +1,71 @@
-## What's actually wrong
+# Upload-a-paper into the Assessment Builder
 
-Two independent issues are conspiring on your Nazi-Germany SBQ:
+## What the teacher gets
 
-**1. The domain allow-list is too narrow for niche History topics.**
-For Humanities, `fetchGroundedSource` calls Tavily with `include_domains: ALLOW_DOMAINS_HUMANITIES` (a fixed list of ~30 archives + a generic `.gov / .edu / .ac.* / .mil / .org` TLD rule). On a topic like *Life in Nazi Germany* — where the richest material lives on `.de` archives (e.g. `dhm.de`, `bundesarchiv.de`), university course pages, museum sites with non-`.org` TLDs, project sites like `alphahistory.com`, and curated educator portals — the search returns very few candidates. The fetcher then walks DOWN the query chain into more generic queries ("nazi germany primary source") and grabs whatever .org/.edu page mentions Germany — which is how Munich-Treaty and Paris-Peace-Conference pages slip in: same era, same .org/.gov TLD, passes the allow-list, weakly passes the keyword gate.
+A new "Upload existing paper" path on Step 1 of New Assessment. They drop a PDF (complete or partial), pick subject/level/syllabus paper, and we:
 
-**2. The relevance gate is too lenient.**
-`relevanceMetrics` accepts an excerpt if it overlaps ≥25% of the syllabus vocabulary AND has ≥2 keyword hits. For *Life in Nazi Germany* the topic vocabulary likely reduces to {nazi, germany, hitler, youth, propaganda, women, gestapo, …}. A Munich Treaty page mentions "Germany", "Hitler", "appeasement" — that's 2 hits and ~25%, so it passes. The gate doesn't distinguish "a few generic words shared" from "this excerpt is actually about the topic."
+1. Store the PDF in the `papers` bucket and create a `past_papers` row.
+2. Run the existing `parse-paper` edge function (extracts questions, sub-parts, diagrams, AO/KO/LO tags, command words).
+3. Convert the parsed result into an `assessments` row + `assessment_questions` rows via the existing `analysePastPaper` helper — this is the same path `/papers` already uses.
+4. Drop the teacher straight onto `/assessment/$id`, where they can:
+   - Edit / add / delete / regenerate questions in place (already supported).
+   - See the auto-built TOS, AO/KO/LO coverage panel, and the Coach review tab (already supported for `assessment_type = "past_paper_analysis"`).
+   - Run "Refresh LO coverage" and "Coach review" (already wired).
 
-You wanted a third thing too: **drop the hard reputable-only restriction for History/SS specifically**, while still preferring authoritative sources.
+Incomplete papers are fine — `analysePastPaper` already tolerates 0-mark or stub questions, and the editor lets them top up.
 
-## What the change does
+## Where it goes in the UI
 
-Three coordinated changes in `supabase/functions/generate-assessment/sources.ts`, all Humanities-only (English allow-list stays unchanged):
+Step 1 of `src/routes/new.tsx` gets a top-of-page mode toggle:
 
-### A. Open the search, keep the preference
+```text
+How do you want to start?
+  ( ) Build from scratch         ( ) Upload an existing paper
+```
 
-- For `subjectKind === "humanities"`, **stop passing `include_domains` to Tavily** (and stop applying the strict allow-list filter to Firecrawl results). Search the open web.
-- Keep `DENY_DOMAINS` as a hard block (Wikipedia, Reddit, essay mills, Quora, blogspot, etc. — these were the original "junk" list and stay banned).
-- Keep `humanitiesTier()` as a *ranking* signal, not a *gating* signal. Tier-1 (gov/archive/museum) gets a big boost, Tier-2 (JSTOR, History Today, HistoryExtra) a smaller one, everything else passes through with a small penalty. Per-pool Tier-2 budget stays in place so we don't fill an SBQ with five historiography essays.
-- Add a soft **publisher quality floor**: reject hosts that look like content farms or shopping/affiliate domains (heuristic on TLD + path patterns like `/products/`, `/shop/`, `/cart/`), plus the existing data-endpoint regex. This is cheap and catches the obvious junk that opening the web invites.
+- "Build from scratch" → current Step 1 form, unchanged.
+- "Upload an existing paper" → compact upload card (Title, Subject, Level, Year, Paper number, Exam board, PDF) + "Upload & analyse" button. Subject/Level/Syllabus paper picker is reused from the existing Step 1 so the analysed assessment is wired to the right syllabus doc/paper.
 
-### B. Make the relevance gate strict enough to catch "Munich Treaty in a Nazi Germany pool"
+On submit we run the same flow `src/routes/papers.tsx` already uses, then `navigate({ to: "/assessment/$id" })` once parsing + analysis finish. While the edge function parses we show a progress card ("Reading PDF… extracting questions… tagging AOs/LOs…") with a polite cancel-and-keep-paper option.
 
-Replace the single proportion-AND-hits gate with a layered check. An excerpt must satisfy ALL of:
+## Technical changes
 
-1. **Topic-anchor hit (NEW, hard requirement).** At least one *topic-anchor* keyword (drawn from the topic title + LO subjects, NOT verbs/adjectives) must appear ≥ 2 times in the excerpt. For *Life in Nazi Germany* anchors would include `nazi`, `germany`, `hitler youth`, `gestapo`, `propaganda`, `volksgemeinschaft`. The Munich Treaty page mentions "Hitler" once and "Germany" once — fails.
-2. **Anchor density.** Anchor-keyword occurrences per 100 words must be ≥ 1.0. This is what separates "a passage about Nazi Germany" from "a passage about 1930s Europe that names Germany twice."
-3. **Existing proportional overlap** of the full topic + LO vocabulary, but the threshold rises to **≥ 35%** AND **≥ 3 distinct keywords matched** (was 25% / 2). The old numbers were tuned for the curated allow-list; with the open web they're too generous.
-4. **Negative-topic guard for Humanities.** When the topic clearly belongs to one well-known historical episode, build a small list of *adjacent-but-distinct* episodes from a hand-curated map and reject excerpts whose anchor density for an *adjacent* topic exceeds the chosen topic's density. The map covers the half-dozen confusable Sec 3/4 History pairs that actually cause this problem (Life in Nazi Germany ↔ Treaty of Versailles / Munich Agreement / Paris Peace Conference / Appeasement; Cold War origins ↔ WWII end; Singapore independence ↔ Malayan Emergency). Small, explicit, easy to extend later.
+Backend: **none required**. We reuse:
+- `papers` storage bucket (exists, RLS open for trial).
+- `past_papers` table + `parse-paper` edge function (exists; tags AO/KO/LO, command words, sub-parts, diagrams).
+- `src/lib/analyse-past-paper.ts` (already builds `assessments` + `assessment_questions` from a parsed paper, links `syllabus_doc_id` / `syllabus_paper_id` when subject+level+paper number match).
 
-### C. Tighten the queries so the search engine has a fighting chance
+Frontend (small, additive):
 
-The current chain dilutes specific topics with generic suffixes ("primary source document archive"). Two changes:
+1. `src/routes/new.tsx`
+   - Add `mode: "scratch" | "upload"` state at the top of Step 1.
+   - Render `<BuilderUploadCard />` when `mode === "upload"`.
+   - Hide stepper / step 2-4 nav while in upload mode (the Coach lives on `/assessment/$id`).
 
-- For Humanities, prepend the **full topic title as a quoted phrase** to the first 3 queries (e.g. `"life in Nazi Germany" hitler youth propaganda primary source`). Tavily and Firecrawl both honour quoted phrases; this alone removes the bulk of off-topic returns.
-- Stop emitting the most generic two-word query (`topicKw.slice(0,2).join(" ") primary source`) for Humanities — it's the one that surfaces the Paris Peace Conference. Replace it with a focused fallback: `"<topic title>" archive document`.
+2. `src/components/BuilderUploadCard.tsx` (new)
+   - Mirrors the upload form in `src/routes/papers.tsx` (Title, Subject, Level, Year, Paper number, Exam board, PDF input).
+   - Pre-fills Subject/Level from the builder's Step 1 selectors; lets the teacher override.
+   - On submit:
+     1. Upload PDF to `papers` bucket.
+     2. Insert `past_papers` row with `parse_status: "pending"`.
+     3. Invoke `parse-paper` edge function and **await** completion (poll `past_papers.parse_status` until `ready` or `failed`, with a 5-minute ceiling).
+     4. Call `analysePastPaper({ paperId, userId })` → returns new `assessment_id`.
+     5. `navigate({ to: "/assessment/$id", params: { id } })`.
+   - Surfaces parse warnings (e.g. "We could only read 14 of 18 questions — you can add the rest in the editor").
 
-Curated topic-anchor extraction lives in a small new helper `topicAnchors(topic, learningOutcomes)` in the same file: drops STOPWORDS, drops generic history vocabulary (`century`, `period`, `era`, `empire`, `government`, `treaty`, `agreement`, `world`, `war`, `policy` when used alone), preserves multi-word proper nouns from the topic title.
+3. `src/lib/analyse-past-paper.ts`
+   - Tiny tweak: when the paper title contains "draft" / "incomplete" or has zero parsed sub-parts, set `assessments.status = "draft"` (already the default) and append a note to `instructions` so the Coach knows this is a work-in-progress import. Otherwise unchanged.
 
-## What you'll see
+No DB migrations. No edge function changes. No new tables.
 
-- For *Life in Nazi Germany*: the source pool draws from museums (USHMM, IWM, DHM), Bundesarchiv, university course pages, BBC History, History Today, plus open-web educator sites like `alphahistory.com` — and stops returning Munich-Treaty / Paris-Peace-Conference excerpts because they fail the anchor-density gate.
-- For other humanities topics: same broadening of accepted publishers, plus fewer "weakly on-topic" excerpts in general.
-- Logs include the new gate reasons (`anchor-density-too-low`, `adjacent-topic-stronger=<x>`) so when you see a confusing pool you can read the edge logs and tell exactly why a candidate was kept or dropped.
+## Edge cases
 
-## Files to change
+- **Parse fails** → keep the `past_papers` row, toast the error, give the teacher a "Try again" button and a "Continue without analysis — start from scratch" fallback.
+- **Slow parse (>30s)** → keep the modal, show animated steps; the parse runs server-side regardless of whether the tab is open, and the user can also navigate to `/papers` and pick it up later (existing flow).
+- **No syllabus paper match** → assessment is still created; the TOS and Coach work off whatever AO/KO/LO tags `parse-paper` inferred. We surface a soft note: "Couldn't auto-link to a syllabus paper — pick one in the editor for tighter coverage."
+- **Marks total mismatch** → editor already lets teachers fix marks per question; coverage rollup recomputes automatically.
 
-- `supabase/functions/generate-assessment/sources.ts` — only file. Changes are scoped to: Humanities branch of `searchUrls` / `firecrawlSearch` / `tavilySearch` call sites, `relevanceMetrics` (replaced by `relevanceVerdict`), `buildQueryChain`, plus two new pure helpers (`topicAnchors`, `ADJACENT_TOPICS`).
+## Out of scope (call out, don't build)
 
-No DB changes, no UI changes, no new secrets. English allow-list and pictorial-image flow are untouched.
+- A first-class "draft import" type separate from `past_paper_analysis`. The existing type already drives the right Coach + TOS surfaces; renaming it can come later if teachers find the label confusing.
+- Re-OCR / re-parsing from inside the editor (already exists on `/papers`; we'll just link to it from the assessment header for imported papers).
