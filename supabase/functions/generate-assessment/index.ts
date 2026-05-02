@@ -1718,23 +1718,20 @@ Deno.serve(async (req) => {
         const CHUNK_SIZE = section.question_type === "mcq" ? 10 : 8;
         const totalQs = section.num_questions;
         const numChunks = Math.max(1, Math.ceil(totalQs / CHUNK_SIZE));
-        let chunkFailed = false;
 
-        for (let c = 0; c < numChunks; c++) {
+        // Run all chunks in PARALLEL — each chunk is an independent AI call,
+        // so awaiting them sequentially was the main reason large sections
+        // (e.g. 40 MCQs = 4 chunks × ~30s) blew past the 150s edge-function
+        // timeout. Parallelism collapses that to ~the slowest single chunk.
+        const chunkPromises = Array.from({ length: numChunks }, async (_unused, c) => {
           const startIdx = c * CHUNK_SIZE;
           const endIdx = Math.min(totalQs, startIdx + CHUNK_SIZE);
           const chunkQCount = endIdx - startIdx;
 
-          // Build a per-chunk shallow copy of the section with its slice of
-          // questions and the proportional marks for that slice.
           const chunkMarks = Math.max(
             chunkQCount,
             Math.round((section.marks * chunkQCount) / totalQs),
           );
-          // Narrow the chunk's topic_pool to the planned per-question topics
-          // so the AI prompt prescribes exactly which discipline and topic each
-          // slot must target. This is what makes the 50/50 Physics+Chemistry
-          // split survive into the Combined Science Paper 1 (MCQ) output.
           const plannedSlice: SectionTopic[] = [];
           for (let qi = startIdx; qi < endIdx; qi++) {
             const t = pickTopic(section, qi, si);
@@ -1761,7 +1758,7 @@ Deno.serve(async (req) => {
           if (numChunks > 1) {
             messages.push({
               role: "system",
-              content: `This section has ${totalQs} questions total; you are generating questions ${startIdx + 1}–${endIdx} (batch ${c + 1} of ${numChunks}). Generate EXACTLY ${chunkQCount} questions and do not duplicate topics already used in earlier batches.`,
+              content: `This section has ${totalQs} questions total; you are generating questions ${startIdx + 1}–${endIdx} (batch ${c + 1} of ${numChunks}). Generate EXACTLY ${chunkQCount} questions. Other batches are being generated in parallel — focus only on your assigned slot range.`,
             });
           }
           messages.push({
@@ -1780,25 +1777,32 @@ Deno.serve(async (req) => {
           const ai = await callAI(messages);
           if (!ai.ok) {
             console.error(`[generate] section ${section.letter} chunk ${c + 1}/${numChunks} AI error`, ai.status, (ai.errText ?? "").slice(0, 300));
-            chunkFailed = true;
-            break;
+            return { ok: false as const, c, qs: [] as any[] };
           }
           const toolCall = ai.json?.choices?.[0]?.message?.tool_calls?.[0];
           if (!toolCall) {
             console.error(`[generate] section ${section.letter} chunk ${c + 1}/${numChunks}: no tool call`, JSON.stringify(ai.json).slice(0, 300));
-            chunkFailed = true;
-            break;
+            return { ok: false as const, c, qs: [] as any[] };
           }
           let parsed: { questions?: any[] };
           try { parsed = JSON.parse(toolCall.function.arguments); }
           catch {
-            chunkFailed = true;
-            break;
+            return { ok: false as const, c, qs: [] as any[] };
           }
           const chunkQs = parsed.questions ?? [];
-          questions.push(...chunkQs);
-          console.log(`[generate] section ${section.letter} chunk ${c + 1}/${numChunks}: produced ${chunkQs.length} questions (cumulative ${questions.length}/${totalQs})`);
+          console.log(`[generate] section ${section.letter} chunk ${c + 1}/${numChunks}: produced ${chunkQs.length} questions`);
+          return { ok: true as const, c, qs: chunkQs };
+        });
+
+        const chunkResults = await Promise.all(chunkPromises);
+        // Re-stitch in chunk order so question slots line up with sourcesForSection.
+        chunkResults.sort((a, b) => a.c - b.c);
+        let chunkFailed = false;
+        for (const r of chunkResults) {
+          if (!r.ok) chunkFailed = true;
+          questions.push(...r.qs);
         }
+        console.log(`[generate] section ${section.letter}: parallel chunks done — ${questions.length}/${totalQs} questions`);
 
         if (chunkFailed && questions.length === 0) {
           sectionFailures++;
