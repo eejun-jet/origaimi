@@ -506,7 +506,7 @@ function EditorPage() {
           question_type: q.question_type,
           marks: q.marks,
           stem: q.stem,
-          options: q.options,
+          options: normalizeOptions(q.options),
           answer: q.answer,
           mark_scheme: q.mark_scheme,
           source: "ai",
@@ -1848,7 +1848,7 @@ function computeCoverage(
           : Array.from(new Set((sec.topic_pool ?? []).flatMap((t) => t.learning_outcomes ?? []))))
       : [];
     const ex = expandQuestionTags(
-      { stem: q.stem, answer: q.answer, mark_scheme: q.mark_scheme, topic: q.topic, options: q.options ?? null },
+      { stem: q.stem, answer: q.answer, mark_scheme: q.mark_scheme, topic: q.topic, options: normalizeOptions(q.options) },
       { ao_codes: q.ao_codes ?? [], knowledge_outcomes: q.knowledge_outcomes ?? [], learning_outcomes: q.learning_outcomes ?? [] },
       { loPool: poolLOs, koPool: poolKOs, aoPool: poolAOs },
       inferKind,
