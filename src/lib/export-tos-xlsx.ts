@@ -96,7 +96,12 @@ function buildSummarySheet(meta: TosAssessmentMeta, coverage: TosCoverage, secti
     ["Generated", today],
   ];
   if (meta.assessment_type === "past_paper_analysis") {
-    aoa.push(["Note", "Imported from past paper — targets inferred from parsed tags."]);
+    aoa.push([
+      "Note",
+      meta.ao_targets_confirmed
+        ? "Imported from past paper — AO targets confirmed by teacher."
+        : "Imported from past paper — AO targets inferred from syllabus weightings; KO/LO targets reflect parsed tags. Confirm AO targets in the Coverage panel for a sharper Δ.",
+    ]);
   }
   aoa.push([]);
   aoa.push(["Section breakdown"]);
