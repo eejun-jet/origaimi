@@ -3030,7 +3030,7 @@ function CoveragePanel({
           <div className="mt-3 space-y-1.5">
             {koLoGroups.map((g) => {
               const meta = STATUS_META[g.status];
-              const koRemarks = g.name === "Unassigned" ? 0 : remarkCount("ko", g.name);
+              const koRemarks = g.name.startsWith("Unmapped") ? 0 : remarkCount("ko", g.name);
               return (
                 <Collapsible key={g.name}>
                   <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-md border border-border bg-card px-2 py-1.5 text-left transition hover:bg-muted/50">
@@ -3047,32 +3047,40 @@ function CoveragePanel({
                     </span>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
-                    <ul className="mt-1 space-y-0.5 border-l border-border pl-2 ml-1.5">
-                      {g.los.length === 0 ? (
-                        <li className="px-2 py-1 text-[11px] italic text-muted-foreground">
-                          No Learning Outcomes mapped under this KO.
-                        </li>
-                      ) : (
-                        g.los.map((lo) => {
-                          const count = remarkCount("lo", lo.text);
-                          return (
-                            <li key={lo.text}>
-                              <button
-                                type="button"
-                                onClick={() => setTarget({ kind: "lo", text: lo.text, covered: lo.covered, actual: lo.actual, target: 0 })}
-                                className={`flex w-full items-start gap-1.5 rounded px-2 py-1 text-left text-[11px] leading-snug transition hover:bg-muted/50 ${
-                                  lo.covered ? "text-foreground" : "text-destructive"
-                                }`}
-                              >
-                                <span className="mt-0.5">{lo.covered ? "✓" : "○"}</span>
-                                <span className="flex-1">{lo.text}</span>
-                                {count > 0 && <RemarkPill count={count} />}
-                              </button>
-                            </li>
-                          );
-                        })
-                      )}
-                    </ul>
+                    <div className="mt-1 ml-1.5 space-y-1.5 border-l border-border pl-2">
+                      {g.contents.map((c) => (
+                        <div key={c.name}>
+                          <p className="px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            {c.name}
+                          </p>
+                          <ul className="space-y-0.5">
+                            {c.los.map((lo) => {
+                              const count = remarkCount("lo", lo.text);
+                              return (
+                                <li key={lo.text}>
+                                  <button
+                                    type="button"
+                                    onClick={() => setTarget({ kind: "lo", text: lo.text, covered: lo.covered, actual: lo.actual, target: 0 })}
+                                    className={`flex w-full items-start gap-1.5 rounded px-2 py-1 text-left text-[11px] leading-snug transition hover:bg-muted/50 ${
+                                      lo.covered ? "text-foreground" : "text-destructive"
+                                    }`}
+                                  >
+                                    <span className="mt-0.5">{lo.covered ? "✓" : "○"}</span>
+                                    {lo.code && (
+                                      <span className="mt-0.5 shrink-0 rounded bg-muted px-1 font-mono text-[9px] text-muted-foreground">
+                                        {lo.code}
+                                      </span>
+                                    )}
+                                    <span className="flex-1">{lo.text}</span>
+                                    {count > 0 && <RemarkPill count={count} />}
+                                  </button>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
                   </CollapsibleContent>
                 </Collapsible>
               );
