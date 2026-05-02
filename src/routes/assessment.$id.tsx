@@ -115,6 +115,8 @@ function EditorPage() {
   const [comments, setComments] = useState<AssessmentComment[]>([]);
   const [identity, setIdentity] = useReviewerIdentity();
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
+  const isMobile = useIsMobile();
   const [sidebarTab, setSidebarTab] = useState<"coverage" | "comments">("coverage");
   const [retagBusy, setRetagBusy] = useState(false);
 
