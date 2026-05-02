@@ -86,6 +86,7 @@ function NewAssessment() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
+  const [startMode, setStartMode] = useState<"scratch" | "upload">("scratch");
   const [busy, setBusy] = useState(false);
 
   // Step 1 / basics — auto-filled when a syllabus paper is selected
