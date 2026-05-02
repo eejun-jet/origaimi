@@ -1,76 +1,36 @@
-# Mobile-optimise the assessment editor
+## Goal
 
-Four targeted polish passes on the screens teachers actually open on a phone. Everything stays responsive on desktop — the changes only kick in below `md` (768 px) or `sm` (640 px) where stated. No new dependencies; uses the shadcn `Sheet`, `DropdownMenu`, and existing `useIsMobile()` hook already in the codebase.
+In the Assessment Coach sidebar, the **LO Coverage** card currently renders every Learning Outcome as one long flat list. On real papers this becomes 30–60 lines of fine print and feels daunting.
 
-## 1. Editor sidebar → mobile bottom sheet
+Switch the default to a **KO-grouped view**: one row per Knowledge Outcome showing `covered / total` LOs and a status pill, with the underlying LOs hidden inside a collapsible that the teacher can expand (click / double-tap) when they want the detail.
 
-**File:** `src/routes/assessment.$id.tsx`
+## What changes
 
-The right rail (Coverage tab + Comments tab + BlueprintTargetsCard + CoachPanel + Total marks) currently stacks below the question list on mobile, forcing a long scroll. Replace with:
+In `src/routes/assessment.$id.tsx`, inside the **LO Coverage** `CollapsibleCard` (around line 2887–2990):
 
-- On `md+` (≥768 px): keep the existing 2-column sticky aside as-is.
-- On `<md`: hide the aside (`hidden md:block` on the existing `<aside>`), and render a **sticky bottom action bar** pinned above the safe area:
+1. **Default rendering** — when `paper.los.length > 0` and we're NOT in the science `loView === "topic" | "map"` branch, replace the current flat `<ul>` (lines 2968–2989) with a list of KO rows built from the existing `koLoGroups` memo (already defined at line 2667 — no new computation needed).
 
-  ```text
-  ┌──────────────────────────────────────────────┐
-  │  ▣ Coverage   💬 Comments (2)   ✦ Coach      │
-  └──────────────────────────────────────────────┘
-  ```
+2. **Each KO row** is a shadcn `Collapsible`:
+   - **Trigger (always visible):** KO name · `coveredLOs / totalLOs` LOs · status pill (reuse `STATUS_META` colors already used in the Coverage Explorer) · chevron that rotates on open · remark pill if any coverage comment is attached to the KO.
+   - **Content (expanded):** the same per-LO buttons that exist today (`✓` / `○`, click → `setTarget({ kind: "lo", ... })`, remark pill), just nested under the KO.
 
-  Each button opens a `Sheet` (`side="bottom"`) with `max-h-[85vh] overflow-y-auto`. Inside the sheet we render the same `<CoveragePanel>` / `<CommentDock>` / `<CoachPanel>` components — no duplication of state or props.
+3. **Sort** KOs by status (uncovered → partial → covered) then alphabetically — `koLoGroups` already does this.
 
-- The unread comment count + "AOs on target" summary surface as small badges on the bar buttons so teachers see status without opening anything.
-- The bar uses `pb-[env(safe-area-inset-bottom)]` and a translucent `bg-background/95 backdrop-blur` border-top for an iOS-feeling chrome.
+4. **Card description / summary** stay as-is (`X / Y learning outcomes covered`) so the headline metric is unchanged.
 
-## 2. Header actions → overflow menu on mobile
+5. **Science papers**: keep the existing `By topic` / `Map` / `Flat list` toggle untouched. The new KO-grouped layout becomes the default for the **Flat list** mode (or we rename that tab to **By KO** since it's no longer flat — minor copy change).
 
-**File:** `src/routes/assessment.$id.tsx` (lines ~603–763)
+6. **Rename the toggle option**: `Flat list` → `By KO` for clarity. Non-science subjects don't see the toggle, they just get the KO-grouped view.
 
-The header row currently shows: Download .docx, Download TOS ▾, Invite reviewer, Status select. On phones these wrap to two ragged rows.
+## UX detail
 
-- On `sm+`: keep the current inline layout.
-- On `<sm`: collapse Download .docx, TOS Excel, TOS Word, and Invite reviewer into a single "Actions ⋯" `DropdownMenu`. The Status select stays inline (it's the most-used control and reads cleanly at narrow widths).
-
-The TOS Excel/Word options become first-level items in the same dropdown rather than a nested submenu — flatter is better on touch.
-
-## 3. Stack Coverage rows + BlueprintTargetsCard under 480 px
-
-**Files:** `src/components/BlueprintTargetsCard.tsx`, `src/routes/assessment.$id.tsx` (CoveragePanel meter rows)
-
-`BlueprintTargetsCard` uses `grid-cols-[3rem,1fr,5rem,4rem]` which gets cramped under ~360 px (the % input shrinks below readability and "≈ X m" overflows). Change to:
-
-- Mobile: `grid-cols-[3rem,minmax(0,1fr),auto]` with the AO title spanning two columns on row 1 and the input + marks-hint sharing row 2.
-- `sm+`: original 4-column layout.
-- Bump the input from `h-7` to `h-8` so it meets the 32 px touch-target minimum.
-
-For the `MeterRow` component used inside `CoveragePanel`'s AO/KO/LO cards, ensure long titles wrap (`break-words`) and the actual/target numbers stay right-aligned in their own row on `<sm`.
-
-## 4. Question card actions → overflow menu on mobile
-
-**File:** `src/routes/assessment.$id.tsx` (`QuestionCard`, lines ~1576–1602)
-
-Five buttons in the action footer (Edit, Regenerate, Save to bank, Comment, Delete) wrap to two rows on phones. Change to:
-
-- On `sm+`: keep the current `flex flex-wrap gap-1` row.
-- On `<sm`: render only **Edit** and **Comment** (the two highest-frequency actions) inline, then a **"⋯ More"** `DropdownMenu` that holds Regenerate, Save to bank, and Delete. Delete keeps its destructive-red styling inside the menu.
-
-The header-area edit/regenerate buttons (lines 1318–1340) are already mobile-aware (`hidden sm:inline` on the labels) so they don't need changes.
-
-## Technical details
-
-- `useIsMobile()` from `src/hooks/use-mobile.tsx` already exists. Use it for #1 (the bottom bar needs to know whether to render). For #2, #3, #4 we use Tailwind responsive classes only — no JS branching, so SSR is clean.
-- The bottom sheet uses Radix's `Sheet` (`side="bottom"`); each instance owns its own `open` state via `useState`. State within the panels (active coverage card, comment scroll position) is preserved because we mount the panels lazily but keep them in the DOM once opened, using a `mounted` ref.
-- Touch targets: all primary buttons use `size="sm"` which is 32 px high — already meets the 32 px Apple/Material minimum. Icon-only buttons get `aria-label`s.
-- Z-index: bottom bar sits at `z-30` so it stays above question cards but below the existing selection bar (`z-20` is fine because they're never visible together — selection bar shows only when items are selected, and the bottom bar can shift up by `top-auto bottom-14` in that case).
-- No changes to backend, exporters, computeCoverage, or any data flow.
+- Default state: all KO rows **collapsed**. The teacher sees ~5–15 rows instead of 30–60 lines.
+- One click on a row toggles it. Multiple rows can be open at once (independent `Collapsible` instances, no accordion lock-in).
+- "Unassigned" KO bucket (orphan LOs already handled by `koLoGroups`) renders last, same expand behavior.
+- No layout change to the surrounding card, the `Refresh LO coverage analysis` button, or the `Expand` → Coverage Explorer button.
 
 ## Files touched
 
-- `src/routes/assessment.$id.tsx` — bottom bar + Sheets, header overflow menu, QuestionCard overflow menu (3 of 4 changes)
-- `src/components/BlueprintTargetsCard.tsx` — responsive grid
+- `src/routes/assessment.$id.tsx` — replace the flat LO list block (~lines 2968–2989) with the KO-grouped Collapsible list; rename one toggle label.
 
-## Out of scope
-
-- Builder (`/new`), Bank, Papers, Dashboard, and Auth pages — all already work fine on the current viewport per inspection. Happy to add a follow-up pass if you spot specific pain points there.
-- Sidebar primitive replacement — we don't need the shadcn `Sidebar` here; a `Sheet` is the right pattern for a context panel that's hidden by default on mobile only.
-- Drag-to-reorder questions on touch (the up/down chevrons already work on mobile).
+No new components, no new data plumbing, no schema changes — `koLoGroups`, `remarkCount`, `setTarget`, and `STATUS_META` are all already in scope in this component.
