@@ -97,7 +97,11 @@ Deno.serve(async (req) => {
       sbqDirective = `\n\nThis is a SOURCE-BASED QUESTION. The "answer" field MUST be a fully-written L4 candidate exemplar (continuous prose paragraphs, in the candidate's voice — NEVER "a strong answer would…" or "the candidate should…"). It must perform the L4 moves of the assigned skill: ${skillL4[skill]} Quote SHORT verbatim phrases from the source(s) named in the stem. Length: ~150–250 words for 5–6 mark parts, ~250–400 words for 7–8 mark parts.`;
     }
 
-    const user = `Rewrite the following question. Keep its question_type (${q.question_type}), topic (${q.topic}), Bloom's level (${q.bloom_level}), and marks (${q.marks}).
+    const invariantsLine = targetDifficulty
+      ? `Keep its question_type (${q.question_type}), topic (${q.topic}), and marks (${q.marks}). Bloom's level (was ${q.bloom_level}) MAY shift to match the target difficulty — do not force it to stay the same.`
+      : `Keep its question_type (${q.question_type}), topic (${q.topic}), Bloom's level (${q.bloom_level}), and marks (${q.marks}).`;
+
+    const user = `Rewrite the following question. ${invariantsLine}
 Original stem: ${q.stem}
 ${instruction ? `Teacher instruction: ${instruction}` : "Make it a fresh, equivalent alternative."}${difficultyDirective}${objectivesDirective}${sbqDirective}
 Return via the tool.`;
