@@ -619,7 +619,7 @@ function EditorPage() {
                       duration_minutes: assessment.duration_minutes,
                       total_marks: assessment.total_marks,
                       total_actual: totalActual,
-                      assessment_type: assessment.assessment_type,
+                      assessment_type: assessment.assessment_type ?? "scratch",
                       instructions: assessment.instructions ?? null,
                     },
                     coverage,
