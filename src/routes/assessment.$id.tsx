@@ -667,6 +667,7 @@ function EditorPage() {
                           total_actual: totalActual,
                           assessment_type: assessment.assessment_type ?? "scratch",
                           instructions: assessment.instructions ?? null,
+                          ao_targets_confirmed: aoTargetsConfirmed,
                         },
                         coverage,
                         sections: sectionedBlueprint.sections.map((s) => ({
@@ -713,6 +714,7 @@ function EditorPage() {
                           total_actual: totalActual,
                           assessment_type: assessment.assessment_type ?? "scratch",
                           instructions: assessment.instructions ?? null,
+                          ao_targets_confirmed: aoTargetsConfirmed,
                         },
                         coverage,
                         sections: sectionedBlueprint.sections.map((s) => ({
