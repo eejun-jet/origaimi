@@ -651,6 +651,7 @@ function EditorPage() {
               }}
             >
               <Download className="h-4 w-4" /> Download TOS
+            </Button>
             <Button variant="outline" size="sm" className="gap-1" onClick={() => setInviteOpen(true)}>
               <UserPlus className="h-4 w-4" /> Invite reviewer
             </Button>
