@@ -1976,6 +1976,28 @@ function normaliseDiscipline(s: string | null | undefined): string {
   return s.split(/[—–-]/).slice(-1)[0]?.trim() || s;
 }
 
+// Per-subject palette for colouring KO containers when an assessment spans
+// multiple disciplines (e.g. Combined Science = Physics + Chemistry + Biology).
+// Uses inline oklch so it works in light + dark without extra tokens.
+type DisciplineStyle = {
+  border: string;       // CSS color — solid accent border / left rail
+  tint: string;         // CSS color — soft background tint
+  chipBg: string;       // CSS color — chip background
+  chipFg: string;       // CSS color — chip foreground
+  dot: string;          // CSS color — small swatch dot
+};
+const DISCIPLINE_PALETTE: Record<string, DisciplineStyle> = {
+  Physics:    { border: "oklch(0.6 0.16 245)",  tint: "oklch(0.95 0.04 245 / 0.55)", chipBg: "oklch(0.92 0.06 245)", chipFg: "oklch(0.32 0.12 245)", dot: "oklch(0.55 0.18 245)" },
+  Chemistry:  { border: "oklch(0.62 0.16 145)", tint: "oklch(0.95 0.04 145 / 0.55)", chipBg: "oklch(0.92 0.07 145)", chipFg: "oklch(0.32 0.12 145)", dot: "oklch(0.55 0.16 145)" },
+  Biology:    { border: "oklch(0.62 0.18 30)",  tint: "oklch(0.95 0.05 30 / 0.55)",  chipBg: "oklch(0.92 0.08 30)",  chipFg: "oklch(0.36 0.14 30)",  dot: "oklch(0.6 0.18 30)" },
+  Practical:  { border: "oklch(0.6 0.16 295)",  tint: "oklch(0.95 0.04 295 / 0.55)", chipBg: "oklch(0.92 0.06 295)", chipFg: "oklch(0.32 0.14 295)", dot: "oklch(0.55 0.18 295)" },
+  General:    { border: "oklch(0.65 0.04 250)", tint: "oklch(0.95 0.01 250 / 0.55)", chipBg: "oklch(0.93 0.02 250)", chipFg: "oklch(0.32 0.04 250)", dot: "oklch(0.55 0.04 250)" },
+};
+function disciplineStyle(name: string | null | undefined): DisciplineStyle {
+  const norm = normaliseDiscipline(name);
+  return DISCIPLINE_PALETTE[norm] ?? DISCIPLINE_PALETTE.General;
+}
+
 function buildTopicsMap(
   paperLOs: Coverage["paper"]["los"],
   sections: Section[],
@@ -2319,10 +2341,14 @@ function TopicsByKOView({
             return a.topic.title.localeCompare(b.topic.title);
           });
         if (tiles.length === 0) return null;
+        const ds = disciplineStyle(disc.name);
         return (
           <div key={disc.name}>
-            <div className="mb-1.5 flex items-baseline justify-between">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{disc.name}</h4>
+            <div
+              className="mb-1.5 flex items-baseline justify-between rounded-md px-2 py-1"
+              style={{ background: ds.tint, borderLeft: `3px solid ${ds.border}` }}
+            >
+              <h4 className="text-xs font-semibold uppercase tracking-wider" style={{ color: ds.chipFg }}>{disc.name}</h4>
               <span className="text-[10px] tabular-nums text-muted-foreground">{disc.coveredLOs} / {disc.totalLOs} LOs</span>
             </div>
             <div className="space-y-1.5">
@@ -2332,7 +2358,10 @@ function TopicsByKOView({
                 const isOpen = openTopics.has(key);
                 return (
                   <Collapsible key={key} open={isOpen} onOpenChange={() => toggle(key)}>
-                    <div className={`rounded-lg border bg-card transition ${meta.ring} ${isOpen ? "shadow-sm" : ""}`}>
+                    <div
+                      className={`rounded-lg border bg-card transition ${meta.ring} ${isOpen ? "shadow-sm" : ""}`}
+                      style={{ borderLeftColor: ds.border, borderLeftWidth: 3 }}
+                    >
                       <CollapsibleTrigger className="group flex w-full items-center gap-2 p-2 text-left hover:bg-muted/30">
                         <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
                         <CoverageDonut covered={t.coveredLOs} total={t.totalLOs} />
@@ -2700,6 +2729,7 @@ function CoveragePanel({
     type ContentBucket = { name: string; los: LoEntry[] };
     type KoBucket = {
       name: string;
+      discipline: string;
       contents: ContentBucket[];
       los: LoEntry[]; // flattened, for status / counts
       coveredLOs: number;
@@ -2713,6 +2743,8 @@ function CoveragePanel({
     const loStat = new Map(paper.los.map((l) => [l.text, l] as const));
     // ko -> content -> LO key -> entry (preserves first-seen order)
     const ko = new Map<string, Map<string, Map<string, LoEntry>>>();
+    // Track first-seen discipline per KO so we can colour-code subjects.
+    const koDiscipline = new Map<string, string>();
     const seen = new Set<string>();
 
     const ensureKo = (name: string) => {
@@ -2735,6 +2767,9 @@ function CoveragePanel({
         const contentName = (t.sub_strand?.trim() || t.topic || "").trim() || koName;
         const codeStem = t.learning_outcome_code?.trim() ?? null;
         const bucket = ensureContent(koName, contentName);
+        if (!koDiscipline.has(koName)) {
+          koDiscipline.set(koName, normaliseDiscipline(t.section));
+        }
         los.forEach((loText, i) => {
           if (!loText || seen.has(loText)) return;
           seen.add(loText);
@@ -2788,6 +2823,7 @@ function CoveragePanel({
       const status: OverviewStatus = classifyTopic(flat);
       buckets.push({
         name: koName,
+        discipline: koDiscipline.get(koName) ?? "General",
         contents,
         los: flat,
         coveredLOs: covered,
@@ -2804,6 +2840,7 @@ function CoveragePanel({
       const covered = items.filter((l) => l.covered).length;
       buckets.push({
         name: "Unmapped LO metadata",
+        discipline: "General",
         contents: [{ name: "(no syllabus mapping)", los: items }],
         los: items,
         coveredLOs: covered,
@@ -3304,37 +3341,78 @@ function CoveragePanel({
                       <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-[1px] bg-warm" />3+×</span>
                     </span>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                    {visibleKOs.map((g) => {
-                      const meta = STATUS_META[g.status];
-                      return (
-                        <button
-                          key={g.name}
-                          type="button"
-                          onClick={() => { setExplorerMode("drilldown"); setExplorerKO(g.name); }}
-                          className={`group flex aspect-square flex-col justify-between rounded-lg border bg-card p-2.5 text-left transition hover:shadow-md hover:-translate-y-0.5 ${meta.ring}`}
-                          title={`${g.name} — ${meta.label}`}
-                        >
-                          <div className="flex items-start justify-between gap-1.5">
-                            <h4 className="line-clamp-3 flex-1 text-[11px] font-semibold leading-snug">{g.name}</h4>
-                            <CoverageDonut covered={g.coveredLOs} total={g.totalLOs} />
-                          </div>
-                          <div className="space-y-1.5">
-                            <DensityBar los={g.los} />
-                            <div className="flex items-center justify-between gap-1">
-                              <span className={`truncate rounded-full border px-1.5 py-0.5 text-[9px] font-medium ${meta.chip}`}>
-                                {meta.label}
-                              </span>
-                              <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
-                                {g.coveredLOs}/{g.totalLOs}
-                                {g.targetMarks ? <> · {g.actualMarks}/{g.targetMarks}m</> : g.actualMarks ? <> · {g.actualMarks}m</> : null}
-                              </span>
+                  {(() => {
+                    // Group tiles by discipline so subjects are visually
+                    // separated when an assessment spans multiple sciences.
+                    const byDisc = new Map<string, typeof visibleKOs>();
+                    for (const g of visibleKOs) {
+                      const d = g.discipline || "General";
+                      if (!byDisc.has(d)) byDisc.set(d, [] as typeof visibleKOs);
+                      byDisc.get(d)!.push(g);
+                    }
+                    const order = ["Physics", "Chemistry", "Biology", "Practical", "General"];
+                    const discNames = Array.from(byDisc.keys()).sort((a, b) => {
+                      const ai = order.indexOf(a); const bi = order.indexOf(b);
+                      if (ai === -1 && bi === -1) return a.localeCompare(b);
+                      if (ai === -1) return 1;
+                      if (bi === -1) return -1;
+                      return ai - bi;
+                    });
+                    const showHeaders = discNames.length > 1;
+                    return (
+                      <div className="space-y-4">
+                        {discNames.map((dname) => {
+                          const ds = disciplineStyle(dname);
+                          const tiles = byDisc.get(dname)!;
+                          return (
+                            <div key={dname}>
+                              {showHeaders && (
+                                <div className="mb-2 flex items-center gap-2 px-1">
+                                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: ds.dot }} />
+                                  <h4 className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: ds.chipFg }}>{dname}</h4>
+                                  <span className="text-[10px] tabular-nums text-muted-foreground">
+                                    {tiles.reduce((s, t) => s + t.coveredLOs, 0)} / {tiles.reduce((s, t) => s + t.totalLOs, 0)} LOs
+                                  </span>
+                                </div>
+                              )}
+                              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                                {tiles.map((g) => {
+                                  const meta = STATUS_META[g.status];
+                                  return (
+                                    <button
+                                      key={g.name}
+                                      type="button"
+                                      onClick={() => { setExplorerMode("drilldown"); setExplorerKO(g.name); }}
+                                      className={`group flex aspect-square flex-col justify-between rounded-lg border-2 p-2.5 text-left transition hover:shadow-md hover:-translate-y-0.5 ${meta.ring}`}
+                                      style={{ borderColor: ds.border, background: ds.tint }}
+                                      title={`${g.name} — ${dname} — ${meta.label}`}
+                                    >
+                                      <div className="flex items-start justify-between gap-1.5">
+                                        <h4 className="line-clamp-3 flex-1 text-[11px] font-semibold leading-snug">{g.name}</h4>
+                                        <CoverageDonut covered={g.coveredLOs} total={g.totalLOs} />
+                                      </div>
+                                      <div className="space-y-1.5">
+                                        <DensityBar los={g.los} />
+                                        <div className="flex items-center justify-between gap-1">
+                                          <span className={`truncate rounded-full border px-1.5 py-0.5 text-[9px] font-medium ${meta.chip}`}>
+                                            {meta.label}
+                                          </span>
+                                          <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+                                            {g.coveredLOs}/{g.totalLOs}
+                                            {g.targetMarks ? <> · {g.actualMarks}/{g.targetMarks}m</> : g.actualMarks ? <> · {g.actualMarks}m</> : null}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             </div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                 </>
               )}
             </div>
@@ -3351,17 +3429,28 @@ function CoveragePanel({
                   {visibleKOs.map((g) => {
                     const meta = STATUS_META[g.status];
                     const active = selectedKO?.name === g.name;
+                    const ds = disciplineStyle(g.discipline);
                     return (
                       <button
                         key={g.name}
                         type="button"
                         onClick={() => setExplorerKO(g.name)}
-                        className={`rounded-lg border bg-card p-3 text-left transition hover:shadow-sm ${
-                          active ? "border-primary ring-2 ring-primary/30" : "border-border"
+                        className={`rounded-lg border-2 p-3 text-left transition hover:shadow-sm ${
+                          active ? "ring-2 ring-primary/40" : ""
                         }`}
+                        style={{ borderColor: ds.border, background: ds.tint }}
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <h4 className="line-clamp-2 text-xs font-semibold leading-snug">{g.name}</h4>
+                          <div className="min-w-0 flex-1">
+                            <span
+                              className="mb-1 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide"
+                              style={{ background: ds.chipBg, color: ds.chipFg }}
+                            >
+                              <span className="h-1.5 w-1.5 rounded-full" style={{ background: ds.dot }} />
+                              {g.discipline}
+                            </span>
+                            <h4 className="line-clamp-2 text-xs font-semibold leading-snug">{g.name}</h4>
+                          </div>
                           <CoverageDonut covered={g.coveredLOs} total={g.totalLOs} />
                         </div>
                         <div className="mt-2 flex items-center justify-between gap-2">
@@ -3395,7 +3484,15 @@ function CoveragePanel({
                 </div>
               ) : (
                 <>
-                  <div className="border-b border-border px-5 py-3">
+                  {(() => { const ds = disciplineStyle(selectedKO.discipline); return (
+                  <div className="border-b border-border px-5 py-3" style={{ background: ds.tint, borderLeft: `4px solid ${ds.border}` }}>
+                    <span
+                      className="mb-1 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide"
+                      style={{ background: ds.chipBg, color: ds.chipFg }}
+                    >
+                      <span className="h-1.5 w-1.5 rounded-full" style={{ background: ds.dot }} />
+                      {selectedKO.discipline}
+                    </span>
                     <h4 className="font-paper text-sm font-semibold">{selectedKO.name}</h4>
                     <p className="mt-0.5 text-[11px] text-muted-foreground">
                       {selectedKO.coveredLOs} / {selectedKO.totalLOs} LOs covered · {selectedKO.actualMarks}{selectedKO.targetMarks ? ` / ${selectedKO.targetMarks}` : ""} marks
@@ -3404,6 +3501,7 @@ function CoveragePanel({
                       {STATUS_META[selectedKO.status].label}
                     </span>
                   </div>
+                  ); })()}
                   <div className="flex-1 overflow-y-auto px-3 py-2">
                     {selectedKO.los.length === 0 ? (
                       <p className="px-2 py-6 text-center text-xs text-muted-foreground">
