@@ -601,6 +601,56 @@ function EditorPage() {
             >
               <Download className="h-4 w-4" /> Download .docx
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1"
+              disabled={questions.length === 0}
+              title="Download Table of Specifications as Excel (subject, syllabus, AOs, KOs, LOs, per-section breakdown)"
+              onClick={() => {
+                try {
+                  exportTosXlsx({
+                    meta: {
+                      title: assessment.title,
+                      subject: assessment.subject,
+                      level: assessment.level,
+                      syllabus_code: assessment.syllabus_code ?? null,
+                      duration_minutes: assessment.duration_minutes,
+                      total_marks: assessment.total_marks,
+                      total_actual: totalActual,
+                      assessment_type: assessment.assessment_type,
+                      instructions: assessment.instructions ?? null,
+                    },
+                    coverage,
+                    sections: sectionedBlueprint.sections.map((s) => ({
+                      id: s.id,
+                      letter: s.letter,
+                      name: s.name ?? null,
+                      question_type: s.question_type,
+                      num_questions: s.num_questions,
+                      marks: s.marks,
+                    })),
+                    questions: questions.map((q) => ({
+                      position: q.position,
+                      question_type: q.question_type,
+                      topic: q.topic,
+                      bloom_level: q.bloom_level,
+                      difficulty: q.difficulty,
+                      marks: q.marks,
+                      stem: q.stem,
+                      ao_codes: q.ao_codes ?? [],
+                      knowledge_outcomes: q.knowledge_outcomes ?? [],
+                      learning_outcomes: q.learning_outcomes ?? [],
+                    })),
+                  });
+                  toast.success("Downloaded TOS .xlsx");
+                } catch (e) {
+                  toast.error("TOS export failed");
+                  console.error(e);
+                }
+              }}
+            >
+              <Download className="h-4 w-4" /> Download TOS
             <Button variant="outline" size="sm" className="gap-1" onClick={() => setInviteOpen(true)}>
               <UserPlus className="h-4 w-4" /> Invite reviewer
             </Button>
