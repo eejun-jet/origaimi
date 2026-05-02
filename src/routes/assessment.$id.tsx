@@ -1684,6 +1684,13 @@ function QuestionCard({
             </Button>
             <Button size="sm" variant="ghost" onClick={() => setShowRegen(false)}>Cancel</Button>
           </div>
+          {regenDifficulty !== "keep" && (
+            <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
+              {regenDifficulty === "easy" && "Easy: single reasoning step, familiar context, plainly-wrong distractors. Bloom's level may drop."}
+              {regenDifficulty === "medium" && "Medium: 2 reasoning steps or one transfer step, one misconception distractor, light qualifier in the stem."}
+              {regenDifficulty === "hard" && "Hard: ≥3 reasoning steps or unfamiliar context, every distractor a named misconception, candidate must select the principle. Bloom's level may rise."}
+            </p>
+          )}
         </div>
       )}
 

@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.0";
+import { buildRegenerateDifficultyDirective } from "../_shared/difficulty.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -61,7 +62,7 @@ Deno.serve(async (req) => {
 
     const sys = `You are an expert Singapore MOE assessment writer for ${a?.level} ${a?.subject}. Use British spelling, SI units, Singapore contexts. Match MOE phrasing.`;
     const difficultyDirective = targetDifficulty
-      ? `\nTarget difficulty: ${targetDifficulty}. Calibrate stem complexity, distractor closeness, and required reasoning steps to match a typical MOE ${targetDifficulty} item. The returned difficulty MUST be exactly "${targetDifficulty}".`
+      ? buildRegenerateDifficultyDirective(targetDifficulty, q.difficulty ?? null, q.question_type)
       : "";
 
     const objectivesBlock: string[] = [];
@@ -96,7 +97,11 @@ Deno.serve(async (req) => {
       sbqDirective = `\n\nThis is a SOURCE-BASED QUESTION. The "answer" field MUST be a fully-written L4 candidate exemplar (continuous prose paragraphs, in the candidate's voice — NEVER "a strong answer would…" or "the candidate should…"). It must perform the L4 moves of the assigned skill: ${skillL4[skill]} Quote SHORT verbatim phrases from the source(s) named in the stem. Length: ~150–250 words for 5–6 mark parts, ~250–400 words for 7–8 mark parts.`;
     }
 
-    const user = `Rewrite the following question. Keep its question_type (${q.question_type}), topic (${q.topic}), Bloom's level (${q.bloom_level}), and marks (${q.marks}).
+    const invariantsLine = targetDifficulty
+      ? `Keep its question_type (${q.question_type}), topic (${q.topic}), and marks (${q.marks}). Bloom's level (was ${q.bloom_level}) MAY shift to match the target difficulty — do not force it to stay the same.`
+      : `Keep its question_type (${q.question_type}), topic (${q.topic}), Bloom's level (${q.bloom_level}), and marks (${q.marks}).`;
+
+    const user = `Rewrite the following question. ${invariantsLine}
 Original stem: ${q.stem}
 ${instruction ? `Teacher instruction: ${instruction}` : "Make it a fresh, equivalent alternative."}${difficultyDirective}${objectivesDirective}${sbqDirective}
 Return via the tool.`;
@@ -106,7 +111,7 @@ Return via the tool.`;
       method: "POST",
       headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: targetDifficulty ? "google/gemini-2.5-pro" : "google/gemini-2.5-flash",
         messages: [{ role: "system", content: sys }, { role: "user", content: user }],
         tools: [TOOL],
         tool_choice: { type: "function", function: { name: "rewrite_question" } },
