@@ -80,6 +80,7 @@ export type PaperTopic = {
   strand: string | null;
   subStrand: string | null;
   learningOutcomes: string[];
+  learningOutcomeCode: string | null;
   suggestedBlooms: string[];
   outcomeCategories: string[];
   aoCodes: string[];
@@ -98,7 +99,7 @@ export async function loadPaperTopics(paperId: string): Promise<PaperTopic[]> {
   if (linkedIds.length > 0) {
     const { data, error } = await supabase
       .from("syllabus_topics")
-      .select("id, topic_code, parent_code, title, depth, position, strand, sub_strand, learning_outcomes, suggested_blooms, outcome_categories, ao_codes, section")
+      .select("id, topic_code, parent_code, title, depth, position, strand, sub_strand, learning_outcomes, learning_outcome_code, suggested_blooms, outcome_categories, ao_codes, section")
       .in("id", linkedIds)
       .order("position", { ascending: true });
     if (error) throw error;
@@ -107,7 +108,7 @@ export async function loadPaperTopics(paperId: string): Promise<PaperTopic[]> {
   // Fallback: legacy single-paper ownership.
   const { data, error } = await supabase
     .from("syllabus_topics")
-    .select("id, topic_code, parent_code, title, depth, position, strand, sub_strand, learning_outcomes, suggested_blooms, outcome_categories, ao_codes, section")
+    .select("id, topic_code, parent_code, title, depth, position, strand, sub_strand, learning_outcomes, learning_outcome_code, suggested_blooms, outcome_categories, ao_codes, section")
     .eq("paper_id", paperId)
     .order("position", { ascending: true });
   if (error) throw error;
@@ -124,7 +125,7 @@ export async function loadPaperTopics(paperId: string): Promise<PaperTopic[]> {
 export async function loadDocTopics(docId: string): Promise<PaperTopic[]> {
   const { data, error } = await supabase
     .from("syllabus_topics")
-    .select("id, topic_code, parent_code, title, depth, position, strand, sub_strand, learning_outcomes, suggested_blooms, outcome_categories, ao_codes, section")
+    .select("id, topic_code, parent_code, title, depth, position, strand, sub_strand, learning_outcomes, learning_outcome_code, suggested_blooms, outcome_categories, ao_codes, section")
     .eq("source_doc_id", docId)
     .order("position", { ascending: true });
   if (error) throw error;
@@ -141,6 +142,7 @@ function mapTopicRow(t: {
   strand: string | null;
   sub_strand: string | null;
   learning_outcomes: string[] | null;
+  learning_outcome_code?: string | null;
   suggested_blooms: string[] | null;
   outcome_categories: string[] | null;
   ao_codes: string[] | null;
@@ -156,6 +158,7 @@ function mapTopicRow(t: {
     strand: t.strand,
     subStrand: t.sub_strand,
     learningOutcomes: t.learning_outcomes ?? [],
+    learningOutcomeCode: t.learning_outcome_code ?? null,
     suggestedBlooms: t.suggested_blooms ?? [],
     outcomeCategories: (t.outcome_categories ?? []) as string[],
     aoCodes: (t.ao_codes ?? []) as string[],

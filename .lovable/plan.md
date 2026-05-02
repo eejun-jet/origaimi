@@ -1,56 +1,210 @@
-## Diagnosis
+## Correction
 
-You're right — easy / medium / hard regenerations look almost identical. Three concrete reasons in the code:
+You’re right. The spreadsheet already contains the hierarchy:
 
-1. **Regeneration prompt anchors are too strong against difficulty.**
-   `supabase/functions/regenerate-question/index.ts:99` tells the model: *"Keep its question_type, topic, **Bloom's level**, and marks."* Bloom's level (Remember / Apply / Analyse / Evaluate…) is the single biggest driver of cognitive demand. Locking it down means the rewrite stays at the same demand regardless of `easy / medium / hard`.
+```text
+LO Code | KO (Knowledge Outcome) - topic | Content | Learning Outcome (LO)
+1.1.1   | Experimental Chemistry         | Experimental Design | name appropriate apparatus...
+1.1.2   | Experimental Chemistry         | Experimental Design | suggest suitable apparatus...
+2.2.1   | Particulate Nature             | Atomic Structure    | state the relative charges...
+```
 
-2. **The difficulty directive is one short, generic line.**
-   `regenerate-question/index.ts:64` and `generate-assessment/index.ts:1036` both say variants of *"Calibrate stem complexity, distractor closeness, and required reasoning steps to match a typical MOE {level} item."* The model has no concrete rubric for what *easy* vs *hard* means — number of inference steps, vocabulary, novelty of context, distractor traps, scaffolding, data-extraction load, etc. Without anchors, the LLM defaults to a near-identical draft and just flips the `difficulty` field.
+So the Coverage view should not infer KO→LO from question tags, and it should not use the generic science skill buckets (`Knowledge`, `Understanding`, `Application`, `Skills`) as the KO containers for LO coverage.
 
-3. **`difficulty` is never compared against reality.**
-   The model can return whatever it wants in the field; we don't audit whether the rewritten stem actually got harder/easier. So a hard-tagged question that "feels easy" passes through untouched.
+The correct structure is:
+
+```text
+KO / Topic container
+  Content sub-container
+    LO code — LO statement — covered / not covered
+```
+
+Questions should only determine whether a coded LO is covered. They should not decide which KO the LO belongs to.
 
 ## Plan
 
-Make difficulty a real lever, not a label. Two surgical changes — no schema work, no UI churn.
+### 1. Preserve LO codes in the assessment blueprint
 
-### 1. Add a concrete difficulty rubric (shared)
+Currently the app’s `SectionTopic` shape only stores LO text:
 
-New file `supabase/functions/_shared/difficulty.ts` exporting:
+```ts
+learning_outcomes?: string[]
+outcome_categories?: string[]
+```
 
-- `DIFFICULTY_RUBRIC` — a paragraph per level with **observable, calibratable criteria** for Singapore MOE papers, e.g.:
-  - **easy:** single-step recall or direct application; familiar SG-textbook context; one piece of given data; MCQ distractors are clearly wrong on inspection; no multi-clause stems; vocabulary at level baseline.
-  - **medium:** 2-step reasoning OR one transfer step into a familiar variant context; one extracted datum + one inference; MCQ distractors include one "almost right" trap from a common misconception; stem may have one qualifying clause.
-  - **hard:** ≥3 reasoning steps OR transfer into an **unfamiliar context** OR multi-source synthesis; quantitative items require a non-obvious rearrangement / unit conversion / sig-fig discipline; MCQ distractors all encode named misconceptions; stem includes constraint(s) the candidate must notice; for SBQ, demands explicit weighing across provenance + content.
-- `buildDifficultyDirective(target, subject, level)` — returns the full directive block to splice into prompts (uses the rubric above plus a checklist of "DO" / "DO NOT" lines so the model has explicit scaffolding to remove or add).
+That loses the unique LO code when building coverage.
 
-### 2. Rewire `regenerate-question`
+I will extend the client-side blueprint topic shape to carry coded LO metadata alongside the current text array, for example:
 
-`supabase/functions/regenerate-question/index.ts`:
+```ts
+learning_outcome_items?: Array<{
+  code: string
+  text: string
+  ko: string
+  content: string
+}>
+```
 
-- **Remove "Bloom's level" from the locked invariants** when `targetDifficulty` is supplied. New copy: *"Keep its question_type, topic, and marks. **Bloom's level may shift to match the target difficulty.**"* When no difficulty is supplied, behaviour is unchanged.
-- **Replace** the one-line `difficultyDirective` with `buildDifficultyDirective(...)` — full rubric for the target level only, plus an explicit *"compared to the original stem, you MUST [add/remove] N of the following: …"* checklist so the rewrite is observably different.
-- Keep the `difficulty: targetDifficulty ?? updated.difficulty` write-back as-is.
+This keeps backward compatibility: older assessments still use `learning_outcomes`, while newly loaded syllabus data can retain the coded mapping.
 
-### 3. Rewire `generate-assessment` per-question targets
+### 2. Load the coded mapping from the syllabus dataset
 
-`supabase/functions/generate-assessment/index.ts` `difficultyBlock` (~line 1031):
-- Replace the single calibration sentence with the same shared rubric, listed once at the top of the block, then the per-slot list. This makes per-question difficulty real instead of cosmetic.
+The uploaded dataset structure maps:
 
-### 4. Light client polish (optional, small)
+- `LO Code` → unique LO identifier
+- `KO (Knowledge Outcome) - topic` → parent KO/topic container
+- `Content` → sub-topic/content group
+- `Learning Outcome (LO)` → LO statement
 
-`src/routes/assessment.$id.tsx:1665` — under "Target difficulty", show a one-line tooltip/help text summarising the rubric so teachers know what they're asking for. Pure copy, no logic.
+I will update the syllabus topic mapping flow so these coded rows are carried into the assessment builder and saved inside `assessment.blueprint` when teachers select LOs.
 
-## Files touched
+For existing database rows, the best available mapping is already in `syllabus_topics`:
 
-- **new** `supabase/functions/_shared/difficulty.ts`
-- `supabase/functions/regenerate-question/index.ts` (prompt edits only)
-- `supabase/functions/generate-assessment/index.ts` (replace `difficultyBlock` body)
-- `src/routes/assessment.$id.tsx` (one help line — optional)
+- `topic_code` / `learning_outcome_code`
+- `title`
+- `strand` / `sub_strand`
+- `learning_outcomes`
 
-## Why this will actually move the needle
+I will use those fields to reconstruct the hierarchy as:
 
-The current prompt asks the model to keep Bloom + topic + marks fixed and then *whisper* "make it hard". The proposed prompt frees Bloom to move with difficulty, gives the model an explicit rubric of what hard *looks like* in MOE terms, and forces a comparative checklist against the original. That's the change that makes a regenerated "hard" item visibly harder rather than a cosmetic relabel.
+```text
+KO = strand, or title fallback
+Content = sub_strand, or title fallback
+LO code = learning_outcome_code, or topic_code fallback
+LO text = learning_outcomes item
+```
 
-No DB migration. No UI redesign. ~120 lines of edge-function changes.
+### 3. Rework the Coverage panel hierarchy
+
+In `src/routes/assessment.$id.tsx`, replace the current `koLoGroups` logic.
+
+Current incorrect behaviour:
+
+```text
+For each question:
+  take q.knowledge_outcomes
+  take q.learning_outcomes
+  put every LO under every KO found on the same question
+```
+
+New behaviour:
+
+```text
+For each selected syllabus LO item in the blueprint:
+  place LO under its stored KO/topic and content group
+  look up whether that LO is covered by question tags
+```
+
+The UI will become:
+
+```text
+Experimental Chemistry              2 / 6 LOs covered
+  Experimental Design
+    ✓ 1.1.1 name appropriate apparatus...
+    ○ 1.1.2 suggest suitable apparatus...
+  Methods of Purification and Analysis
+    ✓ 1.2.1 describe methods of separation...
+    ○ 1.2.2 suggest suitable separation...
+
+Particulate Nature                  1 / 7 LOs covered
+  Kinetic Particle Theory
+    ✓ 2.1.1 describe solid, liquid and gaseous states...
+  Atomic Structure
+    ○ 2.2.1 state relative charges...
+```
+
+### 4. Stop presenting KO and LO coverage as separate concepts
+
+I will remove or merge the separate flat `KO Coverage` card from the sidebar.
+
+Instead, the sidebar will show one card:
+
+**Knowledge / Learning Outcome Coverage**
+
+Description:
+
+> Learning Outcomes are grouped under their parent syllabus KO/topic. Coverage is counted at LO level.
+
+Each KO/topic header will show:
+
+- number of covered coded LOs
+- total coded LOs selected for the assessment
+- marks tagged to that KO/topic where available
+
+The individual LO rows will show:
+
+- LO code
+- LO statement
+- covered / uncovered status
+- question count evidence
+- existing comment/remark pill support
+
+### 5. Update the full Coverage Explorer
+
+The expanded Coverage Explorer will use the same hierarchy:
+
+```text
+KO/topic overview tile → content groups → coded LOs
+```
+
+No more `Unassigned` bucket unless the LO truly lacks a stored KO/code mapping. If that happens, it will be labelled clearly as a data issue:
+
+```text
+Unmapped LO metadata
+```
+
+not as a normal KO.
+
+### 6. Update per-section breakdown
+
+The per-section breakdown will also stop listing KOs and LOs separately. It will render the same nested structure for that section:
+
+```text
+Section A
+  Experimental Chemistry
+    Experimental Design
+      1.1.1 ...
+```
+
+### 7. Keep AI tagging separate from hierarchy
+
+The retagging function can still decide which LO statements a generated question covers, but it should only return LO identifiers/statements from the allowed list. The hierarchy itself comes from the stored syllabus dataset, not from AI.
+
+If needed, I will adjust the retag prompt/output display later so evidence can match by LO code first, then text fallback.
+
+## Files to change
+
+- `src/lib/sections.ts`
+  - add optional coded LO metadata to `SectionTopic`
+  - preserve it during legacy/sectioned blueprint handling
+
+- `src/lib/syllabus-data.ts`
+  - expose LO code / KO / content fields from existing syllabus rows where available
+
+- `src/routes/new.tsx`
+  - carry coded LO metadata into selected blueprint sections
+
+- `src/routes/assessment.$id.tsx`
+  - rebuild coverage hierarchy from coded LO metadata
+  - merge KO/LO coverage into one nested view
+  - update Coverage Explorer and per-section breakdown
+
+Optional, only if the current database rows do not yet contain the uploaded coded mapping:
+
+- add/import the Chemistry dataset rows into the syllabus tables so each LO code is preserved in `learning_outcome_code` / `topic_code` and each row’s KO/content fields are available.
+
+## Expected result
+
+Coverage will read the way your syllabus is structured:
+
+```text
+KO/topic → Content → LO code → LO statement
+```
+
+not:
+
+```text
+KO tags and LO tags as separate unrelated coverage lists
+```
+
+The AI can affect whether an LO is marked covered, but it cannot re-parent, duplicate, or invent the KO/LO hierarchy.

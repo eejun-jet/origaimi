@@ -2669,58 +2669,146 @@ function CoveragePanel({
   const [explorerFilter, setExplorerFilter] = useState<"all" | OverviewStatus>("all");
   const [explorerMode, setExplorerMode] = useState<"overview" | "drilldown">("overview");
 
-  // Build KO → list of LOs (with per-LO covered/actual) using questions as the
-  // source of truth. Falls back to an "Unassigned" bucket for orphan LOs.
+  // Build the KO → Content → LO hierarchy directly from the SYLLABUS topic
+  // pool stored on each section. This mirrors the dataset structure
+  //
+  //   LO Code | KO (strand)              | Content (sub-strand) | LO statement
+  //   1.1.1   | Experimental Chemistry   | Experimental Design  | name appropriate apparatus...
+  //
+  // Crucially, the hierarchy never comes from question tags — questions only
+  // determine whether a coded LO is COVERED. This stops the old behaviour
+  // where every LO on a multi-LO question got duplicated under every KO on
+  // that question, and it stops the generic "Knowledge / Understanding /
+  // Application / Skills" buckets being mistaken for the KO containers.
   const koLoGroups = useMemo(() => {
+    type LoEntry = { code: string | null; text: string; covered: boolean; actual: number };
+    type ContentBucket = { name: string; los: LoEntry[] };
+    type KoBucket = {
+      name: string;
+      contents: ContentBucket[];
+      los: LoEntry[]; // flattened, for status / counts
+      coveredLOs: number;
+      totalLOs: number;
+      actualMarks: number;
+      targetMarks: number;
+      status: OverviewStatus;
+      hasCodes: boolean;
+    };
+
     const loStat = new Map(paper.los.map((l) => [l.text, l] as const));
-    const koMap = new Map<string, Map<string, { covered: boolean; actual: number }>>();
-    // Seed with all KOs (even if no questions tagged yet)
-    for (const k of paper.kos) koMap.set(k.name, new Map());
-    for (const q of questions) {
-      const kos = q.knowledge_outcomes ?? [];
-      const los = q.learning_outcomes ?? [];
-      for (const ko of kos) {
-        if (!koMap.has(ko)) koMap.set(ko, new Map());
-        const bucket = koMap.get(ko)!;
-        for (const lo of los) {
-          const stat = loStat.get(lo);
-          if (!stat) continue;
-          if (!bucket.has(lo)) bucket.set(lo, { covered: stat.covered, actual: stat.actual });
-        }
+    // ko -> content -> LO key -> entry (preserves first-seen order)
+    const ko = new Map<string, Map<string, Map<string, LoEntry>>>();
+    const seen = new Set<string>();
+
+    const ensureKo = (name: string) => {
+      if (!ko.has(name)) ko.set(name, new Map());
+      return ko.get(name)!;
+    };
+    const ensureContent = (koName: string, contentName: string) => {
+      const k = ensureKo(koName);
+      if (!k.has(contentName)) k.set(contentName, new Map());
+      return k.get(contentName)!;
+    };
+
+    for (const sec of sections) {
+      for (const t of sec.topic_pool ?? []) {
+        const los = t.learning_outcomes ?? [];
+        if (los.length === 0) continue;
+        // KO container = explicit strand from the syllabus dataset, falling
+        // back to the topic title if the strand is missing (e.g. legacy rows).
+        const koName = (t.strand?.trim() || t.topic || "Other").trim();
+        const contentName = (t.sub_strand?.trim() || t.topic || "").trim() || koName;
+        const codeStem = t.learning_outcome_code?.trim() ?? null;
+        const bucket = ensureContent(koName, contentName);
+        los.forEach((loText, i) => {
+          if (!loText || seen.has(loText)) return;
+          seen.add(loText);
+          // If the syllabus parser merged N LO statements under one stem,
+          // index them as <stem>.1, <stem>.2, ... for the display code.
+          const code = codeStem
+            ? (los.length === 1 ? codeStem : `${codeStem}.${i + 1}`)
+            : null;
+          const stat = loStat.get(loText);
+          bucket.set(loText, {
+            code,
+            text: loText,
+            covered: stat?.covered ?? false,
+            actual: stat?.actual ?? 0,
+          });
+        });
       }
     }
-    // Orphan LOs (in paper rollup but never grouped under a KO)
-    const grouped = new Set<string>();
-    koMap.forEach((b) => b.forEach((_, lo) => grouped.add(lo)));
-    const orphans = paper.los.filter((l) => !grouped.has(l.text));
-    if (orphans.length > 0) {
-      const bucket = new Map<string, { covered: boolean; actual: number }>();
-      for (const l of orphans) bucket.set(l.text, { covered: l.covered, actual: l.actual });
-      koMap.set("Unassigned", bucket);
+
+    // Any LO that's in the paper rollup but never appeared in the syllabus
+    // topic pool (orphan / data gap) goes into a single clearly-labelled
+    // bucket so it can be investigated.
+    const orphanContent = new Map<string, LoEntry>();
+    for (const l of paper.los) {
+      if (!seen.has(l.text)) {
+        orphanContent.set(l.text, { code: null, text: l.text, covered: l.covered, actual: l.actual });
+      }
     }
-    // Materialise & enrich with marks from paper.kos
+
+    // KO marks rollup (from the existing paper.kos which still carries the
+    // generic Knowledge/Understanding/Application/Skills marks where the
+    // syllabus uses them — ignored here unless the strand name happens to
+    // match, which is the correct behaviour).
     const koMarks = new Map(paper.kos.map((k) => [k.name, k] as const));
-    return Array.from(koMap.entries()).map(([name, bucket]) => {
-      const los = Array.from(bucket.entries()).map(([text, v]) => ({ text, ...v }));
-      const covered = los.filter((l) => l.covered).length;
-      const marks = koMarks.get(name);
-      const status: OverviewStatus = classifyTopic(los);
-      return {
-        name,
-        los,
+
+    const buckets: KoBucket[] = [];
+    for (const [koName, contentMap] of ko.entries()) {
+      const contents: ContentBucket[] = [];
+      const flat: LoEntry[] = [];
+      for (const [cname, loMap] of contentMap.entries()) {
+        const items = Array.from(loMap.values()).sort((a, b) => {
+          if (a.code && b.code) return a.code.localeCompare(b.code, undefined, { numeric: true });
+          return a.text.localeCompare(b.text);
+        });
+        contents.push({ name: cname, los: items });
+        for (const it of items) flat.push(it);
+      }
+      contents.sort((a, b) => a.name.localeCompare(b.name));
+      const covered = flat.filter((l) => l.covered).length;
+      const m = koMarks.get(koName);
+      const status: OverviewStatus = classifyTopic(flat);
+      buckets.push({
+        name: koName,
+        contents,
+        los: flat,
         coveredLOs: covered,
-        totalLOs: los.length,
-        actualMarks: marks?.actual ?? los.reduce((s, l) => s + l.actual, 0),
-        targetMarks: marks?.target ?? 0,
+        totalLOs: flat.length,
+        actualMarks: m?.actual ?? flat.reduce((s, l) => s + l.actual, 0),
+        targetMarks: m?.target ?? 0,
         status,
-      };
-    }).sort((a, b) => {
+        hasCodes: flat.some((l) => !!l.code),
+      });
+    }
+
+    if (orphanContent.size > 0) {
+      const items = Array.from(orphanContent.values()).sort((a, b) => a.text.localeCompare(b.text));
+      const covered = items.filter((l) => l.covered).length;
+      buckets.push({
+        name: "Unmapped LO metadata",
+        contents: [{ name: "(no syllabus mapping)", los: items }],
+        los: items,
+        coveredLOs: covered,
+        totalLOs: items.length,
+        actualMarks: items.reduce((s, l) => s + l.actual, 0),
+        targetMarks: 0,
+        status: classifyTopic(items),
+        hasCodes: false,
+      });
+    }
+
+    return buckets.sort((a, b) => {
+      if (a.name === "Unmapped LO metadata") return 1;
+      if (b.name === "Unmapped LO metadata") return -1;
       const ai = STATUS_META[a.status].sortKey;
       const bi = STATUS_META[b.status].sortKey;
       if (ai !== bi) return ai - bi;
       return a.name.localeCompare(b.name);
     });
-  }, [paper.kos, paper.los, questions]);
+  }, [paper.kos, paper.los, sections]);
 
   const visibleKOs = explorerFilter === "all"
     ? koLoGroups
@@ -2857,46 +2945,12 @@ function CoveragePanel({
         );
       })()}
 
-      {/* KO Coverage */}
-      <CollapsibleCard
-        open={cardOpen.isOpen("ko")}
-        onOpenChange={(v) => cardOpen.set("ko", v)}
-        title="KO Coverage"
-        description="Marks per Knowledge Outcome"
-        summary={paper.kos.length === 0 ? "No Knowledge Outcomes targeted." : `${paper.kos.length} topic${paper.kos.length === 1 ? "" : "s"} tracked`}
-      >
-        <div className="space-y-2.5">
-          {paper.kos.length === 0 && (
-            <p className="text-xs text-muted-foreground">No Knowledge Outcomes targeted.</p>
-          )}
-          {paper.kos.map((k) => (
-            <button
-              key={k.name}
-              type="button"
-              onClick={() => setTarget({ kind: "ko", ...k })}
-              className="block w-full rounded-md p-1 text-left transition hover:bg-muted/50"
-            >
-              <MeterRow
-                label={
-                  <>
-                    {k.name}
-                    <RemarkPill count={remarkCount("ko", k.name)} />
-                  </>
-                }
-                actual={k.actual}
-                target={k.target}
-              />
-            </button>
-          ))}
-        </div>
-      </CollapsibleCard>
-
-      {/* LO Coverage */}
+      {/* LO Coverage — KO (strand) → Content (sub-strand) → coded LO */}
       <CollapsibleCard
         open={cardOpen.isOpen("lo")}
         onOpenChange={(v) => cardOpen.set("lo", v)}
-        title="LO Coverage"
-        description={`${paper.los.length - uncoveredLOs.length} / ${paper.los.length} learning outcomes covered`}
+        title="Knowledge & Learning Outcome Coverage"
+        description="Learning Outcomes are grouped under their parent syllabus KO and Content area, exactly as coded in the syllabus. Coverage is counted at LO level."
         summary={paper.los.length === 0
           ? "No Learning Outcomes targeted."
           : `${paper.los.length - uncoveredLOs.length} / ${paper.los.length} LOs covered · ${uncoveredLOs.length} untested`}
@@ -2976,7 +3030,7 @@ function CoveragePanel({
           <div className="mt-3 space-y-1.5">
             {koLoGroups.map((g) => {
               const meta = STATUS_META[g.status];
-              const koRemarks = g.name === "Unassigned" ? 0 : remarkCount("ko", g.name);
+              const koRemarks = g.name.startsWith("Unmapped") ? 0 : remarkCount("ko", g.name);
               return (
                 <Collapsible key={g.name}>
                   <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-md border border-border bg-card px-2 py-1.5 text-left transition hover:bg-muted/50">
@@ -2993,32 +3047,40 @@ function CoveragePanel({
                     </span>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
-                    <ul className="mt-1 space-y-0.5 border-l border-border pl-2 ml-1.5">
-                      {g.los.length === 0 ? (
-                        <li className="px-2 py-1 text-[11px] italic text-muted-foreground">
-                          No Learning Outcomes mapped under this KO.
-                        </li>
-                      ) : (
-                        g.los.map((lo) => {
-                          const count = remarkCount("lo", lo.text);
-                          return (
-                            <li key={lo.text}>
-                              <button
-                                type="button"
-                                onClick={() => setTarget({ kind: "lo", text: lo.text, covered: lo.covered, actual: lo.actual, target: 0 })}
-                                className={`flex w-full items-start gap-1.5 rounded px-2 py-1 text-left text-[11px] leading-snug transition hover:bg-muted/50 ${
-                                  lo.covered ? "text-foreground" : "text-destructive"
-                                }`}
-                              >
-                                <span className="mt-0.5">{lo.covered ? "✓" : "○"}</span>
-                                <span className="flex-1">{lo.text}</span>
-                                {count > 0 && <RemarkPill count={count} />}
-                              </button>
-                            </li>
-                          );
-                        })
-                      )}
-                    </ul>
+                    <div className="mt-1 ml-1.5 space-y-1.5 border-l border-border pl-2">
+                      {g.contents.map((c) => (
+                        <div key={c.name}>
+                          <p className="px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            {c.name}
+                          </p>
+                          <ul className="space-y-0.5">
+                            {c.los.map((lo) => {
+                              const count = remarkCount("lo", lo.text);
+                              return (
+                                <li key={lo.text}>
+                                  <button
+                                    type="button"
+                                    onClick={() => setTarget({ kind: "lo", text: lo.text, covered: lo.covered, actual: lo.actual, target: 0 })}
+                                    className={`flex w-full items-start gap-1.5 rounded px-2 py-1 text-left text-[11px] leading-snug transition hover:bg-muted/50 ${
+                                      lo.covered ? "text-foreground" : "text-destructive"
+                                    }`}
+                                  >
+                                    <span className="mt-0.5">{lo.covered ? "✓" : "○"}</span>
+                                    {lo.code && (
+                                      <span className="mt-0.5 shrink-0 rounded bg-muted px-1 font-mono text-[9px] text-muted-foreground">
+                                        {lo.code}
+                                      </span>
+                                    )}
+                                    <span className="flex-1">{lo.text}</span>
+                                    {count > 0 && <RemarkPill count={count} />}
+                                  </button>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
                   </CollapsibleContent>
                 </Collapsible>
               );

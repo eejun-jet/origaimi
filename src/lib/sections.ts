@@ -47,6 +47,17 @@ export type SectionTopic = {
    *  "Practical"). Used by the generator to enforce 50/50 splits on multi-track
    *  papers like Combined Science 5086 Paper 1 (MCQ). */
   section?: string | null;
+  /** Major syllabus strand the topic sits under, used as the KO container
+   *  in the Coverage view (e.g. "Kinematics", "Particulate Nature"). */
+  strand?: string | null;
+  /** Sub-strand / "Content" group from the syllabus dataset
+   *  (e.g. "Atomic Structure", "Graphical analysis of motion"). */
+  sub_strand?: string | null;
+  /** Stem code that prefixes each LO under this topic, e.g. "1.1.1".
+   *  Each LO statement at index i is rendered as `<stem>` when only one
+   *  exists, or `<stem>.<i+1>` when the syllabus parser merged multiple
+   *  coded outcomes into a single row. */
+  learning_outcome_code?: string | null;
 };
 
 export type DifficultyMix = { easy: number; medium: number; hard: number };

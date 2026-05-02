@@ -367,6 +367,9 @@ function NewAssessment() {
               ao_codes: t.aoCodes,
               outcome_categories: t.outcomeCategories,
               section: t.section,
+              strand: t.strand,
+              sub_strand: t.subStrand,
+              learning_outcome_code: t.learningOutcomeCode,
             }))
         : topics.map((t) => ({ topic: t }));
       setSections([{
@@ -395,6 +398,9 @@ function NewAssessment() {
           ao_codes: t.aoCodes,
           outcome_categories: t.outcomeCategories,
           section: t.section,
+          strand: t.strand,
+          sub_strand: t.subStrand,
+          learning_outcome_code: t.learningOutcomeCode,
         }));
     }
     return topics.map((t) => ({ topic: t }));
@@ -1650,9 +1656,10 @@ function SectionCard({
                   title: t.topic,
                   depth: 0,
                   position: idx,
-                  strand: null,
-                  subStrand: null,
+                  strand: t.strand ?? null,
+                  subStrand: t.sub_strand ?? null,
                   learningOutcomes: t.learning_outcomes ?? [],
+                  learningOutcomeCode: t.learning_outcome_code ?? null,
                   suggestedBlooms: [],
                   outcomeCategories: t.outcome_categories ?? [],
                   aoCodes: t.ao_codes ?? [],
