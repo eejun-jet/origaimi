@@ -48,6 +48,7 @@ import {
   useReviewerIdentity,
 } from "@/lib/comments";
 import { DetailDrawer } from "@/components/DetailDrawer";
+import { BlueprintTargetsCard } from "@/components/BlueprintTargetsCard";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/assessment/$id")({
