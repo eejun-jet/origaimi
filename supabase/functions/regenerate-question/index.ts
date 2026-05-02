@@ -62,7 +62,7 @@ Deno.serve(async (req) => {
 
     const sys = `You are an expert Singapore MOE assessment writer for ${a?.level} ${a?.subject}. Use British spelling, SI units, Singapore contexts. Match MOE phrasing.`;
     const difficultyDirective = targetDifficulty
-      ? `\nTarget difficulty: ${targetDifficulty}. Calibrate stem complexity, distractor closeness, and required reasoning steps to match a typical MOE ${targetDifficulty} item. The returned difficulty MUST be exactly "${targetDifficulty}".`
+      ? buildRegenerateDifficultyDirective(targetDifficulty, q.difficulty ?? null, q.question_type)
       : "";
 
     const objectivesBlock: string[] = [];
