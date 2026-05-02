@@ -3422,17 +3422,28 @@ function CoveragePanel({
                   {visibleKOs.map((g) => {
                     const meta = STATUS_META[g.status];
                     const active = selectedKO?.name === g.name;
+                    const ds = disciplineStyle(g.discipline);
                     return (
                       <button
                         key={g.name}
                         type="button"
                         onClick={() => setExplorerKO(g.name)}
-                        className={`rounded-lg border bg-card p-3 text-left transition hover:shadow-sm ${
-                          active ? "border-primary ring-2 ring-primary/30" : "border-border"
+                        className={`rounded-lg border-2 p-3 text-left transition hover:shadow-sm ${
+                          active ? "ring-2 ring-primary/40" : ""
                         }`}
+                        style={{ borderColor: ds.border, background: ds.tint }}
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <h4 className="line-clamp-2 text-xs font-semibold leading-snug">{g.name}</h4>
+                          <div className="min-w-0 flex-1">
+                            <span
+                              className="mb-1 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide"
+                              style={{ background: ds.chipBg, color: ds.chipFg }}
+                            >
+                              <span className="h-1.5 w-1.5 rounded-full" style={{ background: ds.dot }} />
+                              {g.discipline}
+                            </span>
+                            <h4 className="line-clamp-2 text-xs font-semibold leading-snug">{g.name}</h4>
+                          </div>
                           <CoverageDonut covered={g.coveredLOs} total={g.totalLOs} />
                         </div>
                         <div className="mt-2 flex items-center justify-between gap-2">
