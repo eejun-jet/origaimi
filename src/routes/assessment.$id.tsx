@@ -648,7 +648,7 @@ function EditorPage() {
           difficulty: q.difficulty,
           marks: q.marks,
           stem: q.stem,
-          options: q.options,
+          options: normalizeOptions(q.options),
           answer: q.answer,
           mark_scheme: q.mark_scheme,
         })),
