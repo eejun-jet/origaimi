@@ -1029,12 +1029,14 @@ ${sampleAnswerBlock}`;
     const lines = opts.difficultyTargets
       .map((d, i) => `  - Question ${i + 1}: ${d.toUpperCase()}`)
       .join("\n");
+    const rubric = buildDifficultyRubricBlock(opts.difficultyTargets);
     difficultyBlock = `
+${rubric}
 
-DIFFICULTY DISTRIBUTION (REQUIRED — set the difficulty field on each question to EXACTLY the target below):
+DIFFICULTY DISTRIBUTION (REQUIRED — set the difficulty field on each question to EXACTLY the target below, AND calibrate the stem to match the rubric for that level):
 ${lines}
 
-Calibrate stem complexity, distractor closeness (for MCQ), required reasoning steps and number of marks-bearing inferences to the target difficulty for each slot.`;
+Per-slot calibration is observable: the EASY items must be visibly easier than the HARD items in number of reasoning steps, novelty of context, distractor closeness (for MCQ), constraint count, and required selection of principle. Do NOT generate items of similar demand and merely relabel them.`;
   }
 
   // Resolve effective objective pool for this section: prefer section-level
