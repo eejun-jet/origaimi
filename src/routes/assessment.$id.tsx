@@ -2722,6 +2722,7 @@ function CoveragePanel({
     type ContentBucket = { name: string; los: LoEntry[] };
     type KoBucket = {
       name: string;
+      discipline: string;
       contents: ContentBucket[];
       los: LoEntry[]; // flattened, for status / counts
       coveredLOs: number;
@@ -2735,6 +2736,8 @@ function CoveragePanel({
     const loStat = new Map(paper.los.map((l) => [l.text, l] as const));
     // ko -> content -> LO key -> entry (preserves first-seen order)
     const ko = new Map<string, Map<string, Map<string, LoEntry>>>();
+    // Track first-seen discipline per KO so we can colour-code subjects.
+    const koDiscipline = new Map<string, string>();
     const seen = new Set<string>();
 
     const ensureKo = (name: string) => {
@@ -2757,6 +2760,9 @@ function CoveragePanel({
         const contentName = (t.sub_strand?.trim() || t.topic || "").trim() || koName;
         const codeStem = t.learning_outcome_code?.trim() ?? null;
         const bucket = ensureContent(koName, contentName);
+        if (!koDiscipline.has(koName)) {
+          koDiscipline.set(koName, normaliseDiscipline(t.section));
+        }
         los.forEach((loText, i) => {
           if (!loText || seen.has(loText)) return;
           seen.add(loText);
