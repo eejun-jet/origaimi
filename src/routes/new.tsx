@@ -858,18 +858,22 @@ function NewAssessment() {
           </aside>
         )}
         </div>
+        )}
 
-        <div className="mt-6 flex items-center justify-between">
-          <Button variant="ghost" disabled={step === 1 || busy}
-            onClick={() => setStep((s) => Math.max(1, s - 1))} className="gap-1">
-            <ChevronLeft className="h-4 w-4" /> Back
-          </Button>
-          {step < 4 ? (
-            <Button disabled={!canNext()} onClick={() => setStep((s) => s + 1)} className="gap-1">
-              Next <ChevronRight className="h-4 w-4" />
+        {!(step === 1 && startMode === "upload") && (
+          <div className="mt-6 flex items-center justify-between">
+            <Button variant="ghost" disabled={step === 1 || busy}
+              onClick={() => setStep((s) => Math.max(1, s - 1))} className="gap-1">
+              <ChevronLeft className="h-4 w-4" /> Back
             </Button>
-          ) : <span />}
-        </div>
+            {step < 4 ? (
+              <Button disabled={!canNext()} onClick={() => setStep((s) => s + 1)} className="gap-1">
+                Next <ChevronRight className="h-4 w-4" />
+              </Button>
+            ) : <span />}
+          </div>
+        )}
+
       </main>
     </div>
   );
