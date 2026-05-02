@@ -1711,9 +1711,41 @@ function QuestionCard({
               </Badge>
             )}
           </Button>
-          <Button size="sm" variant="ghost" onClick={onDelete} className="ml-auto gap-1 text-destructive hover:text-destructive">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onDelete}
+            className="ml-auto hidden gap-1 text-destructive hover:text-destructive sm:inline-flex"
+          >
             <Trash2 className="h-3.5 w-3.5" /> Delete
           </Button>
+          {/* Mobile-only overflow menu: Regenerate, Save to bank, Delete */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="ml-auto gap-1 sm:hidden"
+                aria-label="More actions for this question"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => setShowRegen(true)}>
+                <RefreshCw className="mr-2 h-4 w-4" /> Regenerate
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={onBank}>
+                <BookmarkPlus className="mr-2 h-4 w-4" /> Save to bank
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={onDelete}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="mr-2 h-4 w-4" /> Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       )}
 
