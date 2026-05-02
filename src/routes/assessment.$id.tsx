@@ -2945,46 +2945,12 @@ function CoveragePanel({
         );
       })()}
 
-      {/* KO Coverage */}
-      <CollapsibleCard
-        open={cardOpen.isOpen("ko")}
-        onOpenChange={(v) => cardOpen.set("ko", v)}
-        title="KO Coverage"
-        description="Marks per Knowledge Outcome"
-        summary={paper.kos.length === 0 ? "No Knowledge Outcomes targeted." : `${paper.kos.length} topic${paper.kos.length === 1 ? "" : "s"} tracked`}
-      >
-        <div className="space-y-2.5">
-          {paper.kos.length === 0 && (
-            <p className="text-xs text-muted-foreground">No Knowledge Outcomes targeted.</p>
-          )}
-          {paper.kos.map((k) => (
-            <button
-              key={k.name}
-              type="button"
-              onClick={() => setTarget({ kind: "ko", ...k })}
-              className="block w-full rounded-md p-1 text-left transition hover:bg-muted/50"
-            >
-              <MeterRow
-                label={
-                  <>
-                    {k.name}
-                    <RemarkPill count={remarkCount("ko", k.name)} />
-                  </>
-                }
-                actual={k.actual}
-                target={k.target}
-              />
-            </button>
-          ))}
-        </div>
-      </CollapsibleCard>
-
-      {/* LO Coverage */}
+      {/* LO Coverage — KO (strand) → Content (sub-strand) → coded LO */}
       <CollapsibleCard
         open={cardOpen.isOpen("lo")}
         onOpenChange={(v) => cardOpen.set("lo", v)}
-        title="LO Coverage"
-        description={`${paper.los.length - uncoveredLOs.length} / ${paper.los.length} learning outcomes covered`}
+        title="Knowledge & Learning Outcome Coverage"
+        description="Learning Outcomes are grouped under their parent syllabus KO and Content area, exactly as coded in the syllabus. Coverage is counted at LO level."
         summary={paper.los.length === 0
           ? "No Learning Outcomes targeted."
           : `${paper.los.length - uncoveredLOs.length} / ${paper.los.length} LOs covered · ${uncoveredLOs.length} untested`}
