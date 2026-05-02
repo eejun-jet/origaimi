@@ -238,7 +238,7 @@ export function exportTosXlsx(args: {
   const { meta, coverage, sections, questions } = args;
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, buildSummarySheet(meta, coverage, sections), "Summary");
-  XLSX.utils.book_append_sheet(wb, buildMatrixSheet(coverage, sections), "AO-KO-LO Matrix");
+  XLSX.utils.book_append_sheet(wb, buildMatrixSheet(coverage, sections), "AO-KO Matrix");
   XLSX.utils.book_append_sheet(wb, buildQuestionMapSheet(questions, sections), "Question Map");
 
   const out = XLSX.write(wb, { bookType: "xlsx", type: "array" });
