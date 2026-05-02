@@ -3334,37 +3334,78 @@ function CoveragePanel({
                       <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-[1px] bg-warm" />3+×</span>
                     </span>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                    {visibleKOs.map((g) => {
-                      const meta = STATUS_META[g.status];
-                      return (
-                        <button
-                          key={g.name}
-                          type="button"
-                          onClick={() => { setExplorerMode("drilldown"); setExplorerKO(g.name); }}
-                          className={`group flex aspect-square flex-col justify-between rounded-lg border bg-card p-2.5 text-left transition hover:shadow-md hover:-translate-y-0.5 ${meta.ring}`}
-                          title={`${g.name} — ${meta.label}`}
-                        >
-                          <div className="flex items-start justify-between gap-1.5">
-                            <h4 className="line-clamp-3 flex-1 text-[11px] font-semibold leading-snug">{g.name}</h4>
-                            <CoverageDonut covered={g.coveredLOs} total={g.totalLOs} />
-                          </div>
-                          <div className="space-y-1.5">
-                            <DensityBar los={g.los} />
-                            <div className="flex items-center justify-between gap-1">
-                              <span className={`truncate rounded-full border px-1.5 py-0.5 text-[9px] font-medium ${meta.chip}`}>
-                                {meta.label}
-                              </span>
-                              <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
-                                {g.coveredLOs}/{g.totalLOs}
-                                {g.targetMarks ? <> · {g.actualMarks}/{g.targetMarks}m</> : g.actualMarks ? <> · {g.actualMarks}m</> : null}
-                              </span>
+                  {(() => {
+                    // Group tiles by discipline so subjects are visually
+                    // separated when an assessment spans multiple sciences.
+                    const byDisc = new Map<string, typeof visibleKOs>();
+                    for (const g of visibleKOs) {
+                      const d = g.discipline || "General";
+                      if (!byDisc.has(d)) byDisc.set(d, [] as typeof visibleKOs);
+                      byDisc.get(d)!.push(g);
+                    }
+                    const order = ["Physics", "Chemistry", "Biology", "Practical", "General"];
+                    const discNames = Array.from(byDisc.keys()).sort((a, b) => {
+                      const ai = order.indexOf(a); const bi = order.indexOf(b);
+                      if (ai === -1 && bi === -1) return a.localeCompare(b);
+                      if (ai === -1) return 1;
+                      if (bi === -1) return -1;
+                      return ai - bi;
+                    });
+                    const showHeaders = discNames.length > 1;
+                    return (
+                      <div className="space-y-4">
+                        {discNames.map((dname) => {
+                          const ds = disciplineStyle(dname);
+                          const tiles = byDisc.get(dname)!;
+                          return (
+                            <div key={dname}>
+                              {showHeaders && (
+                                <div className="mb-2 flex items-center gap-2 px-1">
+                                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: ds.dot }} />
+                                  <h4 className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: ds.chipFg }}>{dname}</h4>
+                                  <span className="text-[10px] tabular-nums text-muted-foreground">
+                                    {tiles.reduce((s, t) => s + t.coveredLOs, 0)} / {tiles.reduce((s, t) => s + t.totalLOs, 0)} LOs
+                                  </span>
+                                </div>
+                              )}
+                              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                                {tiles.map((g) => {
+                                  const meta = STATUS_META[g.status];
+                                  return (
+                                    <button
+                                      key={g.name}
+                                      type="button"
+                                      onClick={() => { setExplorerMode("drilldown"); setExplorerKO(g.name); }}
+                                      className={`group flex aspect-square flex-col justify-between rounded-lg border-2 p-2.5 text-left transition hover:shadow-md hover:-translate-y-0.5 ${meta.ring}`}
+                                      style={{ borderColor: ds.border, background: ds.tint }}
+                                      title={`${g.name} — ${dname} — ${meta.label}`}
+                                    >
+                                      <div className="flex items-start justify-between gap-1.5">
+                                        <h4 className="line-clamp-3 flex-1 text-[11px] font-semibold leading-snug">{g.name}</h4>
+                                        <CoverageDonut covered={g.coveredLOs} total={g.totalLOs} />
+                                      </div>
+                                      <div className="space-y-1.5">
+                                        <DensityBar los={g.los} />
+                                        <div className="flex items-center justify-between gap-1">
+                                          <span className={`truncate rounded-full border px-1.5 py-0.5 text-[9px] font-medium ${meta.chip}`}>
+                                            {meta.label}
+                                          </span>
+                                          <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+                                            {g.coveredLOs}/{g.totalLOs}
+                                            {g.targetMarks ? <> · {g.actualMarks}/{g.targetMarks}m</> : g.actualMarks ? <> · {g.actualMarks}m</> : null}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             </div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                 </>
               )}
             </div>
