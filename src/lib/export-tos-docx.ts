@@ -214,21 +214,7 @@ export async function exportTosDocx(args: {
     return [ko.name, ko.target, ko.actual, ko.actual - ko.target, ...perSection] as (string | number)[];
   });
 
-  // ── LO matrix
-  const loBaseWeights = [6, 1, 1, 1];
-  const loSectionWeights = sectionLetters.map(() => 0.7);
-  const loWidths = distributeWidths(contentWidth, [...loBaseWeights, ...loSectionWeights]);
-  const loHeaders = ["Learning Outcome", "Target hits", "Actual hits", "Covered", ...sectionLetters.map((l) => `Sec ${l}`)];
-  const loRows = coverage.paper.los.map((lo) => {
-    const perSection = sections.map((s) => coverage.bySection[s.id]?.los.find((x) => x.text === lo.text)?.actual ?? 0);
-    return [
-      truncate(lo.text, 250),
-      lo.target,
-      lo.actual,
-      lo.covered ? "Yes" : "No",
-      ...perSection,
-    ] as (string | number)[];
-  });
+  // (LO matrix removed — KO-level breakdown is sufficient for the TOS)
 
   // ── Question map
   const sectionLetterForPosition = (position: number): string => {
