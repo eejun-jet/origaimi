@@ -1194,10 +1194,11 @@ const TOOL = {
 
 async function callAI(
   messages: Array<{ role: string; content: string }>,
-  opts: { model?: string; timeoutMs?: number } = {},
+  opts: { model?: string; timeoutMs?: number; maxAttempts?: number } = {},
 ): Promise<{ ok: boolean; status: number; json?: any; errText?: string }> {
   const model = opts.model ?? "google/gemini-2.5-flash";
-  const timeoutMs = opts.timeoutMs ?? 60_000;
+  const timeoutMs = opts.timeoutMs ?? 45_000;
+  const maxAttempts = opts.maxAttempts ?? 1;
   const aiBody = JSON.stringify({
     model,
     messages,
@@ -1206,7 +1207,7 @@ async function callAI(
   });
   let aiResp: Response | null = null;
   let lastErrTxt = "";
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
@@ -1223,7 +1224,7 @@ async function callAI(
       lastErrTxt = `fetch error: ${(e as Error).message}`;
       console.warn(`[generate] AI attempt ${attempt + 1} threw`, lastErrTxt);
       clearTimeout(t);
-      if (attempt < 1) { await new Promise((r) => setTimeout(r, 1000)); continue; }
+      if (attempt < maxAttempts - 1) { await new Promise((r) => setTimeout(r, 1000)); continue; }
       return { ok: false, status: 504, errText: lastErrTxt };
     }
     clearTimeout(t);
@@ -1232,7 +1233,7 @@ async function callAI(
     const transient = aiResp.status === 502 || aiResp.status === 503 || aiResp.status === 504 || aiResp.status === 429;
     console.warn(`[generate] AI attempt ${attempt + 1} failed status=${aiResp.status} transient=${transient}`);
     if (!transient) break;
-    if (attempt < 1) await new Promise((r) => setTimeout(r, 1500));
+    if (attempt < maxAttempts - 1) await new Promise((r) => setTimeout(r, 1500));
   }
   if (!aiResp || !aiResp.ok) {
     return { ok: false, status: aiResp?.status ?? 500, errText: lastErrTxt };
