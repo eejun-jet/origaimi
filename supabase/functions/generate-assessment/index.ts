@@ -1985,7 +1985,7 @@ Deno.serve(async (req) => {
           ? section.learning_outcomes
           : Array.from(new Set(section.topic_pool.flatMap((tp) => tp.learning_outcomes ?? [])));
         const expanded = expandQuestionTags(
-          { stem: q.stem ?? "", answer: q.answer ?? null, mark_scheme: q.mark_scheme ?? null, topic: q.topic ?? null, options: Array.isArray(q.options) ? q.options : null },
+          { stem: q.stem ?? "", answer: q.answer ?? null, mark_scheme: q.mark_scheme ?? null, topic: q.topic ?? null, options: normalizeGeneratedOptions(q.options) },
           { ao_codes: qAOs, knowledge_outcomes: qKOs, learning_outcomes: qLOs },
           { loPool: poolLOs, koPool: poolKOs, aoPool: poolAOs },
           inferKind,
