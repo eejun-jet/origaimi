@@ -477,7 +477,7 @@ function EditorPage() {
       question_type: q.question_type,
       marks: q.marks,
       stem: q.stem,
-      options: q.options,
+      options: normalizeOptions(q.options),
       answer: q.answer,
       mark_scheme: q.mark_scheme,
       source: "ai",
