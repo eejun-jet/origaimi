@@ -16,6 +16,9 @@ export type TosAssessmentMeta = {
   total_actual: number;
   assessment_type: string;
   instructions: string | null;
+  // True when teacher has reviewed and saved AO targets for an imported
+  // past paper (Coverage panel "Confirm AO blueprint targets" step).
+  ao_targets_confirmed?: boolean;
 };
 
 export type TosSection = {
