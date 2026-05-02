@@ -27,6 +27,7 @@ import { ChevronLeft, ChevronRight, Sparkles, Loader2, BookOpen, Upload, Plus, T
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { BuilderCoachPanel } from "@/components/BuilderCoachPanel";
+import { BuilderUploadCard } from "@/components/BuilderUploadCard";
 import type { BuilderSnapshot } from "@/lib/intent-coach";
 
 export const Route = createFileRoute("/new")({
