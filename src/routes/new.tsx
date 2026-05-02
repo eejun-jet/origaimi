@@ -1832,7 +1832,7 @@ function LOGroupedSelector({
   // we keep its first-seen topic grouping so the user picks once.
   const groups = useMemo(() => {
     const seen = new Set<string>();
-    const out: { topicId: string; title: string; los: string[] }[] = [];
+    const out: { topicId: string; title: string; los: string[]; section: string | null }[] = [];
     for (const t of topics) {
       const los: string[] = [];
       for (const raw of t.learningOutcomes ?? []) {
@@ -1841,15 +1841,53 @@ function LOGroupedSelector({
         seen.add(lo);
         los.push(lo);
       }
-      if (los.length > 0) out.push({ topicId: t.id, title: t.title, los });
+      if (los.length > 0) out.push({ topicId: t.id, title: t.title, los, section: t.section ?? null });
     }
     return out;
   }, [topics]);
+
+  // Section buckets (e.g. Physics / Chemistry / Biology on Combined Science 5086/5087/5088).
+  // Only surface bulk "Select all" controls when the LO pool spans more than one section,
+  // so single-subject papers don't see redundant chrome.
+  const sectionBuckets = useMemo(() => {
+    const m = new Map<string, string[]>(); // section label -> LO list
+    for (const g of groups) {
+      if (!g.section) continue;
+      const key = g.section;
+      const arr = m.get(key) ?? [];
+      arr.push(...g.los);
+      m.set(key, arr);
+    }
+    const entries = Array.from(m.entries()).map(([label, los]) => ({ label, los }));
+    return entries.length > 1 ? entries : [];
+  }, [groups]);
 
   const [open, setOpen] = useState<Record<string, boolean>>({});
 
   return (
     <div className="mt-3 max-h-96 space-y-2 overflow-auto rounded-md border border-border bg-background p-2">
+      {sectionBuckets.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 rounded-md border border-dashed border-border bg-muted/30 p-2">
+          <span className="self-center pr-1 text-xs font-medium text-muted-foreground">Quick pick:</span>
+          {sectionBuckets.map(({ label, los }) => {
+            const selectedCount = los.filter((lo) => selected.includes(lo)).length;
+            const allChecked = los.length > 0 && selectedCount === los.length;
+            return (
+              <Button
+                key={label}
+                type="button"
+                size="sm"
+                variant={allChecked ? "default" : "outline"}
+                className="h-7 px-2 text-xs"
+                onClick={() => onToggleMany(los, !allChecked)}
+              >
+                {allChecked ? `Deselect ${label}` : `${label} (select all)`}
+                <span className="ml-1.5 text-[10px] opacity-70">{selectedCount}/{los.length}</span>
+              </Button>
+            );
+          })}
+        </div>
+      )}
       {groups.map(({ topicId, title, los }) => {
         const selectedInGroup = los.filter((lo) => selected.includes(lo));
         const allChecked = los.length > 0 && selectedInGroup.length === los.length;
