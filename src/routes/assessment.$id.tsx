@@ -2816,6 +2816,7 @@ function CoveragePanel({
       const status: OverviewStatus = classifyTopic(flat);
       buckets.push({
         name: koName,
+        discipline: koDiscipline.get(koName) ?? "General",
         contents,
         los: flat,
         coveredLOs: covered,
