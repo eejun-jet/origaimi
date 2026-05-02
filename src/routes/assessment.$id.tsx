@@ -2833,6 +2833,7 @@ function CoveragePanel({
       const covered = items.filter((l) => l.covered).length;
       buckets.push({
         name: "Unmapped LO metadata",
+        discipline: "General",
         contents: [{ name: "(no syllabus mapping)", los: items }],
         los: items,
         coveredLOs: covered,
