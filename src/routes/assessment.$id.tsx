@@ -57,6 +57,8 @@ export const Route = createFileRoute("/assessment/$id")({
   component: EditorPage,
 });
 
+type QuestionOption = string | { key?: string | null; text?: string | null; value?: string | null; label?: string | null };
+
 type Question = {
   id: string;
   position: number;
@@ -66,7 +68,7 @@ type Question = {
   difficulty: string | null;
   marks: number;
   stem: string;
-  options: Array<string | { key?: string | null; text?: string | null; value?: string | null; label?: string | null }> | null;
+  options: QuestionOption[] | null;
   answer: string | null;
   mark_scheme: string | null;
   source_excerpt: string | null;
@@ -81,12 +83,17 @@ type Question = {
   learning_outcomes: string[];
 };
 
-function renderOptionText(option: Question["options"] extends Array<infer T> ? T : never): string {
+function renderOptionText(option: QuestionOption): string {
   if (typeof option === "string") return option;
   if (option && typeof option === "object") {
-    return option.text ?? option.value ?? option.label ?? JSON.stringify(option);
+    return [option.key, option.text ?? option.value ?? option.label].filter(Boolean).join(". ") || JSON.stringify(option);
   }
   return String(option ?? "");
+}
+
+function normalizeOptions(options: Question["options"]): string[] | null {
+  if (!Array.isArray(options)) return null;
+  return options.map(renderOptionText).filter(Boolean);
 }
 
 type Assessment = {
