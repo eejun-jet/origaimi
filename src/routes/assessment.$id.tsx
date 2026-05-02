@@ -1976,6 +1976,28 @@ function normaliseDiscipline(s: string | null | undefined): string {
   return s.split(/[—–-]/).slice(-1)[0]?.trim() || s;
 }
 
+// Per-subject palette for colouring KO containers when an assessment spans
+// multiple disciplines (e.g. Combined Science = Physics + Chemistry + Biology).
+// Uses inline oklch so it works in light + dark without extra tokens.
+type DisciplineStyle = {
+  border: string;       // CSS color — solid accent border / left rail
+  tint: string;         // CSS color — soft background tint
+  chipBg: string;       // CSS color — chip background
+  chipFg: string;       // CSS color — chip foreground
+  dot: string;          // CSS color — small swatch dot
+};
+const DISCIPLINE_PALETTE: Record<string, DisciplineStyle> = {
+  Physics:    { border: "oklch(0.6 0.16 245)",  tint: "oklch(0.95 0.04 245 / 0.55)", chipBg: "oklch(0.92 0.06 245)", chipFg: "oklch(0.32 0.12 245)", dot: "oklch(0.55 0.18 245)" },
+  Chemistry:  { border: "oklch(0.62 0.16 145)", tint: "oklch(0.95 0.04 145 / 0.55)", chipBg: "oklch(0.92 0.07 145)", chipFg: "oklch(0.32 0.12 145)", dot: "oklch(0.55 0.16 145)" },
+  Biology:    { border: "oklch(0.62 0.18 30)",  tint: "oklch(0.95 0.05 30 / 0.55)",  chipBg: "oklch(0.92 0.08 30)",  chipFg: "oklch(0.36 0.14 30)",  dot: "oklch(0.6 0.18 30)" },
+  Practical:  { border: "oklch(0.6 0.16 295)",  tint: "oklch(0.95 0.04 295 / 0.55)", chipBg: "oklch(0.92 0.06 295)", chipFg: "oklch(0.32 0.14 295)", dot: "oklch(0.55 0.18 295)" },
+  General:    { border: "oklch(0.65 0.04 250)", tint: "oklch(0.95 0.01 250 / 0.55)", chipBg: "oklch(0.93 0.02 250)", chipFg: "oklch(0.32 0.04 250)", dot: "oklch(0.55 0.04 250)" },
+};
+function disciplineStyle(name: string | null | undefined): DisciplineStyle {
+  const norm = normaliseDiscipline(name);
+  return DISCIPLINE_PALETTE[norm] ?? DISCIPLINE_PALETTE.General;
+}
+
 function buildTopicsMap(
   paperLOs: Coverage["paper"]["los"],
   sections: Section[],
