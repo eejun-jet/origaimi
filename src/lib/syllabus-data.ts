@@ -80,6 +80,7 @@ export type PaperTopic = {
   strand: string | null;
   subStrand: string | null;
   learningOutcomes: string[];
+  learningOutcomeCode: string | null;
   suggestedBlooms: string[];
   outcomeCategories: string[];
   aoCodes: string[];
