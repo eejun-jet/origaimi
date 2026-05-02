@@ -576,6 +576,101 @@ function EditorPage() {
     questionLabels[q.id] = sec ? `Q${i + 1} · Section ${sec.letter}` : `Q${i + 1}`;
   });
 
+  const tosMeta = () => ({
+    title: assessment.title,
+    subject: assessment.subject,
+    level: assessment.level,
+    syllabus_code: assessment.syllabus_code ?? null,
+    duration_minutes: assessment.duration_minutes,
+    total_marks: assessment.total_marks,
+    total_actual: totalActual,
+    assessment_type: assessment.assessment_type ?? "scratch",
+    instructions: assessment.instructions ?? null,
+    ao_targets_confirmed: aoTargetsConfirmed,
+  });
+  const tosSections = () =>
+    sectionedBlueprint.sections.map((s) => ({
+      id: s.id,
+      letter: s.letter,
+      name: s.name ?? null,
+      question_type: s.question_type,
+      num_questions: s.num_questions,
+      marks: s.marks,
+    }));
+  const tosQuestions = () =>
+    questions.map((q) => ({
+      position: q.position,
+      question_type: q.question_type,
+      topic: q.topic,
+      bloom_level: q.bloom_level,
+      difficulty: q.difficulty,
+      marks: q.marks,
+      stem: q.stem,
+      ao_codes: q.ao_codes ?? [],
+      knowledge_outcomes: q.knowledge_outcomes ?? [],
+      learning_outcomes: q.learning_outcomes ?? [],
+    }));
+
+  const handleDownloadDocx = async () => {
+    try {
+      await exportAssessmentDocx(
+        {
+          title: assessment.title,
+          subject: assessment.subject,
+          level: assessment.level,
+          total_marks: assessment.total_marks,
+          duration_minutes: assessment.duration_minutes,
+          instructions: assessment.instructions,
+          blueprint: assessment.blueprint,
+        },
+        questions.map((q) => ({
+          position: q.position,
+          question_type: q.question_type,
+          topic: q.topic,
+          bloom_level: q.bloom_level,
+          difficulty: q.difficulty,
+          marks: q.marks,
+          stem: q.stem,
+          options: q.options,
+          answer: q.answer,
+          mark_scheme: q.mark_scheme,
+        })),
+      );
+      toast.success("Downloaded .docx");
+    } catch (e) {
+      toast.error("Export failed");
+      console.error(e);
+    }
+  };
+  const handleDownloadTosXlsx = () => {
+    try {
+      exportTosXlsx({
+        meta: tosMeta(),
+        coverage,
+        sections: tosSections(),
+        questions: tosQuestions(),
+      });
+      toast.success("Downloaded TOS .xlsx");
+    } catch (e) {
+      toast.error("TOS export failed");
+      console.error(e);
+    }
+  };
+  const handleDownloadTosDocx = async () => {
+    try {
+      await exportTosDocx({
+        meta: tosMeta(),
+        coverage,
+        sections: tosSections(),
+        questions: tosQuestions(),
+      });
+      toast.success("Downloaded TOS .docx");
+    } catch (e) {
+      toast.error("TOS export failed");
+      console.error(e);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <AppHeader />
