@@ -552,6 +552,49 @@ function NewAssessment() {
 
         <Stepper step={step} />
 
+        {step === 1 && (
+          <div className="mt-8 rounded-xl border border-border bg-muted/20 p-3 sm:p-4">
+            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              How do you want to start?
+            </div>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setStartMode("scratch")}
+                className={`rounded-lg border p-3 text-left transition-colors ${
+                  startMode === "scratch"
+                    ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                    : "border-border bg-card hover:border-primary/40"
+                }`}
+              >
+                <div className="text-sm font-medium">Build from scratch</div>
+                <div className="mt-0.5 text-xs text-muted-foreground">
+                  Pick syllabus, topics, sections, then generate questions.
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setStartMode("upload")}
+                className={`rounded-lg border p-3 text-left transition-colors ${
+                  startMode === "upload"
+                    ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                    : "border-border bg-card hover:border-primary/40"
+                }`}
+              >
+                <div className="text-sm font-medium">Upload an existing paper</div>
+                <div className="mt-0.5 text-xs text-muted-foreground">
+                  Continue setting a draft PDF and run the Assessment Coach.
+                </div>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === 1 && startMode === "upload" ? (
+          <div className="mt-6">
+            <BuilderUploadCard defaultSubject={subject} defaultLevel={level} />
+          </div>
+        ) : (
         <div className={step === 1 ? "" : "mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]"}>
         <div className={step === 1 ? "mt-8 rounded-2xl border border-border bg-card p-6 sm:p-8" : "rounded-2xl border border-border bg-card p-6 sm:p-8"}>
           {step === 1 && (
