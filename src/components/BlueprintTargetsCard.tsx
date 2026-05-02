@@ -141,12 +141,18 @@ export function BlueprintTargetsCard({
           const pct = Number(values[code]) || 0;
           const targetMarks = Math.round((pct / 100) * totalMarks);
           return (
-            <div key={code} className="grid grid-cols-[3rem,1fr,5rem,4rem] items-center gap-2">
+            <div
+              key={code}
+              className="grid grid-cols-[3rem,minmax(0,1fr),auto] items-center gap-x-2 gap-y-1 sm:grid-cols-[3rem,minmax(0,1fr),5rem,4rem]"
+            >
               <span className="text-xs font-semibold text-foreground">{code}</span>
-              <span className="truncate text-xs text-muted-foreground" title={def?.title ?? ""}>
+              <span
+                className="col-span-2 truncate text-xs text-muted-foreground sm:col-span-1"
+                title={def?.title ?? ""}
+              >
                 {def?.title ?? "—"}
               </span>
-              <div className="flex items-center gap-1">
+              <div className="col-start-2 flex items-center gap-1 sm:col-start-3">
                 <Input
                   type="number"
                   min={0}
@@ -155,7 +161,7 @@ export function BlueprintTargetsCard({
                   inputMode="numeric"
                   value={values[code] ?? ""}
                   onChange={(e) => setValues((v) => ({ ...v, [code]: e.target.value }))}
-                  className="h-7 px-2 text-xs"
+                  className="h-8 px-2 text-xs"
                 />
                 <span className="text-xs text-muted-foreground">%</span>
               </div>

@@ -19,7 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Loader2, RefreshCw, Trash2, BookmarkPlus, Sparkles, ChevronUp, ChevronDown, X, Download, Image as ImageIcon, Wand2, MessageCircle, UserPlus, AlertTriangle, Info, CheckCircle2, Pencil, Maximize2 } from "lucide-react";
+import { ArrowLeft, Loader2, RefreshCw, Trash2, BookmarkPlus, Sparkles, ChevronUp, ChevronDown, X, Download, Image as ImageIcon, Wand2, MessageCircle, UserPlus, AlertTriangle, Info, CheckCircle2, Pencil, Maximize2, MoreHorizontal, ListChecks } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { BLOOMS } from "@/lib/syllabus";
 import { toSectioned, sectionAtPosition, getSbqSkill, KNOWLEDGE_OUTCOMES, isHumanitiesSubject, isScienceSubject, type Section } from "@/lib/sections";
@@ -49,6 +49,8 @@ import {
 } from "@/lib/comments";
 import { DetailDrawer } from "@/components/DetailDrawer";
 import { BlueprintTargetsCard } from "@/components/BlueprintTargetsCard";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/assessment/$id")({
@@ -113,6 +115,8 @@ function EditorPage() {
   const [comments, setComments] = useState<AssessmentComment[]>([]);
   const [identity, setIdentity] = useReviewerIdentity();
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
+  const isMobile = useIsMobile();
   const [sidebarTab, setSidebarTab] = useState<"coverage" | "comments">("coverage");
   const [retagBusy, setRetagBusy] = useState(false);
 
@@ -574,6 +578,101 @@ function EditorPage() {
     questionLabels[q.id] = sec ? `Q${i + 1} · Section ${sec.letter}` : `Q${i + 1}`;
   });
 
+  const tosMeta = () => ({
+    title: assessment.title,
+    subject: assessment.subject,
+    level: assessment.level,
+    syllabus_code: assessment.syllabus_code ?? null,
+    duration_minutes: assessment.duration_minutes,
+    total_marks: assessment.total_marks,
+    total_actual: totalActual,
+    assessment_type: assessment.assessment_type ?? "scratch",
+    instructions: assessment.instructions ?? null,
+    ao_targets_confirmed: aoTargetsConfirmed,
+  });
+  const tosSections = () =>
+    sectionedBlueprint.sections.map((s) => ({
+      id: s.id,
+      letter: s.letter,
+      name: s.name ?? null,
+      question_type: s.question_type,
+      num_questions: s.num_questions,
+      marks: s.marks,
+    }));
+  const tosQuestions = () =>
+    questions.map((q) => ({
+      position: q.position,
+      question_type: q.question_type,
+      topic: q.topic,
+      bloom_level: q.bloom_level,
+      difficulty: q.difficulty,
+      marks: q.marks,
+      stem: q.stem,
+      ao_codes: q.ao_codes ?? [],
+      knowledge_outcomes: q.knowledge_outcomes ?? [],
+      learning_outcomes: q.learning_outcomes ?? [],
+    }));
+
+  const handleDownloadDocx = async () => {
+    try {
+      await exportAssessmentDocx(
+        {
+          title: assessment.title,
+          subject: assessment.subject,
+          level: assessment.level,
+          total_marks: assessment.total_marks,
+          duration_minutes: assessment.duration_minutes,
+          instructions: assessment.instructions,
+          blueprint: assessment.blueprint,
+        },
+        questions.map((q) => ({
+          position: q.position,
+          question_type: q.question_type,
+          topic: q.topic,
+          bloom_level: q.bloom_level,
+          difficulty: q.difficulty,
+          marks: q.marks,
+          stem: q.stem,
+          options: q.options,
+          answer: q.answer,
+          mark_scheme: q.mark_scheme,
+        })),
+      );
+      toast.success("Downloaded .docx");
+    } catch (e) {
+      toast.error("Export failed");
+      console.error(e);
+    }
+  };
+  const handleDownloadTosXlsx = () => {
+    try {
+      exportTosXlsx({
+        meta: tosMeta(),
+        coverage,
+        sections: tosSections(),
+        questions: tosQuestions(),
+      });
+      toast.success("Downloaded TOS .xlsx");
+    } catch (e) {
+      toast.error("TOS export failed");
+      console.error(e);
+    }
+  };
+  const handleDownloadTosDocx = async () => {
+    try {
+      await exportTosDocx({
+        meta: tosMeta(),
+        coverage,
+        sections: tosSections(),
+        questions: tosQuestions(),
+      });
+      toast.success("Downloaded TOS .docx");
+    } catch (e) {
+      toast.error("TOS export failed");
+      console.error(e);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <AppHeader />
@@ -600,43 +699,14 @@ function EditorPage() {
               )}
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            {/* Inline export/invite actions — hidden on phones, where they collapse into the Actions ⋯ menu below */}
             <Button
               variant="outline"
               size="sm"
-              className="gap-1"
+              className="hidden gap-1 sm:inline-flex"
               disabled={questions.length === 0}
-              onClick={async () => {
-                try {
-                  await exportAssessmentDocx(
-                    {
-                      title: assessment.title,
-                      subject: assessment.subject,
-                      level: assessment.level,
-                      total_marks: assessment.total_marks,
-                      duration_minutes: assessment.duration_minutes,
-                      instructions: assessment.instructions,
-                      blueprint: assessment.blueprint,
-                    },
-                    questions.map((q) => ({
-                      position: q.position,
-                      question_type: q.question_type,
-                      topic: q.topic,
-                      bloom_level: q.bloom_level,
-                      difficulty: q.difficulty,
-                      marks: q.marks,
-                      stem: q.stem,
-                      options: q.options,
-                      answer: q.answer,
-                      mark_scheme: q.mark_scheme,
-                    })),
-                  );
-                  toast.success("Downloaded .docx");
-                } catch (e) {
-                  toast.error("Export failed");
-                  console.error(e);
-                }
-              }}
+              onClick={handleDownloadDocx}
             >
               <Download className="h-4 w-4" /> Download .docx
             </Button>
@@ -645,7 +715,7 @@ function EditorPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="gap-1"
+                  className="hidden gap-1 sm:inline-flex"
                   disabled={questions.length === 0}
                   title="Download Table of Specifications (subject, syllabus, AOs, KOs, LOs, per-section breakdown)"
                 >
@@ -653,107 +723,58 @@ function EditorPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onSelect={() => {
-                    try {
-                      exportTosXlsx({
-                        meta: {
-                          title: assessment.title,
-                          subject: assessment.subject,
-                          level: assessment.level,
-                          syllabus_code: assessment.syllabus_code ?? null,
-                          duration_minutes: assessment.duration_minutes,
-                          total_marks: assessment.total_marks,
-                          total_actual: totalActual,
-                          assessment_type: assessment.assessment_type ?? "scratch",
-                          instructions: assessment.instructions ?? null,
-                          ao_targets_confirmed: aoTargetsConfirmed,
-                        },
-                        coverage,
-                        sections: sectionedBlueprint.sections.map((s) => ({
-                          id: s.id,
-                          letter: s.letter,
-                          name: s.name ?? null,
-                          question_type: s.question_type,
-                          num_questions: s.num_questions,
-                          marks: s.marks,
-                        })),
-                        questions: questions.map((q) => ({
-                          position: q.position,
-                          question_type: q.question_type,
-                          topic: q.topic,
-                          bloom_level: q.bloom_level,
-                          difficulty: q.difficulty,
-                          marks: q.marks,
-                          stem: q.stem,
-                          ao_codes: q.ao_codes ?? [],
-                          knowledge_outcomes: q.knowledge_outcomes ?? [],
-                          learning_outcomes: q.learning_outcomes ?? [],
-                        })),
-                      });
-                      toast.success("Downloaded TOS .xlsx");
-                    } catch (e) {
-                      toast.error("TOS export failed");
-                      console.error(e);
-                    }
-                  }}
+                <DropdownMenuItem onSelect={handleDownloadTosXlsx}>Excel (.xlsx)</DropdownMenuItem>
+                <DropdownMenuItem onSelect={handleDownloadTosDocx}>Word (.docx)</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button
+              variant="outline"
+              size="sm"
+              className="hidden gap-1 sm:inline-flex"
+              onClick={() => setInviteOpen(true)}
+            >
+              <UserPlus className="h-4 w-4" /> Invite reviewer
+            </Button>
+
+            {/* Mobile-only consolidated Actions menu */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1 sm:hidden"
+                  aria-label="More actions"
                 >
-                  Excel (.xlsx)
+                  <MoreHorizontal className="h-4 w-4" /> Actions
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  disabled={questions.length === 0}
+                  onSelect={handleDownloadDocx}
+                >
+                  <Download className="mr-2 h-4 w-4" /> Download .docx
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onSelect={async () => {
-                    try {
-                      await exportTosDocx({
-                        meta: {
-                          title: assessment.title,
-                          subject: assessment.subject,
-                          level: assessment.level,
-                          syllabus_code: assessment.syllabus_code ?? null,
-                          duration_minutes: assessment.duration_minutes,
-                          total_marks: assessment.total_marks,
-                          total_actual: totalActual,
-                          assessment_type: assessment.assessment_type ?? "scratch",
-                          instructions: assessment.instructions ?? null,
-                          ao_targets_confirmed: aoTargetsConfirmed,
-                        },
-                        coverage,
-                        sections: sectionedBlueprint.sections.map((s) => ({
-                          id: s.id,
-                          letter: s.letter,
-                          name: s.name ?? null,
-                          question_type: s.question_type,
-                          num_questions: s.num_questions,
-                          marks: s.marks,
-                        })),
-                        questions: questions.map((q) => ({
-                          position: q.position,
-                          question_type: q.question_type,
-                          topic: q.topic,
-                          bloom_level: q.bloom_level,
-                          difficulty: q.difficulty,
-                          marks: q.marks,
-                          stem: q.stem,
-                          ao_codes: q.ao_codes ?? [],
-                          knowledge_outcomes: q.knowledge_outcomes ?? [],
-                          learning_outcomes: q.learning_outcomes ?? [],
-                        })),
-                      });
-                      toast.success("Downloaded TOS .docx");
-                    } catch (e) {
-                      toast.error("TOS export failed");
-                      console.error(e);
-                    }
-                  }}
+                  disabled={questions.length === 0}
+                  onSelect={handleDownloadTosXlsx}
                 >
-                  Word (.docx)
+                  <Download className="mr-2 h-4 w-4" /> Download TOS (Excel)
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={questions.length === 0}
+                  onSelect={handleDownloadTosDocx}
+                >
+                  <Download className="mr-2 h-4 w-4" /> Download TOS (Word)
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setInviteOpen(true)}>
+                  <UserPlus className="mr-2 h-4 w-4" /> Invite reviewer
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button variant="outline" size="sm" className="gap-1" onClick={() => setInviteOpen(true)}>
-              <UserPlus className="h-4 w-4" /> Invite reviewer
-            </Button>
+
             <Select value={assessment.status} onValueChange={setStatus}>
-              <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-[140px] sm:w-[150px]"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="draft">Draft</SelectItem>
                 <SelectItem value="in_review">In review</SelectItem>
@@ -1036,94 +1057,187 @@ function EditorPage() {
             )}
           </div>
 
-          <aside className="space-y-4 md:sticky md:top-20 md:self-start md:max-h-[calc(100vh-6rem)] md:overflow-y-auto">
-            <Tabs value={sidebarTab} onValueChange={(v) => setSidebarTab(v as "coverage" | "comments")}>
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="coverage">Coverage</TabsTrigger>
-                <TabsTrigger value="comments" className="gap-1.5">
-                  <MessageCircle className="h-3.5 w-3.5" />
-                  Comments
-                  {(() => {
-                    const open = comments.filter((c) => !c.parent_id && c.status === "open").length;
-                    return open > 0 ? (
-                      <Badge variant="outline" className="h-4 border-destructive/30 px-1 text-[9px] text-destructive">
-                        {open}
-                      </Badge>
-                    ) : null;
-                  })()}
-                </TabsTrigger>
-              </TabsList>
+          {(() => {
+            const sidebarBody = (
+              <Tabs value={sidebarTab} onValueChange={(v) => setSidebarTab(v as "coverage" | "comments")}>
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="coverage">Coverage</TabsTrigger>
+                  <TabsTrigger value="comments" className="gap-1.5">
+                    <MessageCircle className="h-3.5 w-3.5" />
+                    Comments
+                    {(() => {
+                      const open = comments.filter((c) => !c.parent_id && c.status === "open").length;
+                      return open > 0 ? (
+                        <Badge variant="outline" className="h-4 border-destructive/30 px-1 text-[9px] text-destructive">
+                          {open}
+                        </Badge>
+                      ) : null;
+                    })()}
+                  </TabsTrigger>
+                </TabsList>
 
-              <TabsContent value="coverage" className="mt-4 space-y-4">
-                {assessment.assessment_type === "past_paper_analysis" && (
-                  <BlueprintTargetsCard
+                <TabsContent value="coverage" className="mt-4 space-y-4">
+                  {assessment.assessment_type === "past_paper_analysis" && (
+                    <BlueprintTargetsCard
+                      assessmentId={id}
+                      totalMarks={assessment.total_marks}
+                      aoDefs={aoDefs}
+                      observedAoCodes={Array.from(
+                        new Set(questions.flatMap((q) => q.ao_codes ?? [])),
+                      )}
+                      initialOverrides={Object.keys(aoOverrides).length > 0 ? aoOverrides : null}
+                      initialConfirmed={aoTargetsConfirmed}
+                      onSaved={() => loadAll()}
+                    />
+                  )}
+                  <CoveragePanel
                     assessmentId={id}
+                    coverage={coverage}
                     totalMarks={assessment.total_marks}
-                    aoDefs={aoDefs}
-                    observedAoCodes={Array.from(
-                      new Set(questions.flatMap((q) => q.ao_codes ?? [])),
-                    )}
-                    initialOverrides={Object.keys(aoOverrides).length > 0 ? aoOverrides : null}
-                    initialConfirmed={aoTargetsConfirmed}
-                    onSaved={() => loadAll()}
+                    totalActual={totalActual}
+                    questions={questions}
+                    comments={comments}
+                    identity={identity}
+                    subject={assessment.subject}
+                    sections={sectionedBlueprint.sections}
+                    onAddComment={addComment}
+                    onSetCommentStatus={setCommentStatus}
+                    onDeleteComment={deleteComment}
+                    onScrollToQuestion={(qid) => {
+                      setMobileSheetOpen(false);
+                      scrollToQuestion(qid);
+                    }}
+                    onRetag={retagAllQuestions}
+                    retagBusy={retagBusy}
                   />
-                )}
-                <CoveragePanel
-                  assessmentId={id}
-                  coverage={coverage}
-                  totalMarks={assessment.total_marks}
-                  totalActual={totalActual}
-                  questions={questions}
-                  comments={comments}
-                  identity={identity}
-                  subject={assessment.subject}
-                  sections={sectionedBlueprint.sections}
-                  onAddComment={addComment}
-                  onSetCommentStatus={setCommentStatus}
-                  onDeleteComment={deleteComment}
-                  onScrollToQuestion={scrollToQuestion}
-                  onRetag={retagAllQuestions}
-                  retagBusy={retagBusy}
-                />
 
-                <CoachPanel
-                  assessmentId={id}
-                  onScrollToQuestion={scrollToQuestion}
-                  onApplied={loadAll}
-                  comments={comments}
-                  identity={identity}
-                  onAddComment={addComment}
-                  onSetCommentStatus={setCommentStatus}
-                  onDeleteComment={deleteComment}
-                />
-                <div className="rounded-xl border border-border bg-card p-5">
-                  <h3 className="font-medium">Total marks</h3>
-                  <div className="mt-2 flex items-baseline gap-1">
-                    <span className={`font-paper text-3xl font-semibold ${totalActual === assessment.total_marks ? "text-success" : "text-foreground"}`}>{totalActual}</span>
-                    <span className="text-sm text-muted-foreground">/ {assessment.total_marks}</span>
+                  <CoachPanel
+                    assessmentId={id}
+                    onScrollToQuestion={(qid) => {
+                      setMobileSheetOpen(false);
+                      scrollToQuestion(qid);
+                    }}
+                    onApplied={loadAll}
+                    comments={comments}
+                    identity={identity}
+                    onAddComment={addComment}
+                    onSetCommentStatus={setCommentStatus}
+                    onDeleteComment={deleteComment}
+                  />
+                  <div className="rounded-xl border border-border bg-card p-5">
+                    <h3 className="font-medium">Total marks</h3>
+                    <div className="mt-2 flex items-baseline gap-1">
+                      <span className={`font-paper text-3xl font-semibold ${totalActual === assessment.total_marks ? "text-success" : "text-foreground"}`}>{totalActual}</span>
+                      <span className="text-sm text-muted-foreground">/ {assessment.total_marks}</span>
+                    </div>
                   </div>
-                </div>
-              </TabsContent>
+                </TabsContent>
 
-              <TabsContent value="comments" className="mt-4">
-                <CommentDock
-                  comments={comments}
-                  identity={identity}
-                  onIdentityChange={setIdentity}
-                  sectionLetters={sectionedBlueprint.sections.map((s) => s.letter)}
-                  questionLabels={questionLabels}
-                  onAdd={addComment}
-                  onSetStatus={setCommentStatus}
-                  onDelete={deleteComment}
-                  onScrollToQuestion={scrollToQuestion}
-                  onScrollToSection={scrollToSection}
-                  onOpenInvite={() => setInviteOpen(true)}
-                />
-              </TabsContent>
-            </Tabs>
-          </aside>
+                <TabsContent value="comments" className="mt-4">
+                  <CommentDock
+                    comments={comments}
+                    identity={identity}
+                    onIdentityChange={setIdentity}
+                    sectionLetters={sectionedBlueprint.sections.map((s) => s.letter)}
+                    questionLabels={questionLabels}
+                    onAdd={addComment}
+                    onSetStatus={setCommentStatus}
+                    onDelete={deleteComment}
+                    onScrollToQuestion={(qid) => {
+                      setMobileSheetOpen(false);
+                      scrollToQuestion(qid);
+                    }}
+                    onScrollToSection={(letter) => {
+                      setMobileSheetOpen(false);
+                      scrollToSection(letter);
+                    }}
+                    onOpenInvite={() => setInviteOpen(true)}
+                  />
+                </TabsContent>
+              </Tabs>
+            );
+
+            return (
+              <>
+                {/* Desktop: sticky right rail */}
+                <aside className="hidden space-y-4 md:block md:sticky md:top-20 md:self-start md:max-h-[calc(100vh-6rem)] md:overflow-y-auto">
+                  {sidebarBody}
+                </aside>
+
+                {/* Mobile: bottom sheet */}
+                {isMobile && (
+                  <Sheet open={mobileSheetOpen} onOpenChange={setMobileSheetOpen}>
+                    <SheetContent
+                      side="bottom"
+                      className="flex max-h-[85vh] flex-col gap-0 rounded-t-2xl p-0"
+                    >
+                      <SheetHeader className="border-b border-border px-4 py-3 text-left">
+                        <SheetTitle className="text-base">Coverage &amp; comments</SheetTitle>
+                      </SheetHeader>
+                      <div className="flex-1 overflow-y-auto px-4 py-4">
+                        {sidebarBody}
+                      </div>
+                    </SheetContent>
+                  </Sheet>
+                )}
+              </>
+            );
+          })()}
         </div>
       </main>
+
+      {/* Mobile-only sticky bottom bar to summon the Coverage / Comments sheet */}
+      {isMobile && (() => {
+        const openComments = comments.filter((c) => !c.parent_id && c.status === "open").length;
+        const aosOnTarget = coverage.paper.aos.filter((a) => a.target > 0 && a.actual >= a.target).length;
+        const aosTotal = coverage.paper.aos.length;
+        return (
+          <div
+            className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 backdrop-blur md:hidden"
+            style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+          >
+            <div className="mx-auto flex max-w-7xl items-center gap-2 px-3 py-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="flex-1 gap-1.5"
+                onClick={() => {
+                  setSidebarTab("coverage");
+                  setMobileSheetOpen(true);
+                }}
+              >
+                <ListChecks className="h-4 w-4" />
+                Coverage
+                {aosTotal > 0 && (
+                  <Badge variant="outline" className="ml-1 h-4 px-1 text-[9px]">
+                    {aosOnTarget}/{aosTotal}
+                  </Badge>
+                )}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="flex-1 gap-1.5"
+                onClick={() => {
+                  setSidebarTab("comments");
+                  setMobileSheetOpen(true);
+                }}
+              >
+                <MessageCircle className="h-4 w-4" />
+                Comments
+                {openComments > 0 && (
+                  <Badge variant="outline" className="ml-1 h-4 border-destructive/30 px-1 text-[9px] text-destructive">
+                    {openComments}
+                  </Badge>
+                )}
+              </Button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Spacer so the sticky bottom bar doesn't cover the last question on mobile */}
+      <div className="h-16 md:hidden" aria-hidden="true" />
 
       <InviteReviewerDialog
         assessmentId={id}
@@ -1574,12 +1688,13 @@ function QuestionCard({
       )}
 
       {!editing && (
-        <div className="mt-4 flex flex-wrap gap-1 border-t border-border pt-3">
+        <div className="mt-4 flex flex-wrap items-center gap-1 border-t border-border pt-3">
           <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>Edit</Button>
-          <Button size="sm" variant="ghost" onClick={() => setShowRegen(true)} className="gap-1">
+          {/* Secondary actions — visible inline on sm+, collapsed into ⋯ on mobile */}
+          <Button size="sm" variant="ghost" onClick={() => setShowRegen(true)} className="hidden gap-1 sm:inline-flex">
             <RefreshCw className="h-3.5 w-3.5" /> Regenerate
           </Button>
-          <Button size="sm" variant="ghost" onClick={onBank} className="gap-1">
+          <Button size="sm" variant="ghost" onClick={onBank} className="hidden gap-1 sm:inline-flex">
             <BookmarkPlus className="h-3.5 w-3.5" /> Save to bank
           </Button>
           <Button
@@ -1596,9 +1711,41 @@ function QuestionCard({
               </Badge>
             )}
           </Button>
-          <Button size="sm" variant="ghost" onClick={onDelete} className="ml-auto gap-1 text-destructive hover:text-destructive">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onDelete}
+            className="ml-auto hidden gap-1 text-destructive hover:text-destructive sm:inline-flex"
+          >
             <Trash2 className="h-3.5 w-3.5" /> Delete
           </Button>
+          {/* Mobile-only overflow menu: Regenerate, Save to bank, Delete */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="ml-auto gap-1 sm:hidden"
+                aria-label="More actions for this question"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => setShowRegen(true)}>
+                <RefreshCw className="mr-2 h-4 w-4" /> Regenerate
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={onBank}>
+                <BookmarkPlus className="mr-2 h-4 w-4" /> Save to bank
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={onDelete}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="mr-2 h-4 w-4" /> Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       )}
 
