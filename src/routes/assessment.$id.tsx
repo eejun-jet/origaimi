@@ -2916,7 +2916,7 @@ function CoveragePanel({
                   onClick={() => setLoView("list")}
                   className={`rounded px-2 py-0.5 transition ${loView === "list" ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
                 >
-                  Flat list
+                  By KO
                 </button>
               </div>
             )}
