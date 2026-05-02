@@ -1057,94 +1057,187 @@ function EditorPage() {
             )}
           </div>
 
-          <aside className="space-y-4 md:sticky md:top-20 md:self-start md:max-h-[calc(100vh-6rem)] md:overflow-y-auto">
-            <Tabs value={sidebarTab} onValueChange={(v) => setSidebarTab(v as "coverage" | "comments")}>
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="coverage">Coverage</TabsTrigger>
-                <TabsTrigger value="comments" className="gap-1.5">
-                  <MessageCircle className="h-3.5 w-3.5" />
-                  Comments
-                  {(() => {
-                    const open = comments.filter((c) => !c.parent_id && c.status === "open").length;
-                    return open > 0 ? (
-                      <Badge variant="outline" className="h-4 border-destructive/30 px-1 text-[9px] text-destructive">
-                        {open}
-                      </Badge>
-                    ) : null;
-                  })()}
-                </TabsTrigger>
-              </TabsList>
+          {(() => {
+            const sidebarBody = (
+              <Tabs value={sidebarTab} onValueChange={(v) => setSidebarTab(v as "coverage" | "comments")}>
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="coverage">Coverage</TabsTrigger>
+                  <TabsTrigger value="comments" className="gap-1.5">
+                    <MessageCircle className="h-3.5 w-3.5" />
+                    Comments
+                    {(() => {
+                      const open = comments.filter((c) => !c.parent_id && c.status === "open").length;
+                      return open > 0 ? (
+                        <Badge variant="outline" className="h-4 border-destructive/30 px-1 text-[9px] text-destructive">
+                          {open}
+                        </Badge>
+                      ) : null;
+                    })()}
+                  </TabsTrigger>
+                </TabsList>
 
-              <TabsContent value="coverage" className="mt-4 space-y-4">
-                {assessment.assessment_type === "past_paper_analysis" && (
-                  <BlueprintTargetsCard
+                <TabsContent value="coverage" className="mt-4 space-y-4">
+                  {assessment.assessment_type === "past_paper_analysis" && (
+                    <BlueprintTargetsCard
+                      assessmentId={id}
+                      totalMarks={assessment.total_marks}
+                      aoDefs={aoDefs}
+                      observedAoCodes={Array.from(
+                        new Set(questions.flatMap((q) => q.ao_codes ?? [])),
+                      )}
+                      initialOverrides={Object.keys(aoOverrides).length > 0 ? aoOverrides : null}
+                      initialConfirmed={aoTargetsConfirmed}
+                      onSaved={() => loadAll()}
+                    />
+                  )}
+                  <CoveragePanel
                     assessmentId={id}
+                    coverage={coverage}
                     totalMarks={assessment.total_marks}
-                    aoDefs={aoDefs}
-                    observedAoCodes={Array.from(
-                      new Set(questions.flatMap((q) => q.ao_codes ?? [])),
-                    )}
-                    initialOverrides={Object.keys(aoOverrides).length > 0 ? aoOverrides : null}
-                    initialConfirmed={aoTargetsConfirmed}
-                    onSaved={() => loadAll()}
+                    totalActual={totalActual}
+                    questions={questions}
+                    comments={comments}
+                    identity={identity}
+                    subject={assessment.subject}
+                    sections={sectionedBlueprint.sections}
+                    onAddComment={addComment}
+                    onSetCommentStatus={setCommentStatus}
+                    onDeleteComment={deleteComment}
+                    onScrollToQuestion={(qid) => {
+                      setMobileSheetOpen(false);
+                      scrollToQuestion(qid);
+                    }}
+                    onRetag={retagAllQuestions}
+                    retagBusy={retagBusy}
                   />
-                )}
-                <CoveragePanel
-                  assessmentId={id}
-                  coverage={coverage}
-                  totalMarks={assessment.total_marks}
-                  totalActual={totalActual}
-                  questions={questions}
-                  comments={comments}
-                  identity={identity}
-                  subject={assessment.subject}
-                  sections={sectionedBlueprint.sections}
-                  onAddComment={addComment}
-                  onSetCommentStatus={setCommentStatus}
-                  onDeleteComment={deleteComment}
-                  onScrollToQuestion={scrollToQuestion}
-                  onRetag={retagAllQuestions}
-                  retagBusy={retagBusy}
-                />
 
-                <CoachPanel
-                  assessmentId={id}
-                  onScrollToQuestion={scrollToQuestion}
-                  onApplied={loadAll}
-                  comments={comments}
-                  identity={identity}
-                  onAddComment={addComment}
-                  onSetCommentStatus={setCommentStatus}
-                  onDeleteComment={deleteComment}
-                />
-                <div className="rounded-xl border border-border bg-card p-5">
-                  <h3 className="font-medium">Total marks</h3>
-                  <div className="mt-2 flex items-baseline gap-1">
-                    <span className={`font-paper text-3xl font-semibold ${totalActual === assessment.total_marks ? "text-success" : "text-foreground"}`}>{totalActual}</span>
-                    <span className="text-sm text-muted-foreground">/ {assessment.total_marks}</span>
+                  <CoachPanel
+                    assessmentId={id}
+                    onScrollToQuestion={(qid) => {
+                      setMobileSheetOpen(false);
+                      scrollToQuestion(qid);
+                    }}
+                    onApplied={loadAll}
+                    comments={comments}
+                    identity={identity}
+                    onAddComment={addComment}
+                    onSetCommentStatus={setCommentStatus}
+                    onDeleteComment={deleteComment}
+                  />
+                  <div className="rounded-xl border border-border bg-card p-5">
+                    <h3 className="font-medium">Total marks</h3>
+                    <div className="mt-2 flex items-baseline gap-1">
+                      <span className={`font-paper text-3xl font-semibold ${totalActual === assessment.total_marks ? "text-success" : "text-foreground"}`}>{totalActual}</span>
+                      <span className="text-sm text-muted-foreground">/ {assessment.total_marks}</span>
+                    </div>
                   </div>
-                </div>
-              </TabsContent>
+                </TabsContent>
 
-              <TabsContent value="comments" className="mt-4">
-                <CommentDock
-                  comments={comments}
-                  identity={identity}
-                  onIdentityChange={setIdentity}
-                  sectionLetters={sectionedBlueprint.sections.map((s) => s.letter)}
-                  questionLabels={questionLabels}
-                  onAdd={addComment}
-                  onSetStatus={setCommentStatus}
-                  onDelete={deleteComment}
-                  onScrollToQuestion={scrollToQuestion}
-                  onScrollToSection={scrollToSection}
-                  onOpenInvite={() => setInviteOpen(true)}
-                />
-              </TabsContent>
-            </Tabs>
-          </aside>
+                <TabsContent value="comments" className="mt-4">
+                  <CommentDock
+                    comments={comments}
+                    identity={identity}
+                    onIdentityChange={setIdentity}
+                    sectionLetters={sectionedBlueprint.sections.map((s) => s.letter)}
+                    questionLabels={questionLabels}
+                    onAdd={addComment}
+                    onSetStatus={setCommentStatus}
+                    onDelete={deleteComment}
+                    onScrollToQuestion={(qid) => {
+                      setMobileSheetOpen(false);
+                      scrollToQuestion(qid);
+                    }}
+                    onScrollToSection={(letter) => {
+                      setMobileSheetOpen(false);
+                      scrollToSection(letter);
+                    }}
+                    onOpenInvite={() => setInviteOpen(true)}
+                  />
+                </TabsContent>
+              </Tabs>
+            );
+
+            return (
+              <>
+                {/* Desktop: sticky right rail */}
+                <aside className="hidden space-y-4 md:block md:sticky md:top-20 md:self-start md:max-h-[calc(100vh-6rem)] md:overflow-y-auto">
+                  {sidebarBody}
+                </aside>
+
+                {/* Mobile: bottom sheet */}
+                {isMobile && (
+                  <Sheet open={mobileSheetOpen} onOpenChange={setMobileSheetOpen}>
+                    <SheetContent
+                      side="bottom"
+                      className="flex max-h-[85vh] flex-col gap-0 rounded-t-2xl p-0"
+                    >
+                      <SheetHeader className="border-b border-border px-4 py-3 text-left">
+                        <SheetTitle className="text-base">Coverage &amp; comments</SheetTitle>
+                      </SheetHeader>
+                      <div className="flex-1 overflow-y-auto px-4 py-4">
+                        {sidebarBody}
+                      </div>
+                    </SheetContent>
+                  </Sheet>
+                )}
+              </>
+            );
+          })()}
         </div>
       </main>
+
+      {/* Mobile-only sticky bottom bar to summon the Coverage / Comments sheet */}
+      {isMobile && (() => {
+        const openComments = comments.filter((c) => !c.parent_id && c.status === "open").length;
+        const aosOnTarget = coverage.paper.aos.filter((a) => a.target > 0 && a.actual >= a.target).length;
+        const aosTotal = coverage.paper.aos.length;
+        return (
+          <div
+            className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 backdrop-blur md:hidden"
+            style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+          >
+            <div className="mx-auto flex max-w-7xl items-center gap-2 px-3 py-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="flex-1 gap-1.5"
+                onClick={() => {
+                  setSidebarTab("coverage");
+                  setMobileSheetOpen(true);
+                }}
+              >
+                <ListChecks className="h-4 w-4" />
+                Coverage
+                {aosTotal > 0 && (
+                  <Badge variant="outline" className="ml-1 h-4 px-1 text-[9px]">
+                    {aosOnTarget}/{aosTotal}
+                  </Badge>
+                )}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="flex-1 gap-1.5"
+                onClick={() => {
+                  setSidebarTab("comments");
+                  setMobileSheetOpen(true);
+                }}
+              >
+                <MessageCircle className="h-4 w-4" />
+                Comments
+                {openComments > 0 && (
+                  <Badge variant="outline" className="ml-1 h-4 border-destructive/30 px-1 text-[9px] text-destructive">
+                    {openComments}
+                  </Badge>
+                )}
+              </Button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Spacer so the sticky bottom bar doesn't cover the last question on mobile */}
+      <div className="h-16 md:hidden" aria-hidden="true" />
 
       <InviteReviewerDialog
         assessmentId={id}
