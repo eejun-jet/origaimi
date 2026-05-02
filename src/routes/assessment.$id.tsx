@@ -2341,10 +2341,14 @@ function TopicsByKOView({
             return a.topic.title.localeCompare(b.topic.title);
           });
         if (tiles.length === 0) return null;
+        const ds = disciplineStyle(disc.name);
         return (
           <div key={disc.name}>
-            <div className="mb-1.5 flex items-baseline justify-between">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{disc.name}</h4>
+            <div
+              className="mb-1.5 flex items-baseline justify-between rounded-md px-2 py-1"
+              style={{ background: ds.tint, borderLeft: `3px solid ${ds.border}` }}
+            >
+              <h4 className="text-xs font-semibold uppercase tracking-wider" style={{ color: ds.chipFg }}>{disc.name}</h4>
               <span className="text-[10px] tabular-nums text-muted-foreground">{disc.coveredLOs} / {disc.totalLOs} LOs</span>
             </div>
             <div className="space-y-1.5">
@@ -2354,7 +2358,10 @@ function TopicsByKOView({
                 const isOpen = openTopics.has(key);
                 return (
                   <Collapsible key={key} open={isOpen} onOpenChange={() => toggle(key)}>
-                    <div className={`rounded-lg border bg-card transition ${meta.ring} ${isOpen ? "shadow-sm" : ""}`}>
+                    <div
+                      className={`rounded-lg border bg-card transition ${meta.ring} ${isOpen ? "shadow-sm" : ""}`}
+                      style={{ borderLeftColor: ds.border, borderLeftWidth: 3 }}
+                    >
                       <CollapsibleTrigger className="group flex w-full items-center gap-2 p-2 text-left hover:bg-muted/30">
                         <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
                         <CoverageDonut covered={t.coveredLOs} total={t.totalLOs} />
