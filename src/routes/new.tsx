@@ -1846,11 +1846,11 @@ function LOGroupedSelector({
     return out;
   }, [topics]);
 
-  // Section buckets (e.g. Physics / Chemistry / Biology on Combined Science 5086/5087/5088).
-  // Only surface bulk "Select all" controls when the LO pool spans more than one section,
-  // so single-subject papers don't see redundant chrome.
+  // Section buckets (e.g. Physics / Chemistry / Biology on Combined Science 5086/5087/5088,
+  // or a single "Paper 1" bucket on a one-section MCQ paper). We always surface bulk
+  // "Select all" controls so teachers can pick every LO in a section with one click.
   const sectionBuckets = useMemo(() => {
-    const m = new Map<string, string[]>(); // section label -> LO list
+    const m = new Map<string, string[]>(); // section label -> LO list (preserves first-seen order)
     for (const g of groups) {
       if (!g.section) continue;
       const key = g.section;
@@ -1858,8 +1858,7 @@ function LOGroupedSelector({
       arr.push(...g.los);
       m.set(key, arr);
     }
-    const entries = Array.from(m.entries()).map(([label, los]) => ({ label, los }));
-    return entries.length > 1 ? entries : [];
+    return Array.from(m.entries()).map(([label, los]) => ({ label, los }));
   }, [groups]);
 
   const [open, setOpen] = useState<Record<string, boolean>>({});
