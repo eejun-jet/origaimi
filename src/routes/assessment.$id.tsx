@@ -82,6 +82,7 @@ type Assessment = {
   blueprint: unknown;
   instructions: string | null;
   syllabus_doc_id: string | null;
+  syllabus_code?: string | null;
   assessment_type?: string | null;
 };
 
