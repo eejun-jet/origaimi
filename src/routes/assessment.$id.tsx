@@ -28,6 +28,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ChevronRight } from "lucide-react";
 import { exportAssessmentDocx } from "@/lib/export-docx";
+import { exportTosXlsx } from "@/lib/export-tos-xlsx";
 import { CommentThread } from "@/components/CommentThread";
 import { CommentDock } from "@/components/CommentDock";
 import { InviteReviewerDialog } from "@/components/InviteReviewerDialog";
