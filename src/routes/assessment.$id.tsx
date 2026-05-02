@@ -1688,12 +1688,13 @@ function QuestionCard({
       )}
 
       {!editing && (
-        <div className="mt-4 flex flex-wrap gap-1 border-t border-border pt-3">
+        <div className="mt-4 flex flex-wrap items-center gap-1 border-t border-border pt-3">
           <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>Edit</Button>
-          <Button size="sm" variant="ghost" onClick={() => setShowRegen(true)} className="gap-1">
+          {/* Secondary actions — visible inline on sm+, collapsed into ⋯ on mobile */}
+          <Button size="sm" variant="ghost" onClick={() => setShowRegen(true)} className="hidden gap-1 sm:inline-flex">
             <RefreshCw className="h-3.5 w-3.5" /> Regenerate
           </Button>
-          <Button size="sm" variant="ghost" onClick={onBank} className="gap-1">
+          <Button size="sm" variant="ghost" onClick={onBank} className="hidden gap-1 sm:inline-flex">
             <BookmarkPlus className="h-3.5 w-3.5" /> Save to bank
           </Button>
           <Button
