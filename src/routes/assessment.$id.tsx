@@ -2916,7 +2916,7 @@ function CoveragePanel({
                   onClick={() => setLoView("list")}
                   className={`rounded px-2 py-0.5 transition ${loView === "list" ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
                 >
-                  Flat list
+                  By KO
                 </button>
               </div>
             )}
@@ -2966,26 +2966,57 @@ function CoveragePanel({
           />
         )}
         {paper.los.length > 0 && (!isScience || loView === "list") && (
-          <ul className="mt-3 space-y-1">
-            {paper.los.map((lo) => {
-              const count = remarkCount("lo", lo.text);
+          <div className="mt-3 space-y-1.5">
+            {koLoGroups.map((g) => {
+              const meta = STATUS_META[g.status];
+              const koRemarks = g.name === "Unassigned" ? 0 : remarkCount("ko", g.name);
               return (
-                <li key={lo.text}>
-                  <button
-                    type="button"
-                    onClick={() => setTarget({ kind: "lo", ...lo })}
-                    className={`flex w-full items-start gap-1.5 rounded px-2 py-1 text-left text-[11px] leading-snug transition hover:bg-muted/50 ${
-                      lo.covered ? "text-foreground" : "text-destructive"
-                    }`}
-                  >
-                    <span className="mt-0.5">{lo.covered ? "✓" : "○"}</span>
-                    <span className="flex-1">{lo.text}</span>
-                    {count > 0 && <RemarkPill count={count} />}
-                  </button>
-                </li>
+                <Collapsible key={g.name}>
+                  <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-md border border-border bg-card px-2 py-1.5 text-left transition hover:bg-muted/50">
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
+                    <span className="flex-1 truncate text-[11px] font-medium leading-snug">
+                      {g.name}
+                    </span>
+                    {koRemarks > 0 && <RemarkPill count={koRemarks} />}
+                    <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-medium ${meta.chip}`}>
+                      {meta.label}
+                    </span>
+                    <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+                      {g.coveredLOs}/{g.totalLOs}
+                    </span>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <ul className="mt-1 space-y-0.5 border-l border-border pl-2 ml-1.5">
+                      {g.los.length === 0 ? (
+                        <li className="px-2 py-1 text-[11px] italic text-muted-foreground">
+                          No Learning Outcomes mapped under this KO.
+                        </li>
+                      ) : (
+                        g.los.map((lo) => {
+                          const count = remarkCount("lo", lo.text);
+                          return (
+                            <li key={lo.text}>
+                              <button
+                                type="button"
+                                onClick={() => setTarget({ kind: "lo", text: lo.text, covered: lo.covered, actual: lo.actual, target: 0 })}
+                                className={`flex w-full items-start gap-1.5 rounded px-2 py-1 text-left text-[11px] leading-snug transition hover:bg-muted/50 ${
+                                  lo.covered ? "text-foreground" : "text-destructive"
+                                }`}
+                              >
+                                <span className="mt-0.5">{lo.covered ? "✓" : "○"}</span>
+                                <span className="flex-1">{lo.text}</span>
+                                {count > 0 && <RemarkPill count={count} />}
+                              </button>
+                            </li>
+                          );
+                        })
+                      )}
+                    </ul>
+                  </CollapsibleContent>
+                </Collapsible>
               );
             })}
-          </ul>
+          </div>
         )}
       </CollapsibleCard>
 
