@@ -163,7 +163,12 @@ export async function exportTosDocx(args: {
     { k: "Generated", v: today },
   ];
   if (meta.assessment_type === "past_paper_analysis") {
-    summaryRows.push({ k: "Note", v: "Imported from past paper — targets inferred from parsed tags." });
+    summaryRows.push({
+      k: "Note",
+      v: meta.ao_targets_confirmed
+        ? "Imported from past paper — AO targets confirmed by teacher."
+        : "Imported from past paper — AO targets inferred from syllabus weightings; KO/LO targets reflect parsed tags.",
+    });
   }
 
   // ── Section breakdown

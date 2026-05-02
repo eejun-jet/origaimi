@@ -16,6 +16,9 @@ export type TosAssessmentMeta = {
   total_actual: number;
   assessment_type: string;
   instructions: string | null;
+  // True when teacher has reviewed and saved AO targets for an imported
+  // past paper (Coverage panel "Confirm AO blueprint targets" step).
+  ao_targets_confirmed?: boolean;
 };
 
 export type TosSection = {
@@ -93,7 +96,12 @@ function buildSummarySheet(meta: TosAssessmentMeta, coverage: TosCoverage, secti
     ["Generated", today],
   ];
   if (meta.assessment_type === "past_paper_analysis") {
-    aoa.push(["Note", "Imported from past paper — targets inferred from parsed tags."]);
+    aoa.push([
+      "Note",
+      meta.ao_targets_confirmed
+        ? "Imported from past paper — AO targets confirmed by teacher."
+        : "Imported from past paper — AO targets inferred from syllabus weightings; KO/LO targets reflect parsed tags. Confirm AO targets in the Coverage panel for a sharper Δ.",
+    ]);
   }
   aoa.push([]);
   aoa.push(["Section breakdown"]);
