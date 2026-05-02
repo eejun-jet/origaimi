@@ -57,6 +57,8 @@ export const Route = createFileRoute("/assessment/$id")({
   component: EditorPage,
 });
 
+type QuestionOption = string | { key?: string | null; text?: string | null; value?: string | null; label?: string | null };
+
 type Question = {
   id: string;
   position: number;
@@ -66,7 +68,7 @@ type Question = {
   difficulty: string | null;
   marks: number;
   stem: string;
-  options: string[] | null;
+  options: QuestionOption[] | null;
   answer: string | null;
   mark_scheme: string | null;
   source_excerpt: string | null;
@@ -80,6 +82,19 @@ type Question = {
   knowledge_outcomes: string[];
   learning_outcomes: string[];
 };
+
+function renderOptionText(option: QuestionOption): string {
+  if (typeof option === "string") return option;
+  if (option && typeof option === "object") {
+    return [option.key, option.text ?? option.value ?? option.label].filter(Boolean).join(". ") || JSON.stringify(option);
+  }
+  return String(option ?? "");
+}
+
+function normalizeOptions(options: Question["options"]): string[] | null {
+  if (!Array.isArray(options)) return null;
+  return options.map(renderOptionText).filter(Boolean);
+}
 
 type Assessment = {
   id: string;
@@ -462,7 +477,7 @@ function EditorPage() {
       question_type: q.question_type,
       marks: q.marks,
       stem: q.stem,
-      options: q.options,
+      options: normalizeOptions(q.options),
       answer: q.answer,
       mark_scheme: q.mark_scheme,
       source: "ai",
@@ -491,7 +506,7 @@ function EditorPage() {
           question_type: q.question_type,
           marks: q.marks,
           stem: q.stem,
-          options: q.options,
+          options: normalizeOptions(q.options),
           answer: q.answer,
           mark_scheme: q.mark_scheme,
           source: "ai",
@@ -633,7 +648,7 @@ function EditorPage() {
           difficulty: q.difficulty,
           marks: q.marks,
           stem: q.stem,
-          options: q.options,
+          options: normalizeOptions(q.options),
           answer: q.answer,
           mark_scheme: q.mark_scheme,
         })),
@@ -1632,7 +1647,7 @@ function QuestionCard({
             )}
             {q.options && Array.isArray(q.options) && q.options.length > 0 && (
               <ol className="mt-3 list-inside list-[upper-alpha] space-y-1 font-paper text-sm">
-                {q.options.map((o, i) => <li key={i}>{o}</li>)}
+                {q.options.map((o, i) => <li key={i}>{renderOptionText(o)}</li>)}
               </ol>
             )}
             {(q.answer || q.mark_scheme) && (
@@ -1833,7 +1848,7 @@ function computeCoverage(
           : Array.from(new Set((sec.topic_pool ?? []).flatMap((t) => t.learning_outcomes ?? []))))
       : [];
     const ex = expandQuestionTags(
-      { stem: q.stem, answer: q.answer, mark_scheme: q.mark_scheme, topic: q.topic, options: q.options ?? null },
+      { stem: q.stem, answer: q.answer, mark_scheme: q.mark_scheme, topic: q.topic, options: normalizeOptions(q.options) },
       { ao_codes: q.ao_codes ?? [], knowledge_outcomes: q.knowledge_outcomes ?? [], learning_outcomes: q.learning_outcomes ?? [] },
       { loPool: poolLOs, koPool: poolKOs, aoPool: poolAOs },
       inferKind,
