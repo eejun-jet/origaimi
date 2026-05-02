@@ -535,9 +535,39 @@ function EditorPage() {
 
   const sectionedBlueprint = toSectioned(assessment.blueprint);
 
+  // Read teacher-saved AO target overrides + confirmation flag from the
+  // assessment's blueprint (set by BlueprintTargetsCard for past-paper
+  // imports). Overrides win over syllabus-derived weightings.
+  const blueprintObj: Record<string, unknown> =
+    assessment.blueprint && typeof assessment.blueprint === "object" && !Array.isArray(assessment.blueprint)
+      ? (assessment.blueprint as Record<string, unknown>)
+      : {};
+  const aoOverrides: Record<string, number> =
+    blueprintObj.ao_overrides && typeof blueprintObj.ao_overrides === "object"
+      ? (blueprintObj.ao_overrides as Record<string, number>)
+      : {};
+  const aoTargetsConfirmed = blueprintObj.ao_targets_confirmed === true;
+
+  const effectiveAoDefs: AODef[] = (() => {
+    const codes = new Set<string>(aoDefs.map((d) => d.code));
+    Object.keys(aoOverrides).forEach((c) => codes.add(c));
+    return Array.from(codes).map((code) => {
+      const def = aoDefs.find((d) => d.code === code) ?? null;
+      const override = aoOverrides[code];
+      return {
+        code,
+        title: def?.title ?? null,
+        weighting_percent:
+          typeof override === "number" && override > 0
+            ? override
+            : def?.weighting_percent ?? null,
+      };
+    });
+  })();
+
   const totalActual = questions.reduce((s, q) => s + q.marks, 0);
   const allSelected = questions.length > 0 && selectedIds.size === questions.length;
-  const coverage = computeCoverage(questions, sectionedBlueprint.sections, aoDefs, assessment.total_marks, assessment.subject);
+  const coverage = computeCoverage(questions, sectionedBlueprint.sections, effectiveAoDefs, assessment.total_marks, assessment.subject);
   const questionLabels: Record<string, string> = {};
   questions.forEach((q, i) => {
     const sec = sectionAtPosition(sectionedBlueprint, i);
