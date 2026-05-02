@@ -48,6 +48,20 @@ type Section = {
   learning_outcomes?: string[];
 };
 
+function normalizeGeneratedOptions(options: unknown): string[] | null {
+  if (!Array.isArray(options)) return null;
+  return options.map((opt) => {
+    if (typeof opt === "string") return opt;
+    if (opt && typeof opt === "object") {
+      const rec = opt as Record<string, unknown>;
+      const label = typeof rec.key === "string" ? rec.key : null;
+      const text = [rec.text, rec.value, rec.label].find((v) => typeof v === "string") as string | undefined;
+      return [label, text].filter(Boolean).join(". ") || JSON.stringify(opt);
+    }
+    return String(opt ?? "");
+  }).filter(Boolean);
+}
+
 /** Largest-remainder rounding: turn a percentage mix into an array of n difficulty labels. */
 function assignDifficultyToQuestions(
   mix: DifficultyMix | undefined | null,
@@ -1987,7 +2001,7 @@ Deno.serve(async (req) => {
           difficulty: sectionDifficultyTargets ? sectionDifficultyTargets[qi] ?? q.difficulty ?? null : (q.difficulty ?? null),
           marks: q.marks ?? 1,
           stem: q.stem,
-          options: q.options ?? null,
+          options: normalizeGeneratedOptions(q.options),
           answer: q.answer ?? null,
           mark_scheme: q.mark_scheme ?? null,
           source_excerpt,
