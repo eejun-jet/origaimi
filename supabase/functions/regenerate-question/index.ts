@@ -111,7 +111,7 @@ Return via the tool.`;
       method: "POST",
       headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: targetDifficulty ? "google/gemini-2.5-pro" : "google/gemini-2.5-flash",
         messages: [{ role: "system", content: sys }, { role: "user", content: user }],
         tools: [TOOL],
         tool_choice: { type: "function", function: { name: "rewrite_question" } },
