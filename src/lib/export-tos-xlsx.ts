@@ -177,30 +177,6 @@ function buildMatrixSheet(coverage: TosCoverage, sections: TosSection[]): XLSX.W
     ]);
   }
 
-  // ── LO table
-  aoa.push([]);
-  aoa.push(["Learning Outcomes (LO)"]);
-  aoa.push([
-    "Learning Outcome",
-    "Target hits",
-    "Actual hits",
-    "Covered",
-    ...sectionLetters.map((l) => `Sec ${l}`),
-  ]);
-  for (const lo of coverage.paper.los) {
-    const perSection = sections.map((s) => {
-      const sec = coverage.bySection[s.id];
-      return sec?.los.find((x) => x.text === lo.text)?.actual ?? 0;
-    });
-    aoa.push([
-      truncate(lo.text, 250),
-      lo.target,
-      lo.actual,
-      lo.covered ? "Yes" : "No",
-      ...perSection,
-    ]);
-  }
-
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   const sectionCols = sectionLetters.map(() => ({ wch: 8 }));
   ws["!cols"] = [
