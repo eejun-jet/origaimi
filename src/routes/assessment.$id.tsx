@@ -66,7 +66,7 @@ type Question = {
   difficulty: string | null;
   marks: number;
   stem: string;
-  options: string[] | null;
+  options: Array<string | { key?: string | null; text?: string | null; value?: string | null; label?: string | null }> | null;
   answer: string | null;
   mark_scheme: string | null;
   source_excerpt: string | null;
@@ -80,6 +80,14 @@ type Question = {
   knowledge_outcomes: string[];
   learning_outcomes: string[];
 };
+
+function renderOptionText(option: Question["options"] extends Array<infer T> ? T : never): string {
+  if (typeof option === "string") return option;
+  if (option && typeof option === "object") {
+    return option.text ?? option.value ?? option.label ?? JSON.stringify(option);
+  }
+  return String(option ?? "");
+}
 
 type Assessment = {
   id: string;
@@ -1632,7 +1640,7 @@ function QuestionCard({
             )}
             {q.options && Array.isArray(q.options) && q.options.length > 0 && (
               <ol className="mt-3 list-inside list-[upper-alpha] space-y-1 font-paper text-sm">
-                {q.options.map((o, i) => <li key={i}>{o}</li>)}
+                {q.options.map((o, i) => <li key={i}>{renderOptionText(o)}</li>)}
               </ol>
             )}
             {(q.answer || q.mark_scheme) && (
