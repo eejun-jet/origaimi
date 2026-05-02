@@ -602,43 +602,14 @@ function EditorPage() {
               )}
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            {/* Inline export/invite actions — hidden on phones, where they collapse into the Actions ⋯ menu below */}
             <Button
               variant="outline"
               size="sm"
-              className="gap-1"
+              className="hidden gap-1 sm:inline-flex"
               disabled={questions.length === 0}
-              onClick={async () => {
-                try {
-                  await exportAssessmentDocx(
-                    {
-                      title: assessment.title,
-                      subject: assessment.subject,
-                      level: assessment.level,
-                      total_marks: assessment.total_marks,
-                      duration_minutes: assessment.duration_minutes,
-                      instructions: assessment.instructions,
-                      blueprint: assessment.blueprint,
-                    },
-                    questions.map((q) => ({
-                      position: q.position,
-                      question_type: q.question_type,
-                      topic: q.topic,
-                      bloom_level: q.bloom_level,
-                      difficulty: q.difficulty,
-                      marks: q.marks,
-                      stem: q.stem,
-                      options: q.options,
-                      answer: q.answer,
-                      mark_scheme: q.mark_scheme,
-                    })),
-                  );
-                  toast.success("Downloaded .docx");
-                } catch (e) {
-                  toast.error("Export failed");
-                  console.error(e);
-                }
-              }}
+              onClick={handleDownloadDocx}
             >
               <Download className="h-4 w-4" /> Download .docx
             </Button>
@@ -647,7 +618,7 @@ function EditorPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="gap-1"
+                  className="hidden gap-1 sm:inline-flex"
                   disabled={questions.length === 0}
                   title="Download Table of Specifications (subject, syllabus, AOs, KOs, LOs, per-section breakdown)"
                 >
@@ -655,107 +626,58 @@ function EditorPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onSelect={() => {
-                    try {
-                      exportTosXlsx({
-                        meta: {
-                          title: assessment.title,
-                          subject: assessment.subject,
-                          level: assessment.level,
-                          syllabus_code: assessment.syllabus_code ?? null,
-                          duration_minutes: assessment.duration_minutes,
-                          total_marks: assessment.total_marks,
-                          total_actual: totalActual,
-                          assessment_type: assessment.assessment_type ?? "scratch",
-                          instructions: assessment.instructions ?? null,
-                          ao_targets_confirmed: aoTargetsConfirmed,
-                        },
-                        coverage,
-                        sections: sectionedBlueprint.sections.map((s) => ({
-                          id: s.id,
-                          letter: s.letter,
-                          name: s.name ?? null,
-                          question_type: s.question_type,
-                          num_questions: s.num_questions,
-                          marks: s.marks,
-                        })),
-                        questions: questions.map((q) => ({
-                          position: q.position,
-                          question_type: q.question_type,
-                          topic: q.topic,
-                          bloom_level: q.bloom_level,
-                          difficulty: q.difficulty,
-                          marks: q.marks,
-                          stem: q.stem,
-                          ao_codes: q.ao_codes ?? [],
-                          knowledge_outcomes: q.knowledge_outcomes ?? [],
-                          learning_outcomes: q.learning_outcomes ?? [],
-                        })),
-                      });
-                      toast.success("Downloaded TOS .xlsx");
-                    } catch (e) {
-                      toast.error("TOS export failed");
-                      console.error(e);
-                    }
-                  }}
+                <DropdownMenuItem onSelect={handleDownloadTosXlsx}>Excel (.xlsx)</DropdownMenuItem>
+                <DropdownMenuItem onSelect={handleDownloadTosDocx}>Word (.docx)</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button
+              variant="outline"
+              size="sm"
+              className="hidden gap-1 sm:inline-flex"
+              onClick={() => setInviteOpen(true)}
+            >
+              <UserPlus className="h-4 w-4" /> Invite reviewer
+            </Button>
+
+            {/* Mobile-only consolidated Actions menu */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1 sm:hidden"
+                  aria-label="More actions"
                 >
-                  Excel (.xlsx)
+                  <MoreHorizontal className="h-4 w-4" /> Actions
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  disabled={questions.length === 0}
+                  onSelect={handleDownloadDocx}
+                >
+                  <Download className="mr-2 h-4 w-4" /> Download .docx
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onSelect={async () => {
-                    try {
-                      await exportTosDocx({
-                        meta: {
-                          title: assessment.title,
-                          subject: assessment.subject,
-                          level: assessment.level,
-                          syllabus_code: assessment.syllabus_code ?? null,
-                          duration_minutes: assessment.duration_minutes,
-                          total_marks: assessment.total_marks,
-                          total_actual: totalActual,
-                          assessment_type: assessment.assessment_type ?? "scratch",
-                          instructions: assessment.instructions ?? null,
-                          ao_targets_confirmed: aoTargetsConfirmed,
-                        },
-                        coverage,
-                        sections: sectionedBlueprint.sections.map((s) => ({
-                          id: s.id,
-                          letter: s.letter,
-                          name: s.name ?? null,
-                          question_type: s.question_type,
-                          num_questions: s.num_questions,
-                          marks: s.marks,
-                        })),
-                        questions: questions.map((q) => ({
-                          position: q.position,
-                          question_type: q.question_type,
-                          topic: q.topic,
-                          bloom_level: q.bloom_level,
-                          difficulty: q.difficulty,
-                          marks: q.marks,
-                          stem: q.stem,
-                          ao_codes: q.ao_codes ?? [],
-                          knowledge_outcomes: q.knowledge_outcomes ?? [],
-                          learning_outcomes: q.learning_outcomes ?? [],
-                        })),
-                      });
-                      toast.success("Downloaded TOS .docx");
-                    } catch (e) {
-                      toast.error("TOS export failed");
-                      console.error(e);
-                    }
-                  }}
+                  disabled={questions.length === 0}
+                  onSelect={handleDownloadTosXlsx}
                 >
-                  Word (.docx)
+                  <Download className="mr-2 h-4 w-4" /> Download TOS (Excel)
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={questions.length === 0}
+                  onSelect={handleDownloadTosDocx}
+                >
+                  <Download className="mr-2 h-4 w-4" /> Download TOS (Word)
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setInviteOpen(true)}>
+                  <UserPlus className="mr-2 h-4 w-4" /> Invite reviewer
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button variant="outline" size="sm" className="gap-1" onClick={() => setInviteOpen(true)}>
-              <UserPlus className="h-4 w-4" /> Invite reviewer
-            </Button>
+
             <Select value={assessment.status} onValueChange={setStatus}>
-              <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-[140px] sm:w-[150px]"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="draft">Draft</SelectItem>
                 <SelectItem value="in_review">In review</SelectItem>
