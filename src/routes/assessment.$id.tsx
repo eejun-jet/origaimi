@@ -1055,6 +1055,19 @@ function EditorPage() {
               </TabsList>
 
               <TabsContent value="coverage" className="mt-4 space-y-4">
+                {assessment.assessment_type === "past_paper_analysis" && (
+                  <BlueprintTargetsCard
+                    assessmentId={id}
+                    totalMarks={assessment.total_marks}
+                    aoDefs={aoDefs}
+                    observedAoCodes={Array.from(
+                      new Set(questions.flatMap((q) => q.ao_codes ?? [])),
+                    )}
+                    initialOverrides={Object.keys(aoOverrides).length > 0 ? aoOverrides : null}
+                    initialConfirmed={aoTargetsConfirmed}
+                    onSaved={() => loadAll()}
+                  />
+                )}
                 <CoveragePanel
                   assessmentId={id}
                   coverage={coverage}
