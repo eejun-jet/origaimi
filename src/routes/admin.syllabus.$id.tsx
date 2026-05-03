@@ -166,6 +166,7 @@ function SyllabusReview() {
         syllabus_year: doc.syllabus_year,
         subject: doc.subject,
         level: doc.level,
+        skills_outcomes: doc.skills_outcomes ?? [],
       }).eq("id", id);
       if (dErr) throw dErr;
 
