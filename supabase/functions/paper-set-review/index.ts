@@ -85,7 +85,7 @@ Deno.serve(async (req) => {
 
     const { data: setRow, error: setErr } = await supabase
       .from("paper_sets")
-      .select("id,user_id,title,subject,level,syllabus_doc_id")
+      .select("id,user_id,title,subject,level,syllabus_doc_id,scoped_disciplines")
       .eq("id", set_id)
       .single();
     if (setErr || !setRow) {
