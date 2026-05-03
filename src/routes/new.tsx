@@ -316,7 +316,7 @@ function NewAssessment() {
       setTopics(fallbackTopics.slice());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [useSyllabus, selectableSyllabusTopics.length, fallbackTopics.length]);
+  }, [useSyllabus, selectableSyllabusTopics, fallbackTopics, activeSection]);
 
   // Step 2.5 — Objectives (AOs / KOs / LOs).
   // Globally chosen targets the paper must hit; each section can later narrow them.

@@ -21,7 +21,6 @@ import {
   PageNumber,
   ImageRun,
 } from "docx";
-import { saveAs } from "file-saver";
 import { toSectioned, getSbqSkill, type Section } from "@/lib/sections";
 
 export type ExportQuestion = {
@@ -118,6 +117,13 @@ type FetchedDiagram = {
   height: number;
   caption: string | null;
 };
+
+async function saveDocxBlob(blob: Blob, filename: string) {
+  const mod = await import("file-saver");
+  const save = (mod as any).saveAs ?? (mod as any).default?.saveAs ?? (mod as any).default;
+  if (typeof save !== "function") throw new Error("Document download helper could not be loaded");
+  save(blob, filename);
+}
 
 async function fetchDiagram(url: string, caption: string | null): Promise<FetchedDiagram | null> {
   try {
@@ -476,5 +482,5 @@ export async function exportAssessmentDocx(
 
   const blob = await Packer.toBlob(doc);
   const safeTitle = assessment.title.replace(/[^a-z0-9-_ ]+/gi, "").trim() || "assessment";
-  saveAs(blob, `${safeTitle}.docx`);
+  await saveDocxBlob(blob, `${safeTitle}.docx`);
 }
