@@ -2696,7 +2696,7 @@ function CoveragePanel({
   const uncoveredLOs = paper.los.filter((l) => !l.covered);
   const [target, setTarget] = useState<CoverageTarget | null>(null);
   const isScience = isScienceSubject(subject);
-  const [loView, setLoView] = useState<"topic" | "map" | "list">(isScience ? "topic" : "list");
+  const [loView, setLoView] = useState<"topic" | "map" | "list">("list");
   const topicsMap = useMemo(() => buildTopicsMap(paper.los, sections), [paper.los, sections]);
 
   // Card-level open/closed state, persisted per assessment.
