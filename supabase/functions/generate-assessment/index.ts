@@ -1708,7 +1708,7 @@ Deno.serve(async (req) => {
           // (e.g. 3× nationalarchives.gov.uk, 3× ushmm.org). Without this guard
           // the SBQ pool shipped with all sources from one or two domains —
           // teachers complained that source diversity was missing.
-          const curatedAll = curatedHumanitiesSourcePool(sectionTopic.topic, sectionTopic.learning_outcomes ?? []);
+          const curatedAll = curatedHumanitiesSourcePool(sectionTopic.topic, sectionTopic.learning_outcomes ?? [], section.knowledge_outcomes ?? []);
           const curatedSeed: typeof curatedAll = [];
           const seenSeedHosts = new Set<string>();
           // Pass 1: take one source per distinct host, in bundle order.
