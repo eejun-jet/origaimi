@@ -215,6 +215,7 @@ export type Database = {
           item_sources: Json | null
           level: string
           question_types: Json | null
+          scoped_disciplines: string[] | null
           status: string
           subject: string
           syllabus_code: string | null
@@ -236,6 +237,7 @@ export type Database = {
           item_sources?: Json | null
           level: string
           question_types?: Json | null
+          scoped_disciplines?: string[] | null
           status?: string
           subject: string
           syllabus_code?: string | null
@@ -257,6 +259,7 @@ export type Database = {
           item_sources?: Json | null
           level?: string
           question_types?: Json | null
+          scoped_disciplines?: string[] | null
           status?: string
           subject?: string
           syllabus_code?: string | null
@@ -365,6 +368,7 @@ export type Database = {
           id: string
           level: string | null
           notes: string | null
+          scoped_disciplines: string[] | null
           subject: string | null
           syllabus_doc_id: string | null
           title: string
@@ -376,6 +380,7 @@ export type Database = {
           id?: string
           level?: string | null
           notes?: string | null
+          scoped_disciplines?: string[] | null
           subject?: string | null
           syllabus_doc_id?: string | null
           title: string
@@ -387,6 +392,7 @@ export type Database = {
           id?: string
           level?: string | null
           notes?: string | null
+          scoped_disciplines?: string[] | null
           subject?: string | null
           syllabus_doc_id?: string | null
           title?: string
