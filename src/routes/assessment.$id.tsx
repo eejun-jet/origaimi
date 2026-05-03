@@ -113,9 +113,12 @@ type Assessment = {
   instructions: string | null;
   syllabus_doc_id: string | null;
   syllabus_code?: string | null;
+  syllabus_paper_id?: string | null;
   assessment_type?: string | null;
   scoped_disciplines?: string[] | null;
 };
+
+type SyllabusPaperInfo = { paper_number: string | null; paper_code: string | null };
 
 type AODef = { code: string; title: string | null; weighting_percent: number | null };
 
