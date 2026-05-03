@@ -382,6 +382,14 @@ export async function exportAssessmentDocx(
         body.push(p(section.instructions, { align: AlignmentType.CENTER, size: 22, spacingAfter: 240 }));
       }
     }
+    // Render the SBQ shared source pool ONCE under the section header.
+    const isSbq = section?.question_type === "source_based";
+    const firstWithSrc = isSbq ? items.find((q) => !!q.source_excerpt) : null;
+    if (firstWithSrc?.source_excerpt) {
+      const parsed = parseExportSourcePool(firstWithSrc.source_excerpt);
+      sourceParagraphs(parsed).forEach((para) => body.push(para));
+      body.push(new Paragraph({ spacing: { after: 200 }, children: [new TextRun({ text: "" })] }));
+    }
     items.forEach((q) => {
       runningQ += 1;
       body.push(questionRow(runningQ, q, diagramMap.get(q.position) ?? null));
