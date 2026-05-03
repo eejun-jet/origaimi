@@ -60,6 +60,7 @@ type Topic = {
   depth: number;
   position: number;
   section: string | null;
+  ko_content: Record<string, string[]>;
 };
 
 type AO = {
