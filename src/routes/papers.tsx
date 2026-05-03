@@ -229,7 +229,7 @@ function UploadForm({ userId, onUploaded }: { userId?: string; onUploaded: () =>
     <form onSubmit={handleSubmit} className="rounded-xl border border-border bg-card p-5">
       <h2 className="font-paper text-lg font-semibold">Upload past paper</h2>
       <p className="mt-1 text-xs text-muted-foreground">
-        PDF. We'll extract figures and topic tags so the generator can reuse them.
+        PDF or Word (.docx). We'll extract figures and topic tags so the generator can reuse them.
       </p>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
