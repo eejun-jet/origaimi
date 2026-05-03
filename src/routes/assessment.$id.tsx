@@ -3032,6 +3032,15 @@ function CoveragePanel({
 
   return (
     <>
+      {disciplineUniverse.length >= 2 && (
+        <DisciplineScopeStrip
+          universe={disciplineUniverse}
+          inScope={inScope}
+          override={scopedDisciplines}
+          onChange={onScopeChange}
+        />
+      )}
+
       {/* Paper overview */}
       <div className="rounded-xl border border-border bg-card p-5">
         <h3 className="font-medium">Paper overview</h3>
