@@ -1378,6 +1378,17 @@ function SectionCard({
       const key = trimmed.toLowerCase();
       if (!seen.has(key)) seen.set(key, trimmed);
     };
+    // SS papers: only the three Issues are valid KOs. Don't merge in topic-pool
+    // outcome_categories (which include generic "Knowledge"/"Skills"/"Values"
+    // buckets) or stale globalKos that came from non-SS topics.
+    const isSocialStudiesKos =
+      availableKos.length > 0 && availableKos.every((k) => /^issue\s*\d/i.test(k));
+    if (isSocialStudiesKos) {
+      for (const c of availableKos) add(c);
+      // Preserve any already-selected SS issue on the section.
+      for (const c of sectionKos) if (/^issue\s*\d/i.test(c)) add(c);
+      return Array.from(seen.values());
+    }
     for (const t of section.topic_pool) {
       for (const c of t.outcome_categories ?? []) add(c);
     }
