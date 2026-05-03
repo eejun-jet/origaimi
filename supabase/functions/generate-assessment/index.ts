@@ -1453,7 +1453,7 @@ Deno.serve(async (req) => {
     const userId = bodyUserId ?? "00000000-0000-0000-0000-000000000001";
 
     const fallbackTypes = Array.isArray(questionTypes) ? questionTypes : [];
-    const sections = toSections(blueprint, "structured", fallbackTypes);
+    let sections = toSections(blueprint, "structured", fallbackTypes);
     if (sections.length === 0) {
         await markAssessmentStatus("generation_failed");
         return new Response(JSON.stringify({ error: "Blueprint has no sections" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -1461,6 +1461,18 @@ Deno.serve(async (req) => {
 
     const subjectKind = classifySubject(subject);
     const scienceMathKind = classifyScienceMath(subject);
+    const isSSPaper = isSocialStudiesAssessment(subject, paperCode, syllabusCode);
+    if (isSSPaper) {
+      const masterPool = sections.flatMap((s) => s.topic_pool ?? []);
+      const base = sections[0] ?? { letter: "A", topic_pool: [] } as Section;
+      const sourceBased = sections.find((s) => s.question_type === "source_based");
+      const srq = sections.find((s) => s.question_type === "long");
+      const defaultSkills = ["inference", "comparison", "reliability", "purpose", "assertion"];
+      sections = [
+        { ...base, ...(sourceBased ?? {}), letter: "A", name: sourceBased?.name ?? "Source-Based Case Study", question_type: "source_based", marks: 35, num_questions: 5, topic_pool: (sourceBased?.topic_pool?.length ? sourceBased.topic_pool : masterPool), sbq_skills: sourceBased?.sbq_skills?.length ? sourceBased.sbq_skills : defaultSkills, sbq_skill: undefined },
+        { ...base, ...(srq ?? {}), letter: "B", name: srq?.name ?? "Structured Response Questions", question_type: "long", marks: 15, num_questions: 2, topic_pool: (srq?.topic_pool?.length ? srq.topic_pool : masterPool), sbq_skills: undefined, sbq_skill: undefined },
+      ];
+    }
 
     // Fetch past-paper exemplars once for the whole paper (style anchor).
     let exemplarBlock = "";
