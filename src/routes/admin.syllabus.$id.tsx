@@ -18,6 +18,8 @@ export const Route = createFileRoute("/admin/syllabus/$id")({
   head: () => ({ meta: [{ title: "Review syllabus · origAImi" }] }),
 });
 
+type SkillsOutcome = { code: string; statement: string };
+
 type Doc = {
   id: string;
   title: string;
@@ -28,6 +30,7 @@ type Doc = {
   subject: string | null;
   level: string | null;
   parse_status: string;
+  skills_outcomes: SkillsOutcome[];
 };
 
 type Paper = {
