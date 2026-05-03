@@ -620,3 +620,61 @@ function MacroSummaryPanel({ review, running }: { review: ReviewSnapshot | null;
     </div>
   );
 }
+
+function PaperSetScopeStrip({
+  universe,
+  inScope,
+  override,
+  onChange,
+}: {
+  universe: string[];
+  inScope: Set<string> | null;
+  override: string[] | null;
+  onChange: (next: string[] | null) => void | Promise<void>;
+}) {
+  const isAuto = !override || override.length === 0;
+  const active = (d: string) => (inScope ? inScope.has(d) : true);
+  const toggle = (d: string) => {
+    const current = new Set(universe.filter(active));
+    if (current.has(d)) current.delete(d);
+    else current.add(d);
+    if (current.size === 0) return;
+    onChange(Array.from(current));
+  };
+  return (
+    <div className="rounded-lg border border-border bg-card p-3 text-xs">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-medium text-foreground">Scope:</span>
+        {universe.map((d) => {
+          const on = active(d);
+          return (
+            <button
+              key={d}
+              type="button"
+              onClick={() => toggle(d)}
+              className={`rounded-full border px-2 py-0.5 transition ${
+                on
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "border-border bg-muted/30 text-muted-foreground hover:bg-muted"
+              }`}
+              title={on ? `${d} is in scope — click to exclude` : `${d} excluded — click to include`}
+            >
+              {on ? "✓ " : ""}{d}
+            </button>
+          );
+        })}
+        <span className="ml-auto text-muted-foreground">
+          {isAuto ? "Auto-detected from question tags" : "Manual override"}
+        </span>
+        {!isAuto && (
+          <button type="button" onClick={() => onChange(null)} className="text-primary hover:underline">
+            Reset to auto
+          </button>
+        )}
+      </div>
+      <p className="mt-1 text-[11px] text-muted-foreground">
+        Untested disciplines are hidden from KO / LO coverage and "Untested" flags.
+      </p>
+    </div>
+  );
+}
