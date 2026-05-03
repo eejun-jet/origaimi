@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { AppHeader } from "@/components/AppHeader";
@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SUBJECTS, LEVELS } from "@/lib/syllabus";
-import { Loader2, Layers } from "lucide-react";
+import { Loader2, Layers, Upload, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/paper-set/new")({
@@ -49,6 +49,8 @@ function PaperSetNew() {
   const [papers, setPapers] = useState<PaperRow[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     (async () => {
@@ -60,19 +62,30 @@ function PaperSetNew() {
     })();
   }, []);
 
+  const loadPapers = async () => {
+    let q = supabase
+      .from("past_papers")
+      .select("id,title,subject,level,paper_number,year,parse_status")
+      .order("created_at", { ascending: false });
+    if (subject) q = q.eq("subject", subject);
+    if (level) q = q.eq("level", level);
+    const { data } = await q;
+    setPapers((data as PaperRow[]) ?? []);
+  };
+
   useEffect(() => {
-    (async () => {
-      let q = supabase
-        .from("past_papers")
-        .select("id,title,subject,level,paper_number,year,parse_status")
-        .eq("parse_status", "ready")
-        .order("created_at", { ascending: false });
-      if (subject) q = q.eq("subject", subject);
-      if (level) q = q.eq("level", level);
-      const { data } = await q;
-      setPapers((data as PaperRow[]) ?? []);
-    })();
+    loadPapers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subject, level]);
+
+  // Poll while any selected/recent paper is still parsing.
+  useEffect(() => {
+    const anyPending = papers.some((p) => p.parse_status === "pending" || p.parse_status === "processing");
+    if (!anyPending) return;
+    const t = setInterval(loadPapers, 4000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [papers]);
 
   // Auto-pick syllabus doc when only one matches subject+level.
   const matchedDocs = useMemo(
@@ -92,15 +105,88 @@ function PaperSetNew() {
     });
   };
 
-  const canSave = title.trim().length > 0 && subject && level && selected.size >= 2 && !saving;
+  const handleFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    if (!subject || !level) {
+      toast.error("Pick subject and level first — uploaded papers inherit those tags.");
+      return;
+    }
+    const list = Array.from(files);
+    const valid = list.filter((f) => {
+      const n = f.name.toLowerCase();
+      return n.endsWith(".pdf") || n.endsWith(".docx");
+    });
+    if (valid.length === 0) {
+      toast.error("Only PDF or .docx files are supported");
+      return;
+    }
+    setUploading(true);
+    const newIds: string[] = [];
+    try {
+      for (const file of valid) {
+        const ext = file.name.split(".").pop() || "pdf";
+        const baseTitle = file.name.replace(/\.(pdf|docx)$/i, "");
+        const key = `${user?.id ?? "trial"}/${crypto.randomUUID()}.${ext}`;
+        const up = await supabase.storage.from("papers").upload(key, file, {
+          contentType: file.type || (ext === "docx"
+            ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            : "application/pdf"),
+          upsert: false,
+        });
+        if (up.error) {
+          toast.error(`${file.name}: ${up.error.message}`);
+          continue;
+        }
+        const { data: inserted, error: iErr } = await supabase
+          .from("past_papers")
+          .insert({
+            user_id: user?.id ?? "00000000-0000-0000-0000-000000000001",
+            title: baseTitle,
+            subject,
+            level,
+            year: null,
+            paper_number: null,
+            exam_board: "MOE",
+            file_path: key,
+            parse_status: "pending",
+          })
+          .select("id")
+          .single();
+        if (iErr || !inserted) {
+          toast.error(`${file.name}: ${iErr?.message ?? "insert failed"}`);
+          continue;
+        }
+        const id = (inserted as { id: string }).id;
+        newIds.push(id);
+        supabase.functions
+          .invoke("parse-paper", { body: { paperId: id } })
+          .catch((err) => console.warn("parse-paper invocation error", err));
+      }
+      if (newIds.length > 0) {
+        toast.success(`Uploaded ${newIds.length} paper${newIds.length > 1 ? "s" : ""} — parsing in background. They'll be selectable once ready.`);
+        setSelected((s) => {
+          const n = new Set(s);
+          newIds.forEach((id) => n.add(id));
+          return n;
+        });
+        await loadPapers();
+      }
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  const readySelected = papers.filter((p) => selected.has(p.id) && p.parse_status === "ready").length;
+  const canSave = title.trim().length > 0 && subject && level && readySelected >= 2 && !saving;
 
   const save = async () => {
     if (!user) {
       toast.error("Please sign in.");
       return;
     }
-    if (selected.size < 2) {
-      toast.error("Pick at least two papers — a single paper already has its own coverage view.");
+    if (readySelected < 2) {
+      toast.error("Pick at least two papers that have finished parsing.");
       return;
     }
     setSaving(true);
@@ -122,7 +208,9 @@ function PaperSetNew() {
       return;
     }
     const setId = (setRow as { id: string }).id;
-    const orderedIds = Array.from(selected);
+    const orderedIds = papers
+      .filter((p) => selected.has(p.id) && p.parse_status === "ready")
+      .map((p) => p.id);
     const links = orderedIds.map((paper_id, position) => ({ set_id: setId, paper_id, position }));
     const { error: lErr } = await supabase.from("paper_set_papers").insert(links);
     if (lErr) {
@@ -203,33 +291,78 @@ function PaperSetNew() {
 
         <section className="rounded-lg border border-border bg-card p-5 space-y-3">
           <div className="flex items-baseline justify-between">
+            <h2 className="text-lg font-medium">Upload papers for this set</h2>
+            <span className="text-xs text-muted-foreground">PDF or .docx · multi-select</span>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Drop the full set in here — e.g. all four Combined Science papers. Each paper is parsed
+            in the background; once ready it's auto-selected for the set.
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              multiple
+              className="hidden"
+              onChange={(e) => handleFiles(e.target.files)}
+            />
+            <Button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading || !subject || !level}
+              className="gap-2"
+            >
+              {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              {uploading ? "Uploading…" : "Upload papers"}
+            </Button>
+            {(!subject || !level) && (
+              <span className="text-xs text-muted-foreground">Pick subject and level above first.</span>
+            )}
+            <Button type="button" variant="ghost" size="sm" onClick={loadPapers} className="ml-auto gap-1">
+              <RefreshCw className="h-3.5 w-3.5" /> Refresh
+            </Button>
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-border bg-card p-5 space-y-3">
+          <div className="flex items-baseline justify-between">
             <h2 className="text-lg font-medium">Papers in this set</h2>
-            <span className="text-sm text-muted-foreground">{selected.size} selected</span>
+            <span className="text-sm text-muted-foreground">
+              {readySelected} of {selected.size} selected ready
+            </span>
           </div>
           {!subject || !level ? (
             <p className="text-sm text-muted-foreground">Pick a subject and level above to see your parsed papers.</p>
           ) : papers.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No parsed papers found for {subject} · {level}. <Link to="/papers" className="text-primary underline">Upload papers</Link> first.
+              No papers found for {subject} · {level}. Upload above, or <Link to="/papers" className="text-primary underline">manage papers</Link>.
             </p>
           ) : (
             <ul className="divide-y divide-border">
-              {papers.map((p) => (
-                <li key={p.id} className="flex items-center gap-3 py-2">
-                  <Checkbox
-                    checked={selected.has(p.id)}
-                    onCheckedChange={() => toggle(p.id)}
-                    id={`pp-${p.id}`}
-                  />
-                  <label htmlFor={`pp-${p.id}`} className="flex-1 cursor-pointer">
-                    <div className="text-sm font-medium">{p.title}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {[p.year, p.paper_number ? `Paper ${p.paper_number}` : null].filter(Boolean).join(" · ")}
-                    </div>
-                  </label>
-                  <Badge variant="secondary">ready</Badge>
-                </li>
-              ))}
+              {papers.map((p) => {
+                const ready = p.parse_status === "ready";
+                const failed = p.parse_status === "failed";
+                return (
+                  <li key={p.id} className="flex items-center gap-3 py-2">
+                    <Checkbox
+                      checked={selected.has(p.id)}
+                      onCheckedChange={() => toggle(p.id)}
+                      disabled={!ready}
+                      id={`pp-${p.id}`}
+                    />
+                    <label htmlFor={`pp-${p.id}`} className={`flex-1 ${ready ? "cursor-pointer" : "cursor-not-allowed opacity-70"}`}>
+                      <div className="text-sm font-medium">{p.title}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {[p.year, p.paper_number ? `Paper ${p.paper_number}` : null].filter(Boolean).join(" · ") || "—"}
+                      </div>
+                    </label>
+                    <Badge variant={ready ? "secondary" : failed ? "destructive" : "outline"}>
+                      {ready ? "ready" : failed ? "failed" : "parsing…"}
+                    </Badge>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>
