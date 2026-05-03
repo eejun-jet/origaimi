@@ -88,7 +88,16 @@ export function BuilderUploadCard({
       return;
     }
     if (!file) {
-      toast.error("Pick a PDF first");
+      toast.error("Pick a PDF or .docx first");
+      return;
+    }
+    const lowerName = file.name.toLowerCase();
+    const isPdf = file.type === "application/pdf" || lowerName.endsWith(".pdf");
+    const isDocx =
+      file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      lowerName.endsWith(".docx");
+    if (!isPdf && !isDocx) {
+      toast.error("Only PDF or .docx files are supported");
       return;
     }
     if (!title.trim()) {
