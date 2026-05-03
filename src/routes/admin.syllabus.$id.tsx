@@ -109,7 +109,7 @@ function SyllabusReview() {
       supabase.from("syllabus_topics").select("*").eq("source_doc_id", id).order("position", { ascending: true }),
       supabase.from("syllabus_assessment_objectives").select("*").eq("source_doc_id", id).order("position", { ascending: true }),
     ]);
-    setDoc(d as Doc);
+    setDoc(d ? { ...(d as unknown as Doc), skills_outcomes: normaliseSkillsOutcomes((d as { skills_outcomes?: unknown }).skills_outcomes) } : null);
     setPapers((ps as Paper[]) ?? []);
     setTopics((ts as Topic[]) ?? []);
     setAos((aoData as AO[]) ?? []);
