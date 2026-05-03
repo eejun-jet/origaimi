@@ -347,6 +347,10 @@ function NewAssessment() {
   // rather than forcing a fixed bucket list.
   const availableKos = useMemo(() => {
     if (!useSyllabus) return [] as string[];
+    // For Social Studies (2260/2261/2262), the only valid KO categories are
+    // the three Issues. Topics may carry generic "Knowledge"/"Skills"/"Values"
+    // bucket labels — those must NOT appear as KO checkboxes.
+    if (socialStudiesPaper) return DEFAULT_SOCIAL_STUDIES_KOS.slice();
     const seen = new Map<string, string>(); // lower -> original casing
     for (const t of selectableSyllabusTopics) {
       if (!selectedTopicIds.includes(t.id)) continue;
@@ -358,7 +362,7 @@ function NewAssessment() {
       }
     }
     return Array.from(seen.values());
-  }, [useSyllabus, selectableSyllabusTopics, selectedTopicIds]);
+  }, [useSyllabus, socialStudiesPaper, selectableSyllabusTopics, selectedTopicIds]);
 
   // Reset objective picks whenever topics change, keeping any custom LOs the
   // teacher typed (anything not in derivedLos is preserved as custom).
