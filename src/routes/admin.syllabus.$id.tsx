@@ -366,6 +366,92 @@ function SyllabusReview() {
           </div>
         </Card>
 
+        {/* Skills Outcomes — cross-cutting, paper-wide. Mainly for Social Studies. */}
+        <Card className="mb-6 p-4">
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-medium">Skills Outcomes</h2>
+              <p className="text-xs text-muted-foreground">
+                Cross-cutting skills (e.g. Social Studies SO1–SO4). Apply to every Issue and question in this syllabus, not per-topic.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setDoc((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        skills_outcomes: [
+                          ...(prev.skills_outcomes ?? []),
+                          { code: `SO${(prev.skills_outcomes?.length ?? 0) + 1}`, statement: "" },
+                        ],
+                      }
+                    : prev,
+                )
+              }
+            >
+              <Plus className="mr-2 h-4 w-4" /> Add SO
+            </Button>
+          </div>
+          {(doc.skills_outcomes?.length ?? 0) === 0 ? (
+            <p className="text-xs italic text-muted-foreground">
+              None defined. Add 3–6 skills outcomes if this syllabus uses cross-cutting skills instead of per-topic LOs.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {doc.skills_outcomes.map((so, idx) => (
+                <div key={idx} className="grid grid-cols-1 gap-2 rounded-md border border-border p-2 sm:grid-cols-12">
+                  <div className="sm:col-span-2">
+                    <Label className="text-xs">Code</Label>
+                    <Input
+                      className="font-mono"
+                      value={so.code}
+                      onChange={(e) =>
+                        setDoc((prev) =>
+                          prev
+                            ? { ...prev, skills_outcomes: prev.skills_outcomes.map((x, i) => (i === idx ? { ...x, code: e.target.value } : x)) }
+                            : prev,
+                        )
+                      }
+                    />
+                  </div>
+                  <div className="sm:col-span-9">
+                    <Label className="text-xs">Statement</Label>
+                    <Textarea
+                      rows={2}
+                      className="text-xs"
+                      value={so.statement}
+                      onChange={(e) =>
+                        setDoc((prev) =>
+                          prev
+                            ? { ...prev, skills_outcomes: prev.skills_outcomes.map((x, i) => (i === idx ? { ...x, statement: e.target.value } : x)) }
+                            : prev,
+                        )
+                      }
+                      placeholder="examine societal issues critically by gathering, interpreting, analysing and evaluating information…"
+                    />
+                  </div>
+                  <div className="flex items-end justify-end sm:col-span-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        setDoc((prev) =>
+                          prev ? { ...prev, skills_outcomes: prev.skills_outcomes.filter((_, i) => i !== idx) } : prev,
+                        )
+                      }
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+
         {/* Paper switcher */}
         {papers.length > 0 && (
           <Card className="mb-4 p-3">
