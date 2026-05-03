@@ -35,7 +35,50 @@ export type ExportQuestion = {
   options: string[] | null;
   answer: string | null;
   mark_scheme: string | null;
+  diagram_url?: string | null;
+  diagram_caption?: string | null;
 };
+
+type FetchedDiagram = {
+  data: ArrayBuffer;
+  type: "png" | "jpg" | "gif" | "bmp";
+  width: number;
+  height: number;
+  caption: string | null;
+};
+
+async function fetchDiagram(url: string, caption: string | null): Promise<FetchedDiagram | null> {
+  try {
+    const res = await fetch(url, { mode: "cors" });
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    const data = await blob.arrayBuffer();
+    const mime = (blob.type || "").toLowerCase();
+    let type: FetchedDiagram["type"] = "png";
+    if (mime.includes("jpeg") || mime.includes("jpg")) type = "jpg";
+    else if (mime.includes("gif")) type = "gif";
+    else if (mime.includes("bmp")) type = "bmp";
+    else if (mime.includes("svg")) return null; // docx-js ImageRun svg requires fallback; skip
+    // Probe natural dimensions to preserve aspect ratio
+    const dims = await new Promise<{ w: number; h: number }>((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve({ w: img.naturalWidth || 480, h: img.naturalHeight || 320 });
+      img.onerror = () => resolve({ w: 480, h: 320 });
+      img.src = URL.createObjectURL(blob);
+    });
+    const maxW = 480;
+    const ratio = dims.w > 0 ? Math.min(1, maxW / dims.w) : 1;
+    return {
+      data,
+      type,
+      width: Math.round(dims.w * ratio),
+      height: Math.round(dims.h * ratio),
+      caption,
+    };
+  } catch {
+    return null;
+  }
+}
 
 export type ExportAssessment = {
   title: string;
