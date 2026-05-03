@@ -254,8 +254,13 @@ function PaperSetView() {
         map.set(k, row);
       }
     }
-    return Array.from(map.values()).sort((a, b) => a.lo.localeCompare(b.lo));
-  }, [flatQuestions, topics]);
+    const all = Array.from(map.values()).sort((a, b) => a.lo.localeCompare(b.lo));
+    if (!inScope) return all;
+    return all.filter((r) => {
+      const d = discLookup.byLO.get(r.lo);
+      return !d || inScope.has(d);
+    });
+  }, [flatQuestions, topics, inScope, discLookup]);
 
   const perPaper = useMemo(() => {
     return papers.map((p) => {
