@@ -914,6 +914,13 @@ function buildDeterministicSbqQuestions(
     }
 
     const scheme = skill?.markScheme ?? SBQ_SKILLS.inference.markScheme;
+    // Per-skill AO is the SEAB AO3 sub-objective (AO3.2 inference, AO3.3
+    // comparison, AO3.4 reliability/surprise, AO3.5 purpose, AO3.6 utility,
+    // AO3.7 assertion). Combine with the section's wider AO pool.
+    const skillAO = SBQ_SKILL_AO[skillId];
+    const aoSet = new Set<string>(sectionAOs);
+    if (skillAO) aoSet.add(skillAO);
+    const aoCodes = Array.from(aoSet);
 
     return {
       question_type: "source_based",
@@ -923,6 +930,9 @@ function buildDeterministicSbqQuestions(
       marks,
       stem: intro + prompt,
       options: null,
+      ao_codes: aoCodes,
+      knowledge_outcomes: sectionKOs,
+      learning_outcomes: sectionAllLOs,
       answer,
       mark_scheme: scheme,
     };
