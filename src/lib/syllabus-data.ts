@@ -15,6 +15,8 @@ export type SyllabusLibraryPaper = {
   assessmentMode: string | null;
 };
 
+export type SkillsOutcome = { code: string; statement: string };
+
 export type SyllabusLibraryDoc = {
   id: string;
   title: string;
@@ -24,7 +26,32 @@ export type SyllabusLibraryDoc = {
   syllabusYear: number | null;
   parseStatus: string;
   papers: SyllabusLibraryPaper[];
+  skillsOutcomes: SkillsOutcome[];
 };
+
+export function normaliseSkillsOutcomes(raw: unknown): SkillsOutcome[] {
+  if (!Array.isArray(raw)) return [];
+  const out: SkillsOutcome[] = [];
+  for (const r of raw) {
+    if (!r || typeof r !== "object") continue;
+    const code = (r as { code?: unknown }).code;
+    const statement = (r as { statement?: unknown }).statement;
+    if (typeof code === "string" && typeof statement === "string" && code.trim() && statement.trim()) {
+      out.push({ code: code.trim(), statement: statement.trim() });
+    }
+  }
+  return out;
+}
+
+export async function loadDocSkillsOutcomes(docId: string): Promise<SkillsOutcome[]> {
+  const { data, error } = await supabase
+    .from("syllabus_documents")
+    .select("skills_outcomes")
+    .eq("id", docId)
+    .single();
+  if (error) throw error;
+  return normaliseSkillsOutcomes((data as { skills_outcomes?: unknown } | null)?.skills_outcomes);
+}
 
 export async function loadSyllabusLibrary(): Promise<SyllabusLibraryDoc[]> {
   const { data: docs, error: docsErr } = await supabase
