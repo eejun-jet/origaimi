@@ -2060,6 +2060,7 @@ function disciplineStyle(name: string | null | undefined): DisciplineStyle {
 function buildTopicsMap(
   paperLOs: Coverage["paper"]["los"],
   sections: Section[],
+  inScope: Set<string> | null = null,
 ): TopicsMap {
   // (discipline, topicTitle) → Map<loText, {covered, actual}>
   const grouped = new Map<string, Map<string, Map<string, { covered: boolean; actual: number }>>>();
@@ -2069,6 +2070,9 @@ function buildTopicsMap(
   const place = (discipline: string, topicTitle: string, loText: string) => {
     const stat = loStats.get(loText);
     if (!stat) return; // LO not in paper rollup → skip
+    // Discipline scoping: drop LOs that belong to out-of-scope disciplines
+    // (e.g. Biology when only Physics + Chemistry are tested).
+    if (inScope && !inScope.has(discipline)) return;
     if (!grouped.has(discipline)) grouped.set(discipline, new Map());
     const disc = grouped.get(discipline)!;
     if (!disc.has(topicTitle)) disc.set(topicTitle, new Map());
