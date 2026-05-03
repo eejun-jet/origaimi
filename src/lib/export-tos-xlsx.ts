@@ -70,6 +70,11 @@ export type TosTopicIndexEntry = {
   learning_outcomes: string[];
   outcome_categories: string[];
   section: string | null;
+  /** Used as a KO fallback when outcome_categories is empty (e.g. Combined
+   *  Science syllabus topics carry no KO labels — the syllabus instead
+   *  groups LOs under strands like "Kinematics" or "Acids, Bases and Salts"). */
+  strand?: string | null;
+  sub_strand?: string | null;
 };
 
 function slug(s: string): string {
