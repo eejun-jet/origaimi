@@ -22,6 +22,7 @@ export type BuilderSnapshot = {
   subject: string | null;
   level: string | null;
   syllabusCode?: string | null;
+  syllabusDocId?: string | null;
   paperCode?: string | null;
   assessmentMode?: string | null; // "written" | "spoken" | "listening" | …
   totalMarks: number;
