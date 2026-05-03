@@ -1267,7 +1267,8 @@ type SectionCardProps = {
   visibleQuestionTypes: { id: string; label: string }[];
   subject: string;
   allAOs: AssessmentObjective[];
-  
+  availableSos?: SkillsOutcome[];
+
   globalAoCodes: string[];
   globalKos: string[];
   globalLos: string[];
@@ -1280,7 +1281,7 @@ type SectionCardProps = {
 
 function SectionCard({
   section, isFirst, isLast, masterPool, visibleQuestionTypes, subject,
-  allAOs, globalAoCodes, globalKos, globalLos,
+  allAOs, availableSos = [], globalAoCodes, globalKos, globalLos,
   specimenMix, specimenLabel,
   onUpdate, onRemove, onMove,
 }: SectionCardProps) {
