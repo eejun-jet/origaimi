@@ -1681,38 +1681,46 @@ function SectionCard({
                       checked={allChecked ? true : someChecked ? "indeterminate" : false}
                       onCheckedChange={() => onUpdate({ learning_outcomes: allChecked ? [] : loCandidates.slice() })}
                     />
-                    <span>{allChecked ? "Deselect all LOs" : "Select all LOs"}</span>
+                    <span>{allChecked ? `Deselect all ${usingSoFallback ? "SOs" : "LOs"}` : `Select all ${usingSoFallback ? "SOs" : "LOs"}`}</span>
                   </label>
                 );
               })()}
-              <LOGroupedSelector
-                topics={section.topic_pool.map((t, idx) => ({
-                  id: `${section.id}-topic-${idx}-${t.topic_code ?? t.topic}`,
-                  paperId: "",
-                  topicCode: t.topic_code ?? null,
-                  parentCode: null,
-                  title: t.topic,
-                  depth: 0,
-                  position: idx,
-                  strand: t.strand ?? null,
-                  subStrand: t.sub_strand ?? null,
-                  learningOutcomes: t.learning_outcomes ?? [],
-                  learningOutcomeCode: t.learning_outcome_code ?? null,
-                  suggestedBlooms: [],
-                  outcomeCategories: t.outcome_categories ?? [],
-                  aoCodes: t.ao_codes ?? [],
-                  section: t.section ?? null,
-                  koContent: {},
-                }))}
-                selected={sectionLos}
-                onToggle={(lo) => toggleLo(lo)}
-                onToggleMany={(los, select) => {
-                  const next = select
-                    ? Array.from(new Set([...sectionLos, ...los]))
-                    : sectionLos.filter((x) => !los.includes(x));
-                  onUpdate({ learning_outcomes: next });
-                }}
-              />
+              {usingSoFallback ? (
+                <SOFlatSelector
+                  items={loCandidates}
+                  selected={sectionLos}
+                  onToggle={(lo) => toggleLo(lo)}
+                />
+              ) : (
+                <LOGroupedSelector
+                  topics={section.topic_pool.map((t, idx) => ({
+                    id: `${section.id}-topic-${idx}-${t.topic_code ?? t.topic}`,
+                    paperId: "",
+                    topicCode: t.topic_code ?? null,
+                    parentCode: null,
+                    title: t.topic,
+                    depth: 0,
+                    position: idx,
+                    strand: t.strand ?? null,
+                    subStrand: t.sub_strand ?? null,
+                    learningOutcomes: t.learning_outcomes ?? [],
+                    learningOutcomeCode: t.learning_outcome_code ?? null,
+                    suggestedBlooms: [],
+                    outcomeCategories: t.outcome_categories ?? [],
+                    aoCodes: t.ao_codes ?? [],
+                    section: t.section ?? null,
+                    koContent: {},
+                  }))}
+                  selected={sectionLos}
+                  onToggle={(lo) => toggleLo(lo)}
+                  onToggleMany={(los, select) => {
+                    const next = select
+                      ? Array.from(new Set([...sectionLos, ...los]))
+                      : sectionLos.filter((x) => !los.includes(x));
+                    onUpdate({ learning_outcomes: next });
+                  }}
+                />
+              )}
             </>
           )}
           <div className="mt-2 flex gap-1.5">
