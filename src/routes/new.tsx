@@ -15,7 +15,9 @@ import {
 } from "@/lib/syllabus";
 import {
   loadSyllabusLibrary, loadPaperTopics, loadDocTopics, loadDocAssessmentObjectives,
+  loadDocSkillsOutcomes,
   type SyllabusLibraryDoc, type SyllabusLibraryPaper, type PaperTopic, type AssessmentObjective,
+  type SkillsOutcome,
 } from "@/lib/syllabus-data";
 import {
   type Section, type SectionTopic, type SectionedBlueprint, type DifficultyMix,
@@ -103,6 +105,7 @@ function NewAssessment() {
   const [selectedPaperKey, setSelectedPaperKey] = useState<string>(""); // `${docId}:${paperId}`
   const [paperTopics, setPaperTopics] = useState<PaperTopic[]>([]);
   const [docAOs, setDocAOs] = useState<AssessmentObjective[]>([]);
+  const [docSOs, setDocSOs] = useState<SkillsOutcome[]>([]);
   const [topicsLoading, setTopicsLoading] = useState(false);
   const [streamFilter, setStreamFilter] = useState<Stream>("standard");
 
@@ -198,6 +201,7 @@ function NewAssessment() {
     if (!selected) {
       setPaperTopics([]);
       setDocAOs([]);
+      setDocSOs([]);
       return;
     }
     const { doc, paper } = selected;
@@ -217,10 +221,12 @@ function NewAssessment() {
         return t;
       }),
       loadDocAssessmentObjectives(doc.id),
+      loadDocSkillsOutcomes(doc.id).catch(() => []),
     ])
-      .then(([t, aos]) => {
+      .then(([t, aos, sos]) => {
         setPaperTopics(t);
         setDocAOs(aos);
+        setDocSOs(sos);
       })
       .catch((e) => toast.error(e.message ?? "Could not load topics"))
       .finally(() => setTopicsLoading(false));
@@ -780,6 +786,9 @@ function NewAssessment() {
                   visibleQuestionTypes={visibleQuestionTypes}
                   subject={subject}
                   allAOs={docAOs}
+                  availableSos={
+                    /^social studies$/i.test(selected?.paper.componentName ?? "") ? docSOs : []
+                  }
 
                   globalAoCodes={selectedAoCodes}
                   globalKos={selectedKos}
@@ -1258,7 +1267,8 @@ type SectionCardProps = {
   visibleQuestionTypes: { id: string; label: string }[];
   subject: string;
   allAOs: AssessmentObjective[];
-  
+  availableSos?: SkillsOutcome[];
+
   globalAoCodes: string[];
   globalKos: string[];
   globalLos: string[];
@@ -1271,7 +1281,7 @@ type SectionCardProps = {
 
 function SectionCard({
   section, isFirst, isLast, masterPool, visibleQuestionTypes, subject,
-  allAOs, globalAoCodes, globalKos, globalLos,
+  allAOs, availableSos = [], globalAoCodes, globalKos, globalLos,
   specimenMix, specimenLabel,
   onUpdate, onRemove, onMove,
 }: SectionCardProps) {
@@ -1312,6 +1322,9 @@ function SectionCard({
   }, [section.topic_pool, globalKos, sectionKos]);
 
   // LO candidates: union of (a) LOs from this section's topic_pool, (b) global LOs, (c) anything already on the section.
+  // Fallback for syllabuses that publish only Skills Outcomes (e.g. Social
+  // Studies papers in 2260/2261/2262 — Paper 1) — surface SOs as picks so the
+  // box isn't empty.
   const loCandidates = useMemo(() => {
     const set = new Set<string>();
     for (const t of section.topic_pool) {
@@ -1320,10 +1333,20 @@ function SectionCard({
         if (v) set.add(v);
       }
     }
+    if (set.size === 0 && availableSos.length > 0) {
+      for (const so of availableSos) {
+        set.add(`${so.code}: ${so.statement}`);
+      }
+    }
     for (const lo of globalLos) set.add(lo);
     for (const lo of sectionLos) set.add(lo);
     return Array.from(set);
-  }, [section.topic_pool, globalLos, sectionLos]);
+  }, [section.topic_pool, globalLos, sectionLos, availableSos]);
+
+  const usingSoFallback = useMemo(() => {
+    if (availableSos.length === 0) return false;
+    return section.topic_pool.every((t) => (t.learning_outcomes ?? []).length === 0);
+  }, [section.topic_pool, availableSos]);
 
   const toggleAo = (code: string) => {
     const next = sectionAos.includes(code) ? sectionAos.filter((c) => c !== code) : [...sectionAos, code];
@@ -1634,9 +1657,16 @@ function SectionCard({
         {/* Learning Outcomes — grouped by topic, expandable */}
         <div className="mt-3 rounded-lg border border-border bg-muted/20 p-3">
           <div className="flex items-center justify-between">
-            <Label className="text-sm font-medium">Learning Outcomes (LOs)</Label>
+            <Label className="text-sm font-medium">
+              {usingSoFallback ? "Skills Outcomes (SO)" : "Learning Outcomes (LOs)"}
+            </Label>
             <span className="text-xs text-muted-foreground">{sectionLos.length} / {loCandidates.length} selected</span>
           </div>
+          {usingSoFallback && (
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              This syllabus paper defines Skills Outcomes (SO) instead of topic-level Learning Outcomes. Pick the SOs this section should target.
+            </p>
+          )}
           {loCandidates.length === 0 ? (
             <p className="mt-2 text-xs text-muted-foreground">No LOs available — add a custom one below.</p>
           ) : (
