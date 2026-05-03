@@ -24,6 +24,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { BLOOMS } from "@/lib/syllabus";
 import { toSectioned, sectionAtPosition, getSbqSkill, KNOWLEDGE_OUTCOMES, isHumanitiesSubject, isScienceSubject, type Section } from "@/lib/sections";
 import { expandQuestionTags } from "@/lib/coverage-infer";
+import {
+  inferInScopeDisciplines,
+  buildDisciplineLookup,
+  normaliseDiscipline as normDiscipline,
+} from "@/lib/discipline-scope";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ChevronRight } from "lucide-react";
