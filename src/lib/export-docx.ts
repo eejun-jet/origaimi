@@ -60,7 +60,7 @@ function p(text: string, opts: { bold?: boolean; size?: number; align?: typeof A
   return new Paragraph({
     alignment: opts.align,
     spacing: { after: opts.spacingAfter ?? 120 },
-    children: [new TextRun({ text, bold: opts.bold, size: opts.size ?? 22, font: ARIAL })],
+    children: [new TextRun({ text: clean(text), bold: opts.bold, size: opts.size ?? 22, font: ARIAL })],
   });
 }
 
@@ -68,7 +68,7 @@ function heading(text: string, level: typeof HeadingLevel[keyof typeof HeadingLe
   return new Paragraph({
     heading: level,
     spacing: { before: 240, after: 160 },
-    children: [new TextRun({ text, bold: true, size, font: ARIAL })],
+    children: [new TextRun({ text: clean(text), bold: true, size, font: ARIAL })],
   });
 }
 
@@ -76,7 +76,7 @@ function bullet(text: string) {
   return new Paragraph({
     numbering: { reference: "bullets", level: 0 },
     spacing: { after: 80 },
-    children: [new TextRun({ text, size: 22, font: ARIAL })],
+    children: [new TextRun({ text: clean(text), size: 22, font: ARIAL })],
   });
 }
 
