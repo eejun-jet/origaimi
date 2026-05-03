@@ -567,13 +567,17 @@ function topicGroupOf(text: string): string | null {
   return null;
 }
 
-function curatedHumanitiesSourcePool(topic: string, learningOutcomes: string[] = []): GroundedSource[] {
-  // Topic-anchored matching: the SECTION TOPIC dictates the bundle. LOs are
-  // only consulted when the topic alone fails to match anything (e.g. terse
-  // topic strings like "Inquiry: Singapore"). Even then, an LO match is
-  // rejected if it falls into a DIFFERENT topic group from the section topic
-  // — this prevents "origins of the Cold War" from pulling in WWII sources
-  // because LOs reference earlier context.
+function curatedHumanitiesSourcePool(
+  topic: string,
+  learningOutcomes: string[] = [],
+  knowledgeOutcomes: string[] = [],
+): GroundedSource[] {
+  // Topic-anchored matching: the SECTION TOPIC dictates the bundle. LOs/KOs
+  // are consulted as fallbacks when the topic alone fails to match anything
+  // (e.g. terse topic strings, or SS papers where the user only picked the
+  // Issue at the KO level — "Issue 1: Exploring Citizenship and Governance"
+  // — without selecting individual LOs). An LO/KO match is rejected if it
+  // falls into a DIFFERENT topic group from the section topic.
   const topicGroup = topicGroupOf(topic);
   const matched: GroundedSource[] = [];
   const seenUrls = new Set<string>();
@@ -589,11 +593,11 @@ function curatedHumanitiesSourcePool(topic: string, learningOutcomes: string[] =
   }
   if (matched.length > 0) return matched;
 
-  // Pass 2: LO fallback — only bundles whose group matches the section topic
-  // group (or whose group is not in conflict if topic group is null).
-  const loBlob = learningOutcomes.join(" ");
+  // Pass 2: LO + KO fallback — only bundles whose group matches the section
+  // topic group (or whose group is not in conflict if topic group is null).
+  const fallbackBlob = [...learningOutcomes, ...knowledgeOutcomes].join(" ");
   for (const bundle of CURATED_HUMANITIES_BUNDLES) {
-    if (!bundle.trigger.test(loBlob)) continue;
+    if (!bundle.trigger.test(fallbackBlob)) continue;
     const bundleSampleText = bundle.sources.map((s) => s.source_title).join(" ");
     const bundleGroup = topicGroupOf(bundleSampleText) ?? topicGroupOf(bundle.trigger.source);
     if (topicGroup && bundleGroup && bundleGroup !== topicGroup) continue;
@@ -1704,7 +1708,7 @@ Deno.serve(async (req) => {
           // (e.g. 3× nationalarchives.gov.uk, 3× ushmm.org). Without this guard
           // the SBQ pool shipped with all sources from one or two domains —
           // teachers complained that source diversity was missing.
-          const curatedAll = curatedHumanitiesSourcePool(sectionTopic.topic, sectionTopic.learning_outcomes ?? []);
+          const curatedAll = curatedHumanitiesSourcePool(sectionTopic.topic, sectionTopic.learning_outcomes ?? [], section.knowledge_outcomes ?? []);
           const curatedSeed: typeof curatedAll = [];
           const seenSeedHosts = new Set<string>();
           // Pass 1: take one source per distinct host, in bundle order.
@@ -1795,6 +1799,7 @@ Deno.serve(async (req) => {
             const curated = curatedHumanitiesSourcePool(
               sectionTopic.topic,
               sectionTopic.learning_outcomes ?? [],
+              section.knowledge_outcomes ?? [],
             );
             // Backfill PASS 1: prefer NEW hosts not already represented in
             // the pool, to keep source diversity.
