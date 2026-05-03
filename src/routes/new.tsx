@@ -1716,6 +1716,50 @@ function SectionCard({
           </div>
         </div>
 
+        {/* Knowledge Outcomes (KOs) — for SS, these are the three Issues that
+            scope the entire paper. Selecting them tightens both SBQ and SRQ
+            generation to a coherent theme. */}
+        {koCandidates.length > 0 && (
+          <div className="mt-3 rounded-lg border border-border bg-muted/20 p-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">Knowledge Outcomes (KOs)</Label>
+              <span className="text-xs text-muted-foreground">{sectionKos.length} / {koCandidates.length} selected</span>
+            </div>
+            {availableKos.length > 0 && (
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Pick the Issue(s) this section should target. Both SBQ sources and SRQ essays will be scoped to your selection.
+              </p>
+            )}
+            {(() => {
+              const allChecked = allKoSelected;
+              const someChecked = koCandidates.some((k) => sectionKos.includes(k)) && !allChecked;
+              return (
+                <label className="mt-3 flex cursor-pointer items-center gap-2 rounded-md border border-dashed border-border p-2 text-xs font-medium hover:bg-muted/40">
+                  <Checkbox
+                    checked={allChecked ? true : someChecked ? "indeterminate" : false}
+                    onCheckedChange={() => onUpdate({ knowledge_outcomes: allChecked ? [] : koCandidates.slice() })}
+                  />
+                  <span>{allChecked ? "Deselect all KOs" : "Select all KOs"}</span>
+                </label>
+              );
+            })()}
+            <div className="mt-2 space-y-1">
+              {koCandidates.map((ko) => {
+                const checked = sectionKos.includes(ko);
+                return (
+                  <label
+                    key={ko}
+                    className={`flex cursor-pointer items-start gap-3 rounded-md border p-2 text-sm transition-colors ${checked ? "border-primary bg-primary-soft/40" : "border-border hover:bg-muted/40"}`}
+                  >
+                    <Checkbox checked={checked} onCheckedChange={() => toggleKo(ko)} />
+                    <span className="flex-1">{ko}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Learning Outcomes — grouped by topic, expandable */}
         <div className="mt-3 rounded-lg border border-border bg-muted/20 p-3">
           <div className="flex items-center justify-between">
