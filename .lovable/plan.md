@@ -1,73 +1,54 @@
-# Skills Outcomes for Social Studies (document-level, cross-cutting)
+## Goal
 
-## Model
+Two changes to the downloaded Table of Specifications (.xlsx **and** .docx — both exports share the same data layer, so we update both):
 
-- **4 SOs live once** on the SS `syllabus_documents` row and apply to every Issue / sub-issue / question in that syllabus.
-- **Issues + sub-issues** stay as `syllabus_topics` (unchanged).
-- **Indicative content** stays in `ko_content` per topic (already shipped).
-- **`learning_outcomes`** column on SS topics goes unused — SS questions are tagged with `{topic, KOs, AOs, SO codes}` instead of LOs.
+1. **Split "Syllabus code" and "Paper number"** into two separate rows. Today the Summary shows only `Syllabus code` (e.g. `5086 / 5087 / 5088`). The user wants a new `Paper` row immediately below it (e.g. `1`).
+2. **Add a condensed LO coverage table sorted by KO**, where each row is a Knowledge Outcome and its associated Learning Outcomes are listed in cell(s) on the right. For multi-discipline papers (Combined Science), split the LOs into one column per discipline (Physics / Chemistry / Biology / Practical) so a teacher can read each science's LO coverage side-by-side.
 
-Coverage question becomes: *"Across the whole paper, did we exercise SO1–SO4 enough times?"* — not per-Issue, not per-question-mandatory.
+## What changes
 
-## Schema
+### 1. Paper number in the Summary
 
-One additive column:
+- `assessments.syllabus_paper_id` already points to a `syllabus_papers` row that carries `paper_number` and `paper_code`. The assessment route does not currently load it, so we add a small fetch in `src/routes/assessment.$id.tsx` (lookup by `syllabus_paper_id` when present) and store the paper number on local state.
+- Extend `TosAssessmentMeta` (in `src/lib/export-tos-xlsx.ts`) with an optional `paper_number: string | null` field.
+- `tosMeta()` populates it from the loaded paper row.
+- `buildSummarySheet` (xlsx) and `buildKeyValueTable` (docx) emit a new `Paper` row directly under `Syllabus code`. Render `—` when unknown.
 
-```sql
-ALTER TABLE syllabus_documents
-  ADD COLUMN skills_outcomes jsonb NOT NULL DEFAULT '[]'::jsonb;
-```
+### 2. KO-grouped LO coverage table
 
-Shape: `[{ "code": "SO1", "statement": "examine societal issues critically..." }, ...]`. Populated on the SS doc only; empty/ignored everywhere else.
+- Pass the section topic-pools through to the exporter so we can derive a per-LO map of `{ kos: string[]; discipline: string | null }`. Concretely, add an optional `topicIndex` argument to `exportTosXlsx` / `exportTosDocx` shaped:
 
-No change to `syllabus_topics`. No per-Issue SO storage.
+  ```ts
+  type TopicIndexEntry = {
+    learning_outcomes: string[];
+    outcome_categories: string[]; // KOs
+    section: string | null;       // "Physics" | "Chemistry" | …
+  };
+  ```
 
-## Ingestion from your .xlsx
+  Built in `assessment.$id.tsx` from `sectionedBlueprint.sections[].topic_pool`.
 
-One-off script (`scripts-tmp/ingest_ss_skills.mjs`):
-1. Read 4 rows of `code | statement`.
-2. Write the array to `skills_outcomes` on the SS `syllabus_documents` row (looked up by `syllabus_code` or doc id you confirm).
+- New helper `buildKoLoCoverageRows(coverage, topicIndex)`:
+  - Rows: every KO in `coverage.paper.kos` (already KO-sorted by syllabus order).
+  - For each KO, gather all LOs whose topic carries that KO. Annotate each LO with `covered` (from `coverage.paper.los`).
+  - Group LOs by discipline. Format each LO as `✓ <text>` / `· <text>` so coverage is readable inline.
 
-Idempotent — replaces the array.
+- New sheet **"KO → LO coverage"** in xlsx and a new section in docx, immediately after the existing AO + KO matrix.
+  - Columns: `KO`, `Target`, `Actual`, `Δ`, then either:
+    - **Single discipline papers** → one column `Learning Outcomes`.
+    - **Multi-discipline papers** (≥2 distinct disciplines in the topic-pool, e.g. Combined Science) → one column per discipline in this order: Physics, Chemistry, Biology, Practical, Other.
+  - Each LO cell lists LOs as a multi-line string, prefixed with ✓ when covered and · when uncovered. Empty cells when no LO maps to that KO+discipline combination.
 
-## UI changes (SS-only branches; non-SS unchanged)
+- Discipline detection mirrors the existing logic in `discipline-scope.ts` (`normaliseDiscipline`). Empty / unknown disciplines collapse into "Other"; if only one bucket has entries we fall back to the single-column layout.
 
-### `admin.syllabus.$id.tsx`
-- Add a top-of-page **"Skills Outcomes"** card (visible only when subject is SS): editable list of `{code, statement}`. Persists to `syllabus_documents.skills_outcomes`.
-- Topic editor: hide the LO editor for SS topics; keep KO + `ko_content` editors as today.
+### Files touched
 
-### `new.tsx` (Assessment Builder)
-- For SS papers, render an **"SO targets"** panel listing the 4 SOs with a per-SO target count (default e.g. 1–2 questions each). Stored on `assessments.blueprint`.
-- Non-SS unchanged.
+- `src/lib/export-tos-xlsx.ts` — extend `TosAssessmentMeta`, add Paper row to summary, add new "KO → LO coverage" sheet, accept optional `topicIndex`.
+- `src/lib/export-tos-docx.ts` — same Paper row + new KO→LO section, accept the same `topicIndex` (re-exports the type from xlsx file).
+- `src/routes/assessment.$id.tsx` — fetch paper number from `syllabus_papers` when `assessment.syllabus_paper_id` is set; build `topicIndex` from `sectionedBlueprint`; thread both into `tosMeta()` and `exportTosXlsx` / `exportTosDocx` calls.
 
-### `assessment.$id.tsx` (Coverage)
-- For SS, replace "LO Coverage" with **"Skills Outcome Coverage"**: a 4-row bar showing `hits vs target` per SO, with the existing under/well/over colour grammar.
-- Non-SS unchanged.
+### Out of scope
 
-## Generator + coach
-
-### `generate-assessment/index.ts`
-- For SS: inject the 4 SOs and their per-SO targets as **paper-level skill targets** in the prompt. Instruct the model to tag each generated question with the SO code(s) it exercises (multi-tag allowed). Per-Q LO tagging is dropped for SS.
-- Persist `so_codes` on `assessment_questions` — use the existing `learning_outcomes` text array as the storage column to avoid a schema change (semantically: "outcomes the question hits"; for SS these are SO codes, for other subjects LO codes — same column, different vocabulary). Document this in the function header.
-
-### `coverage-infer.ts` (×3 copies — `src/lib/`, `supabase/functions/coach-review/`, `supabase/functions/generate-assessment/`)
-- Add `inferSOs(text, soPool)` keyed off SS verb cues:
-  - "infer / from the source / how useful / how reliable / surprised" → source-handling SO
-  - "to what extent / weighing / judgement" → reasoned-argument SO
-  - "compare / contrast / similar / different" → comparison SO
-  - "appreciate / multiple perspectives / different views" → perspectives SO
-- The cue→SO mapping is built from the SO `statement` tokens at runtime so it adapts to whatever the .xlsx defines (no hardcoded statement text).
-
-### `coach-review/index.ts` + `paper-set-review/index.ts`
-- Pass the 4 SOs + targets into the coach payload. Coach reports paper-level SO engagement and flags under/over-tested SOs only — no per-Q LO overtesting flags for SS.
-
-## Migration / rollout
-
-1. Schema migration: add `skills_outcomes` column.
-2. You upload .xlsx → I run ingest → verify in admin editor.
-3. UI + generator + coach branches gated behind `subject === "Social Studies"` (or the SS syllabus doc's subject) so Sci/Hist are untouched.
-
-## What I need from you
-
-- The .xlsx with the 4 SOs (`code | statement`).
-- Confirm which `syllabus_documents` row is the SS doc to bind to (title or syllabus_code), so the ingest script targets it precisely.
+- No schema changes — `paper_number` already exists on `syllabus_papers`.
+- No change to the on-screen Coverage panel; this is export-only.
+- The existing Question Map sheet and AO/KO matrix are unchanged.
