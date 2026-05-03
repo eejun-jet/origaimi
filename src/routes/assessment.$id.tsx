@@ -114,6 +114,7 @@ type Assessment = {
   syllabus_doc_id: string | null;
   syllabus_code?: string | null;
   assessment_type?: string | null;
+  scoped_disciplines?: string[] | null;
 };
 
 type AODef = { code: string; title: string | null; weighting_percent: number | null };
