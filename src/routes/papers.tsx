@@ -174,7 +174,13 @@ function UploadForm({ userId, onUploaded }: { userId?: string; onUploaded: () =>
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file) return toast.error("Pick a PDF file first");
+    if (!file) return toast.error("Pick a PDF or .docx file first");
+    const lowerName = file.name.toLowerCase();
+    const isPdf = file.type === "application/pdf" || lowerName.endsWith(".pdf");
+    const isDocx =
+      file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      lowerName.endsWith(".docx");
+    if (!isPdf && !isDocx) return toast.error("Only PDF or .docx files are supported");
     if (!title.trim()) return toast.error("Give the paper a title");
     setBusy(true);
     try {
@@ -223,7 +229,7 @@ function UploadForm({ userId, onUploaded }: { userId?: string; onUploaded: () =>
     <form onSubmit={handleSubmit} className="rounded-xl border border-border bg-card p-5">
       <h2 className="font-paper text-lg font-semibold">Upload past paper</h2>
       <p className="mt-1 text-xs text-muted-foreground">
-        PDF. We'll extract figures and topic tags so the generator can reuse them.
+        PDF or Word (.docx). We'll extract figures and topic tags so the generator can reuse them.
       </p>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
@@ -261,8 +267,8 @@ function UploadForm({ userId, onUploaded }: { userId?: string; onUploaded: () =>
           <Input value={examBoard} onChange={(e) => setExamBoard(e.target.value)} placeholder="MOE" />
         </div>
         <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
-          <Label className="text-xs">PDF file</Label>
-          <Input ref={fileRef} type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+          <Label className="text-xs">PDF or Word file</Label>
+          <Input ref={fileRef} type="file" accept="application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
         </div>
       </div>
       <div className="mt-4 flex justify-end">

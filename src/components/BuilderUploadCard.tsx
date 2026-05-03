@@ -88,7 +88,16 @@ export function BuilderUploadCard({
       return;
     }
     if (!file) {
-      toast.error("Pick a PDF first");
+      toast.error("Pick a PDF or .docx first");
+      return;
+    }
+    const lowerName = file.name.toLowerCase();
+    const isPdf = file.type === "application/pdf" || lowerName.endsWith(".pdf");
+    const isDocx =
+      file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      lowerName.endsWith(".docx");
+    if (!isPdf && !isDocx) {
+      toast.error("Only PDF or .docx files are supported");
       return;
     }
     if (!title.trim()) {
@@ -249,7 +258,7 @@ export function BuilderUploadCard({
         <div>
           <h2 className="font-paper text-xl font-semibold">Upload an existing paper</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Drop a PDF — complete or in-progress. We'll parse it, build the Table of Specifications, and open it in
+            Drop a PDF or Word document — complete or in-progress. We'll parse it, build the Table of Specifications, and open it in
             the editor so you can keep setting and run the Assessment Coach.
           </p>
         </div>
@@ -302,11 +311,11 @@ export function BuilderUploadCard({
       </div>
 
       <div className="space-y-2">
-        <Label>PDF file</Label>
+        <Label>PDF or Word file</Label>
         <Input
           ref={fileRef}
           type="file"
-          accept="application/pdf"
+          accept="application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx"
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
         />
         <p className="text-xs text-muted-foreground">

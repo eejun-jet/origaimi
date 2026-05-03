@@ -169,7 +169,32 @@ Deno.serve(async (req) => {
       });
     }
     const buf = new Uint8Array(await fileBlob.arrayBuffer());
-    const b64 = base64Encode(buf);
+    const lowerPath = filePath.toLowerCase();
+    const isDocx =
+      lowerPath.endsWith(".docx") ||
+      (fileBlob.type ?? "").includes("officedocument.wordprocessingml.document");
+
+    let userContent: unknown;
+    if (isDocx) {
+      const docxText = await extractDocxText(buf);
+      if (!docxText.trim()) {
+        await supabase.from("past_papers").update({
+          parse_status: "failed", parse_error: "Could not extract any text from the .docx file",
+        }).eq("id", paperId);
+        return new Response(JSON.stringify({ error: "empty docx" }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      userContent = [
+        { type: "text", text: `Index this past paper. Title: ${(paper as { title: string }).title}. Subject: ${(paper as { subject: string | null }).subject ?? "unknown"}. Level: ${(paper as { level: string | null }).level ?? "unknown"}. The paper was uploaded as a .docx — figures may not be visible, so list only figures explicitly captioned in the text. Identify every numbered question and sub-part (verbatim, with marks, command word, source_excerpt if any), and produce a style_summary.\n\n--- DOCX CONTENT ---\n${docxText}` },
+      ];
+    } else {
+      const b64 = base64Encode(buf);
+      userContent = [
+        { type: "text", text: `Index this past paper. Title: ${(paper as { title: string }).title}. Subject: ${(paper as { subject: string | null }).subject ?? "unknown"}. Level: ${(paper as { level: string | null }).level ?? "unknown"}. Identify every figure (with concise visual description), every numbered question and sub-part (verbatim, with marks, command word, source_excerpt if any, figure_refs), and produce a style_summary.` },
+        { type: "file", file: { filename: "paper.pdf", file_data: `data:application/pdf;base64,${b64}` } },
+      ];
+    }
 
     const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -178,13 +203,7 @@ Deno.serve(async (req) => {
         model: "google/gemini-2.5-pro",
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: `Index this past paper. Title: ${(paper as { title: string }).title}. Subject: ${(paper as { subject: string | null }).subject ?? "unknown"}. Level: ${(paper as { level: string | null }).level ?? "unknown"}. Identify every figure (with concise visual description), every numbered question and sub-part (verbatim, with marks, command word, source_excerpt if any, figure_refs), and produce a style_summary.` },
-              { type: "file", file: { filename: "paper.pdf", file_data: `data:application/pdf;base64,${b64}` } },
-            ],
-          },
+          { role: "user", content: userContent },
         ],
         tools: [TOOL],
         tool_choice: { type: "function", function: { name: "save_paper_index" } },
@@ -692,4 +711,44 @@ function base64Encode(bytes: Uint8Array): string {
     s += String.fromCharCode(...bytes.subarray(i, i + chunk));
   }
   return btoa(s);
+}
+
+// Extract plain text from a .docx file (a ZIP containing word/document.xml).
+// We use the standard `JSZip` ESM build to unzip in Deno, then strip XML tags
+// while preserving paragraph breaks.
+async function extractDocxText(bytes: Uint8Array): Promise<string> {
+  const { default: JSZip } = await import("https://esm.sh/jszip@3.10.1");
+  const zip = await JSZip.loadAsync(bytes);
+  const parts: string[] = [];
+  // Main body
+  const docXml = await zip.file("word/document.xml")?.async("string");
+  if (docXml) parts.push(docXmlToText(docXml));
+  // Headers and footers (often contain title / paper number info)
+  for (const name of Object.keys(zip.files)) {
+    if (/^word\/(header|footer)\d*\.xml$/.test(name)) {
+      const x = await zip.file(name)?.async("string");
+      if (x) parts.push(docXmlToText(x));
+    }
+  }
+  return parts.join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function docXmlToText(xml: string): string {
+  // Insert paragraph and line breaks before stripping tags.
+  let s = xml
+    .replace(/<\/w:p\s*>/g, "\n")
+    .replace(/<w:br[^>]*\/>/g, "\n")
+    .replace(/<w:tab[^>]*\/>/g, "\t");
+  // Strip every XML tag
+  s = s.replace(/<[^>]+>/g, "");
+  // Decode common XML entities
+  s = s
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(parseInt(d, 10)));
+  return s;
 }
