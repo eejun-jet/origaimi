@@ -174,7 +174,13 @@ function UploadForm({ userId, onUploaded }: { userId?: string; onUploaded: () =>
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file) return toast.error("Pick a PDF file first");
+    if (!file) return toast.error("Pick a PDF or .docx file first");
+    const lowerName = file.name.toLowerCase();
+    const isPdf = file.type === "application/pdf" || lowerName.endsWith(".pdf");
+    const isDocx =
+      file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      lowerName.endsWith(".docx");
+    if (!isPdf && !isDocx) return toast.error("Only PDF or .docx files are supported");
     if (!title.trim()) return toast.error("Give the paper a title");
     setBusy(true);
     try {
