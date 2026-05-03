@@ -847,6 +847,7 @@ function NewAssessment() {
                   subject={subject}
                   allAOs={docAOs}
                   availableSos={socialStudiesPaper ? effectiveDocSOs : []}
+                  availableKos={socialStudiesPaper ? DEFAULT_SOCIAL_STUDIES_KOS : []}
 
                   globalAoCodes={selectedAoCodes}
                   globalKos={selectedKos}
