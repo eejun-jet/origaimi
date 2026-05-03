@@ -56,7 +56,7 @@ export async function loadDocSkillsOutcomes(docId: string): Promise<SkillsOutcom
 export async function loadSyllabusLibrary(): Promise<SyllabusLibraryDoc[]> {
   const { data: docs, error: docsErr } = await supabase
     .from("syllabus_documents")
-    .select("id, title, syllabus_code, subject, level, syllabus_year, parse_status")
+    .select("id, title, syllabus_code, subject, level, syllabus_year, parse_status, skills_outcomes")
     .in("parse_status", ["parsed", "published", "ready"])
     .order("syllabus_code", { ascending: true });
   if (docsErr) throw docsErr;
