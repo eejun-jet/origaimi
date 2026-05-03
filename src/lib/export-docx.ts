@@ -213,7 +213,7 @@ export async function exportAssessmentDocx(
         new Paragraph({
           alignment: AlignmentType.CENTER,
           spacing: { before: 240, after: 120 },
-          children: [new TextRun({ text: `Section ${section.letter}${headerSuffix}`, bold: true, size: 32, font: ARIAL })],
+          children: [new TextRun({ text: clean(`Section ${section.letter}${headerSuffix}`), bold: true, size: 32, font: ARIAL })],
         }),
       );
       body.push(
