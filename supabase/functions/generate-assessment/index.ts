@@ -1923,6 +1923,9 @@ Deno.serve(async (req) => {
       if (isHumanitiesSBQ && sharedSourcePool.length > 0) {
         console.log(`[generate] section ${section.letter}: using deterministic SBQ builder to avoid long AI timeout`);
         questions = buildDeterministicSbqQuestions(section, sharedSourcePool, perQSkillsForFetch);
+      } else if (isSSPaper && section.question_type === "long") {
+        console.log(`[generate] section ${section.letter}: using deterministic SS SRQ builder to avoid AI timeout`);
+        questions = buildDeterministicSsSrqQuestions(section);
       } else {
         // Chunk large sections so a single AI call never has to emit too many
         // questions at once (gateway times out around 60s; 40 MCQs in one shot
