@@ -809,16 +809,21 @@ function buildInquiryQuestion(topicNoun: string, skills: (SbqSkillDef | null)[])
   return `What can these sources tell us about ${topicNoun}?`;
 }
 
-function buildDeterministicSbqQuestions(section: Section, sources: GroundedSource[], skills: (SbqSkillDef | null)[]): any[] {
+function buildDeterministicSbqQuestions(
+  section: Section,
+  sources: GroundedSource[],
+  skills: (SbqSkillDef | null)[],
+  ssBundle?: SsSubIssueBundle | null,
+): any[] {
   const rawTopic = section.topic_pool[0]?.topic ?? "";
   const sectionLOs = section.topic_pool[0]?.learning_outcomes
     ?? section.learning_outcomes
     ?? [];
-  // Concise noun phrase for {T} — never paste the LO directive into the stem.
-  const topicNoun = deriveTopicNoun(rawTopic, sectionLOs);
-  // Topic field stored on the row (used for tagging only, not the stem).
+  // SS: use the sub-issue framing so {T} is concrete (e.g. "housing inequality
+  // and Singaporean identity") instead of generic LO/Issue text.
+  const topicNoun = ssBundle ? ssBundle.subIssue : deriveTopicNoun(rawTopic, sectionLOs);
   const topicTag = stripCodePrefix(rawTopic).replace(/\*+$/, "").trim() || topicNoun;
-  const inquiry = buildInquiryQuestion(topicNoun, skills);
+  const inquiry = ssBundle ? ssBundle.inquiryQuestion : buildInquiryQuestion(topicNoun, skills);
 
   const perQMarks = Math.floor(section.marks / Math.max(1, section.num_questions));
   const remainder = section.marks - perQMarks * section.num_questions;
