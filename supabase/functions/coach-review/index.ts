@@ -317,11 +317,15 @@ Submit your findings via the submit_coach_review tool. Run these checks:
 
 4. Mark-scheme realism — for each question, judge whether marks_declared matches the cognitive demand. Suggest marks_suggested when it is off by ≥ 1.${isSci ? " For science calculations, also penalise mark schemes that lump method + accuracy into one mark, omit units, or quote the final answer to too many / too few significant figures." : ""}
 
+   HARD RULE — MCQ: Multiple-choice items follow the convention "1 mark per question" unless the teacher's instructions explicitly say otherwise. Do NOT propose mark-scheme changes for MCQ questions. Never emit a mark_scheme_flags entry, marks_suggested value, or "calculation mark scheme should specify method/units" suggestion for an MCQ. Score MCQs only on stem quality and answer correctness.
+
 5. Suggestions — for every fail or warn, attach at most ONE one-line "Try: …" rewrite that the teacher can apply. Keep rewrites in the same question type and within ±1 mark of the original. Skip suggestions whose value is marginal — silence is better than filler.
 
 6. Cognitive demand (optional, single observation) — if the recall / application / analysis spread is materially skewed, populate \`cognitive_demand\` with a calm one-liner. Omit the field entirely if the spread is reasonable.
 
-7. Question variety (optional, single observation) — if command-verb diversity, item-format mix or reading load is notably narrow or heavy, populate \`question_variety\` with one observation. Omit if varied.${sciencePackBlock}
+7. Question variety (optional, single observation) — if command-verb diversity, item-format mix or reading load is notably narrow or heavy, populate \`question_variety\` with one observation. Omit if varied.
+
+   HARD RULE — fixed-format papers: If the paper's section blueprint constrains every question to a single question_type (e.g. an MCQ-only Paper 1, a structured-only Paper 2), the format is fixed by the syllabus. Do NOT recommend adding other question types (no "include short-answer", "introduce structured tasks", "diversify with essays" etc.). You may still observe command-verb, context, or reading-load variation within the chosen format.${sciencePackBlock}
 
 Return STRICTLY through the tool. Do not include prose outside the tool call. For required array fields, return an empty array when there is nothing material — do not invent findings.`;
 
@@ -400,6 +404,46 @@ Return STRICTLY through the tool. Do not include prose outside the tool call. Fo
         status: 502,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // Belt-and-braces server-side filtering: even if the model ignores the
+    // hard-rule prompt above, strip nonsensical findings before the teacher
+    // sees them.
+    try {
+      const qById = new Map<string, any>((questions as any[]).map((q) => [q.id, q]));
+      const qByPos = new Map<number, any>((questions as any[]).map((q) => [q.position, q]));
+      const isMcqQ = (qid?: string, pos?: number) => {
+        const q = (qid && qById.get(qid)) || (typeof pos === "number" && qByPos.get(pos)) || null;
+        return q?.question_type === "mcq";
+      };
+
+      // (a) Drop mark-scheme flags / mark-related suggestions for MCQ items.
+      if (Array.isArray(findings.mark_scheme_flags)) {
+        findings.mark_scheme_flags = findings.mark_scheme_flags.filter(
+          (f: any) => !isMcqQ(f?.question_id, f?.position),
+        );
+      }
+      if (Array.isArray(findings.suggestions)) {
+        findings.suggestions = findings.suggestions.filter((s: any) => {
+          if (!isMcqQ(s?.question_id, s?.position)) return true;
+          // Keep MCQ suggestions only if they're not about marks/mark-scheme.
+          if (s?.category === "marks") return false;
+          const blob = `${s?.rewrite ?? ""} ${s?.rationale ?? ""}`.toLowerCase();
+          if (/mark scheme|method and final answer|units|significant figures|s\.f\.|\bmarks?\b.*(suggest|increase|reduce|raise|drop)/.test(blob)) return false;
+          return true;
+        });
+      }
+
+      // (b) Suppress "diversify question types" on a fixed-format paper.
+      const uniqueTypes = new Set((questions as any[]).map((q) => q?.question_type).filter(Boolean));
+      if (uniqueTypes.size <= 1 && findings.question_variety) {
+        const blob = `${findings.question_variety?.note ?? ""} ${findings.question_variety?.suggestion ?? ""}`.toLowerCase();
+        if (/multiple-choice|short answer|short-answer|structured|essay|open-ended|diversif|introduc|includ|broaden|range of (response|item|question)/.test(blob)) {
+          delete findings.question_variety;
+        }
+      }
+    } catch (filterErr) {
+      console.warn("coach-review: post-filter step failed", filterErr);
     }
 
     // Calibration vs specimen — deterministic, no AI cost. Pull the most

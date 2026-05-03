@@ -1,53 +1,52 @@
-## Goals
+## Three small fixes
 
-1. Default the "Knowledge & Learning Outcome Coverage" view to **By KO** (currently it's the third tab; topic view is the default for science papers).
-2. Eliminate the misleading **"Unmapped LO metadata"** bucket that appears even when every LO has a KO in the syllabus.
+### 1. Sensible default `num_questions` when seeding Section A
 
-## Why "Unmapped LO metadata" shows up today
+`src/routes/new.tsx` lines 358–383 currently seed Section A with `num_questions = max(1, masterPool.length)`. With combined-science syllabi, the LO pool can run to ~100 entries, so a 40-mark paper opens with "97 questions" suggested.
 
-In `src/routes/assessment.$id.tsx`, `koLoGroups` (line ~2727) builds the KO → Content → LO hierarchy by walking each section's `topic_pool` and collecting LO **text**. Any LO present in the paper rollup (`paper.los`) whose text wasn't seen during that walk is dumped into a single "Unmapped LO metadata" bucket (line ~2841).
+Replace the seed with a format-aware default:
 
-The walk only touches `t.learning_outcomes` from rows in `topic_pool`. An LO becomes "orphan" whenever the exact LO text on a question (or in `section.learning_outcomes`) doesn't string-match any text inside any `topic_pool[*].learning_outcomes` for the sections in the paper. This happens routinely:
+- If the seeded question type is **MCQ**: `num_questions = max(1, totalMarks)` (1 mark per question by convention).
+- Otherwise: `num_questions = max(1, min(masterPool.length, ceil(totalMarks / 4)))` so structured-style sections start near the marks budget rather than the topic pool size.
 
-- The section was generated from a syllabus subset that didn't load the full topic pool (the section was saved with `learning_outcomes` listed flat, but `topic_pool` is empty or partial).
-- Whitespace / punctuation / casing differences between the LO string stored on the question and the LO string in the syllabus row.
-- The AI tagger produced a paraphrased LO string that no longer exactly matches the syllabus.
-- The teacher edited an LO statement.
+The user can still override this from the section editor — we only change the *initial* value.
 
-So even though every LO logically has a KO, the bucket is a string-equality artefact, not a real data gap.
+### 2. Coach: don't suggest re-marking MCQ unless the user said otherwise
 
-## Fix
+`supabase/functions/coach-review/index.ts` (check 4, line 318) has the AI judge whether `marks_declared` matches cognitive demand for every question. For MCQ, the convention is **1 mark per question unless the teacher explicitly states otherwise**, so suggestions like "Q2 · 1m → 2m, Calculation mark scheme should specify method and final answer units" are noise.
 
-### 1. Default "By KO" tab
+Two changes inside that function:
 
-`src/routes/assessment.$id.tsx` line 2699:
-
-```ts
-const [loView, setLoView] = useState<"topic" | "map" | "list">(isScience ? "topic" : "list");
+a. Append a hard rule to the system prompt before the existing check 4 text:
+```
+MCQ items follow the convention "1 mark per question" unless the teacher's
+instructions say otherwise. Do NOT propose mark-scheme changes for MCQ
+questions (no marks_suggested entries, no method/units rewrites). Score MCQs
+only on stem quality and answer correctness.
 ```
 
-Change the default to `"list"` for every subject so the "By KO" view shows first. Also reorder the toggle buttons so **By KO** is rendered first, then **By topic**, then **Map**, matching the new default.
+b. Filter `findings.mark_scheme_flags` and `findings.suggestions` server-side after parsing the tool call: drop any flag/suggestion whose target question is `question_type === "mcq"` and whose category is `marks` (or whose `marks_suggested` field is set). This is a belt-and-braces guard in case the model still slips one through.
 
-### 2. Map orphan LOs back to a real KO instead of dumping them in "Unmapped"
+### 3. Coach: don't recommend "diversify question types" on a single-format paper
 
-Inside the `koLoGroups` memo (lines ~2727–2862), build a robust LO→KO lookup before the orphan pass:
+When every question in the paper has the same `question_type` (e.g. a Paper-1 MCQ paper, or a structured-only paper), the `question_variety` finding telling the teacher to "explore including short answer questions or structured problem-solving tasks" is impossible to act on — the paper format is fixed.
 
-a. **Normalised text index.** While walking `topic_pool`, also store each LO under a normalised key (`lower-case, collapse whitespace, strip trailing punctuation`) → `{ koName, contentName, code }`. Re-check orphan LOs against this normalised index first; if a match is found, place the LO into that KO/Content bucket instead of the orphan bucket.
+Two changes:
 
-b. **Section-level fallback.** If still no match, look at the LO's owning section(s) (the sections whose `learning_outcomes` array contains this text, or whose questions reference this LO). Use that section's `knowledge_outcomes` (or, if empty, the union of `outcome_categories` from its `topic_pool`) to attach the LO to the most likely KO. The Content bucket name in this case is the section's name, e.g. "Section A — Cells & Energy", so it's clear where the LO came from.
+a. Add a paper-format note to the system prompt above the variety check:
+```
+If the paper's section blueprint constrains every question to a single
+question_type (e.g. an MCQ-only Paper 1, a structured-only Paper 2), the
+question format is fixed by the syllabus. Do NOT recommend adding other
+question types in question_variety. You may still observe command-verb,
+context, or reading-load variation within the chosen format.
+```
 
-c. **Drop the "Unmapped LO metadata" bucket entirely.** After (a) and (b), any remaining truly-orphan LO (no syllabus match and no section KO) is logged via `console.warn` for diagnostics, but **not** rendered as a bucket. Empirically, with steps (a)+(b) the orphan set is virtually always empty — and when it isn't, surfacing a confusing UI bucket is worse than silently logging it.
-
-d. Remove the special sort branch for `"Unmapped LO metadata"` (lines 2856–2857) and the `koRemarks` guard at line 3085, since the bucket no longer exists.
-
-### 3. No changes elsewhere
-
-- `paper.los` calculation (line ~1888) is left alone — it's still the source of truth for "covered/uncovered" counts; only the grouping logic changes.
-- Coverage Explorer (full-screen drilldown) consumes the same `koLoGroups`, so it inherits the fix automatically.
-- `By topic` and `Map` views (used for science) are untouched; users can still switch to them, they just aren't the default.
+b. After parsing the tool call, compute `uniqueTypes = new Set(questions.map(q => q.question_type))`. If `uniqueTypes.size === 1`, drop `findings.question_variety` if it (i) mentions "multiple-choice", "short answer", "structured", "essay", or "diversif" / "include" / "introduce" of another format. Cheap regex on the `note` + `suggestion` is enough; we don't want to suppress legitimate within-format observations.
 
 ## Files touched
 
-- `src/routes/assessment.$id.tsx` — default `loView`, tab button order, `koLoGroups` memo (orphan re-mapping + drop "Unmapped" bucket), small cleanup of the two references to "Unmapped LO metadata".
+- `src/routes/new.tsx` — initial section-seed logic (~10 lines).
+- `supabase/functions/coach-review/index.ts` — system prompt additions + post-parse filtering (~25 lines).
 
-No database / edge-function changes.
+No DB / schema changes.
