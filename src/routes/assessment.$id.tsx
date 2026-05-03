@@ -715,6 +715,7 @@ function EditorPage() {
         coverage,
         sections: tosSections(),
         questions: tosQuestions(),
+        topicIndex: tosTopicIndex(),
       });
       toast.success("Downloaded TOS .docx");
     } catch (e) {
