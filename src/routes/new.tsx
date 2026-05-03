@@ -1657,9 +1657,16 @@ function SectionCard({
         {/* Learning Outcomes — grouped by topic, expandable */}
         <div className="mt-3 rounded-lg border border-border bg-muted/20 p-3">
           <div className="flex items-center justify-between">
-            <Label className="text-sm font-medium">Learning Outcomes (LOs)</Label>
+            <Label className="text-sm font-medium">
+              {usingSoFallback ? "Skills Outcomes (SO)" : "Learning Outcomes (LOs)"}
+            </Label>
             <span className="text-xs text-muted-foreground">{sectionLos.length} / {loCandidates.length} selected</span>
           </div>
+          {usingSoFallback && (
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              This syllabus paper defines Skills Outcomes (SO) instead of topic-level Learning Outcomes. Pick the SOs this section should target.
+            </p>
+          )}
           {loCandidates.length === 0 ? (
             <p className="mt-2 text-xs text-muted-foreground">No LOs available — add a custom one below.</p>
           ) : (
