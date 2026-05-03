@@ -24,6 +24,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { BLOOMS } from "@/lib/syllabus";
 import { toSectioned, sectionAtPosition, getSbqSkill, KNOWLEDGE_OUTCOMES, isHumanitiesSubject, isScienceSubject, type Section } from "@/lib/sections";
 import { expandQuestionTags } from "@/lib/coverage-infer";
+import {
+  inferInScopeDisciplines,
+  buildDisciplineLookup,
+  normaliseDiscipline as normDiscipline,
+} from "@/lib/discipline-scope";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ChevronRight } from "lucide-react";
@@ -109,6 +114,7 @@ type Assessment = {
   syllabus_doc_id: string | null;
   syllabus_code?: string | null;
   assessment_type?: string | null;
+  scoped_disciplines?: string[] | null;
 };
 
 type AODef = { code: string; title: string | null; weighting_percent: number | null };
@@ -586,7 +592,12 @@ function EditorPage() {
 
   const totalActual = questions.reduce((s, q) => s + q.marks, 0);
   const allSelected = questions.length > 0 && selectedIds.size === questions.length;
-  const coverage = computeCoverage(questions, sectionedBlueprint.sections, effectiveAoDefs, assessment.total_marks, assessment.subject);
+  const { inScope: disciplineScope, universe: disciplineUniverse } = computeScopeForAssessment(
+    sectionedBlueprint.sections,
+    questions,
+    assessment.scoped_disciplines ?? null,
+  );
+  const coverage = computeCoverage(questions, sectionedBlueprint.sections, effectiveAoDefs, assessment.total_marks, assessment.subject, disciplineScope);
   const questionLabels: Record<string, string> = {};
   questions.forEach((q, i) => {
     const sec = sectionAtPosition(sectionedBlueprint, i);
@@ -1809,12 +1820,35 @@ type Coverage = {
   }>;
 };
 
+// Build the discipline scope (e.g. {"Physics","Chemistry"} for Combined
+// Science when Biology isn't tested) from the section topic-pools and the
+// teacher-confirmed scope override. Returns null when filtering should be
+// skipped (single-discipline papers).
+export function computeScopeForAssessment(
+  sections: Section[],
+  questions: { topic?: string | null; knowledge_outcomes?: string[] | null; learning_outcomes?: string[] | null }[],
+  override: string[] | null | undefined,
+): { inScope: Set<string> | null; universe: string[] } {
+  const topics = sections.flatMap((s) =>
+    (s.topic_pool ?? []).map((t) => ({
+      title: t.topic,
+      section: t.section ?? null,
+      outcome_categories: t.outcome_categories ?? [],
+      learning_outcomes: t.learning_outcomes ?? [],
+    })),
+  );
+  const inScope = inferInScopeDisciplines({ questions, topics, override: override ?? null });
+  const lookup = buildDisciplineLookup(topics);
+  return { inScope, universe: Array.from(lookup.universe).filter((d) => d !== "General") };
+}
+
 function computeCoverage(
   questions: Question[],
   sections: Section[],
   aoDefs: AODef[],
   totalMarks: number,
   subject: string,
+  inScope: Set<string> | null,
 ): Coverage {
   // Build a flat blueprint to map question position → section
   const sectionByPos: Section[] = [];
@@ -1873,13 +1907,38 @@ function computeCoverage(
     return { code, title: def?.title ?? null, target, actual, weighting };
   });
 
+  // Discipline scoping: drop KOs/LOs that belong only to out-of-scope disciplines
+  // (e.g. Biology when only Physics + Chemistry are tested in this paper).
+  const scopeLookup = inScope
+    ? buildDisciplineLookup(
+        sections.flatMap((s) =>
+          (s.topic_pool ?? []).map((t) => ({
+            title: t.topic,
+            section: t.section ?? null,
+            outcome_categories: t.outcome_categories ?? [],
+            learning_outcomes: t.learning_outcomes ?? [],
+          })),
+        ),
+      )
+    : null;
+  const koInScope = (name: string): boolean => {
+    if (!inScope || !scopeLookup) return true;
+    const d = scopeLookup.byKO.get(name);
+    return !d || inScope.has(d);
+  };
+  const loInScope = (text: string): boolean => {
+    if (!inScope || !scopeLookup) return true;
+    const d = scopeLookup.byLO.get(text);
+    return !d || inScope.has(d);
+  };
+
   // ── Paper-wide KO targets from sections.knowledge_outcomes (sum of section marks
   //    listing the KO) + actuals from question.knowledge_outcomes
   const koSet = new Set<string>(KNOWLEDGE_OUTCOMES as readonly string[]);
   sections.forEach((s) => (s.knowledge_outcomes ?? []).forEach((k) => koSet.add(k)));
   questions.forEach((q) => koOf(q).forEach((k) => koSet.add(k)));
 
-  const paperKOs = Array.from(koSet).map((name) => {
+  const paperKOs = Array.from(koSet).filter(koInScope).map((name) => {
     const target = sections.reduce((sum, s) => sum + ((s.knowledge_outcomes ?? []).includes(name) ? s.marks : 0), 0);
     const actual = questions.reduce((sum, q) => sum + (koOf(q).includes(name) ? q.marks : 0), 0);
     return { name, target, actual };
@@ -1890,7 +1949,7 @@ function computeCoverage(
   sections.forEach((s) => (s.learning_outcomes ?? []).forEach((lo) => loSet.add(lo)));
   questions.forEach((q) => loOf(q).forEach((lo) => loSet.add(lo)));
 
-  const paperLOs = Array.from(loSet).map((text) => {
+  const paperLOs = Array.from(loSet).filter(loInScope).map((text) => {
     const target = sections.reduce((sum, s) => sum + ((s.learning_outcomes ?? []).includes(text) ? 1 : 0), 0);
     const actual = questions.reduce((sum, q) => sum + (loOf(q).includes(text) ? 1 : 0), 0);
     return { text, target, actual, covered: actual > 0 };
