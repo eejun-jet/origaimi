@@ -809,6 +809,21 @@ function buildInquiryQuestion(topicNoun: string, skills: (SbqSkillDef | null)[])
   return `What can these sources tell us about ${topicNoun}?`;
 }
 
+// Per-skill AO mapping for the SEAB History SBQ taxonomy (see syllabus
+// 2173/2192 AO table reproduced in History_Dataset.xlsx). The deterministic
+// SBQ builder uses these so every generated SBQ ships with the right AO3
+// sub-objective tag — without this the AO/KO/LO fields end up empty when
+// the section blueprint doesn't carry section-level overrides.
+const SBQ_SKILL_AO: Record<string, string> = {
+  inference: "AO3.2",
+  comparison: "AO3.3",
+  reliability: "AO3.4",
+  surprise: "AO3.4",
+  purpose: "AO3.5",
+  utility: "AO3.6",
+  assertion: "AO3.7",
+};
+
 function buildDeterministicSbqQuestions(
   section: Section,
   sources: GroundedSource[],
@@ -819,6 +834,19 @@ function buildDeterministicSbqQuestions(
   const sectionLOs = section.topic_pool[0]?.learning_outcomes
     ?? section.learning_outcomes
     ?? [];
+  // Section-level objective fallbacks — the deterministic builder must emit
+  // ao/ko/lo on every question so that History SBQ papers don't ship with
+  // empty tag columns when the section blueprint only carries them on the
+  // topic_pool entries.
+  const sectionAOs = (section.ao_codes && section.ao_codes.length > 0)
+    ? section.ao_codes
+    : Array.from(new Set(section.topic_pool.flatMap((tp) => tp.ao_codes ?? [])));
+  const sectionKOs = (section.knowledge_outcomes && section.knowledge_outcomes.length > 0)
+    ? section.knowledge_outcomes
+    : Array.from(new Set(section.topic_pool.flatMap((tp) => tp.outcome_categories ?? [])));
+  const sectionAllLOs = sectionLOs.length > 0
+    ? sectionLOs
+    : Array.from(new Set(section.topic_pool.flatMap((tp) => tp.learning_outcomes ?? [])));
   // SS: use the sub-issue framing so {T} is concrete (e.g. "housing inequality
   // and Singaporean identity") instead of generic LO/Issue text.
   const topicNoun = ssBundle ? ssBundle.subIssue : deriveTopicNoun(rawTopic, sectionLOs);
@@ -886,6 +914,13 @@ function buildDeterministicSbqQuestions(
     }
 
     const scheme = skill?.markScheme ?? SBQ_SKILLS.inference.markScheme;
+    // Per-skill AO is the SEAB AO3 sub-objective (AO3.2 inference, AO3.3
+    // comparison, AO3.4 reliability/surprise, AO3.5 purpose, AO3.6 utility,
+    // AO3.7 assertion). Combine with the section's wider AO pool.
+    const skillAO = SBQ_SKILL_AO[skillId];
+    const aoSet = new Set<string>(sectionAOs);
+    if (skillAO) aoSet.add(skillAO);
+    const aoCodes = Array.from(aoSet);
 
     return {
       question_type: "source_based",
@@ -895,6 +930,9 @@ function buildDeterministicSbqQuestions(
       marks,
       stem: intro + prompt,
       options: null,
+      ao_codes: aoCodes,
+      knowledge_outcomes: sectionKOs,
+      learning_outcomes: sectionAllLOs,
       answer,
       mark_scheme: scheme,
     };
