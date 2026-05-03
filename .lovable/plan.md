@@ -1,52 +1,48 @@
-## Three small fixes
+## Macro Coverage: review a set of papers as one
 
-### 1. Sensible default `num_questions` when seeding Section A
+Add a new page that lets a teacher group several already-parsed past papers (e.g. the four Combined Science papers) under one **Paper Set**, then runs the existing AO / KO / LO coverage analytics across the union of those papers' questions. Kept separate from the single-paper Assessment Coach so the UI stays uncluttered.
 
-`src/routes/new.tsx` lines 358–383 currently seed Section A with `num_questions = max(1, masterPool.length)`. With combined-science syllabi, the LO pool can run to ~100 entries, so a 40-mark paper opens with "97 questions" suggested.
+### User flow
 
-Replace the seed with a format-aware default:
+1. From the dashboard or papers page, click **"Review a paper set"**.
+2. Page 1 (set up) — like the assessment builder's first step:
+   - Pick **Subject + Level** (drives the syllabus document the set is graded against).
+   - Pick the **Syllabus document** (auto-selected when only one matches).
+   - Name the set (e.g. "2025 Combined Science O-Level — full set").
+   - Tick the past papers to include from a filtered list of already-parsed `past_papers` rows for that subject+level. Show parse status; only `ready` papers are selectable.
+   - Save → creates a `paper_sets` row + `paper_set_papers` join rows.
+3. Page 2 (coverage) — `/paper-set/$id`:
+   - Header: set title, subject, level, syllabus, paper count, total questions, total marks (summed from `questions_json`).
+   - **Cognitive demand** strip: AO mark-share aggregated across all papers vs declared syllabus weighting (delta bars, same component pattern as the assessment AO chart).
+   - **KO / LO coverage** panel: same three views as the assessment page (By KO is default), but sourced from the union of question tags across the set. Each KO row shows which papers exercise it (badges "P1 ✓ P2 — P3 ✓ P4 ✓") so the gap is visible.
+   - **Unrealised outcomes**: KOs / LOs in the syllabus that no question in the set touches.
+   - **Per-paper contribution table**: rows = papers in the set; columns = % of marks per AO, # questions, # KOs covered. One glance shows which paper carries which load.
+   - **Optional AI macro summary** (single button "Run macro review") — calls a new `paper-set-review` edge function that takes the aggregated stats + syllabus AO definitions and returns 2–4 calm one-liners about overall demand balance and any structural gaps. Mirrors `coach-review`'s voice rules (no praise, no verdicts). Persisted to `paper_set_reviews` so a re-run can be compared.
 
-- If the seeded question type is **MCQ**: `num_questions = max(1, totalMarks)` (1 mark per question by convention).
-- Otherwise: `num_questions = max(1, min(masterPool.length, ceil(totalMarks / 4)))` so structured-style sections start near the marks budget rather than the topic pool size.
+### Data model
 
-The user can still override this from the section editor — we only change the *initial* value.
+New tables (migration):
+- `paper_sets (id uuid pk, user_id uuid, title text, subject text, level text, syllabus_doc_id uuid → syllabus_documents.id, notes text, created_at, updated_at)`
+- `paper_set_papers (set_id uuid → paper_sets.id on delete cascade, paper_id uuid → past_papers.id on delete cascade, position int, primary key(set_id, paper_id))`
+- `paper_set_reviews (id uuid pk, set_id uuid → paper_sets, ran_at timestamptz, model text, snapshot jsonb)`
 
-### 2. Coach: don't suggest re-marking MCQ unless the user said otherwise
+RLS: same "Trial open" policies as the existing tables in this project (the codebase is currently trial-mode; matches `assessments`, `past_papers`).
 
-`supabase/functions/coach-review/index.ts` (check 4, line 318) has the AI judge whether `marks_declared` matches cognitive demand for every question. For MCQ, the convention is **1 mark per question unless the teacher explicitly states otherwise**, so suggestions like "Q2 · 1m → 2m, Calculation mark scheme should specify method and final answer units" are noise.
+### Code touchpoints
 
-Two changes inside that function:
+- `src/routes/paper-set.new.tsx` — set-up page (subject/level/syllabus picker + paper-multi-select, similar styling to `papers.tsx` and `new.tsx` step 1).
+- `src/routes/paper-set.$id.tsx` — coverage page. Heavy lifting reuses the AO / KO / LO mapping logic already in `src/routes/assessment.$id.tsx`. Extract the shared coverage-aggregation helpers into `src/lib/coverage.ts` so both pages call the same code (move `koLoGroups`, `normaliseLo`, AO mark-share calc, etc.).
+- `src/routes/papers.tsx` — add a "Group into set" / "Review as set" entry point (multi-select checkboxes on the papers list, then a "Create set" button).
+- `src/routes/dashboard.tsx` — surface existing paper sets (list with "Open coverage").
+- `supabase/functions/paper-set-review/index.ts` — new edge function that receives the aggregated stats payload and calls Lovable AI Gateway (`google/gemini-2.5-flash`, same as `coach-review`) to produce the macro summary. Reuses the voice rules and output shape from `coach-review` but with a smaller schema (`summary`, `priority_insights`, `unrealised_outcomes`, `ao_drift`).
+- No changes to the existing per-paper Assessment Coach.
 
-a. Append a hard rule to the system prompt before the existing check 4 text:
-```
-MCQ items follow the convention "1 mark per question" unless the teacher's
-instructions say otherwise. Do NOT propose mark-scheme changes for MCQ
-questions (no marks_suggested entries, no method/units rewrites). Score MCQs
-only on stem quality and answer correctness.
-```
+### Why this is a separate page, not a tab in Assessment Coach
 
-b. Filter `findings.mark_scheme_flags` and `findings.suggestions` server-side after parsing the tool call: drop any flag/suggestion whose target question is `question_type === "mcq"` and whose category is `marks` (or whose `marks_suggested` field is set). This is a belt-and-braces guard in case the model still slips one through.
+The current Coach is scoped to one `assessment` row (own questions, own blueprint, own mark scheme review). A paper set has no single blueprint, no mark-scheme rewrites, and no per-question suggestions — only aggregate coverage and demand balance. Folding that into the existing Coach UI confuses two different jobs, so it lives on its own route and only exposes the analytics that make sense at the macro level.
 
-### 3. Coach: don't recommend "diversify question types" on a single-format paper
+### Files touched
 
-When every question in the paper has the same `question_type` (e.g. a Paper-1 MCQ paper, or a structured-only paper), the `question_variety` finding telling the teacher to "explore including short answer questions or structured problem-solving tasks" is impossible to act on — the paper format is fixed.
-
-Two changes:
-
-a. Add a paper-format note to the system prompt above the variety check:
-```
-If the paper's section blueprint constrains every question to a single
-question_type (e.g. an MCQ-only Paper 1, a structured-only Paper 2), the
-question format is fixed by the syllabus. Do NOT recommend adding other
-question types in question_variety. You may still observe command-verb,
-context, or reading-load variation within the chosen format.
-```
-
-b. After parsing the tool call, compute `uniqueTypes = new Set(questions.map(q => q.question_type))`. If `uniqueTypes.size === 1`, drop `findings.question_variety` if it (i) mentions "multiple-choice", "short answer", "structured", "essay", or "diversif" / "include" / "introduce" of another format. Cheap regex on the `note` + `suggestion` is enough; we don't want to suppress legitimate within-format observations.
-
-## Files touched
-
-- `src/routes/new.tsx` — initial section-seed logic (~10 lines).
-- `supabase/functions/coach-review/index.ts` — system prompt additions + post-parse filtering (~25 lines).
-
-No DB / schema changes.
+- New: `src/routes/paper-set.new.tsx`, `src/routes/paper-set.$id.tsx`, `src/lib/coverage.ts` (extracted), `supabase/functions/paper-set-review/index.ts`.
+- Edited: `src/routes/papers.tsx` (multi-select + create-set entry), `src/routes/dashboard.tsx` (list paper sets), `src/routes/assessment.$id.tsx` (refactor to import from `src/lib/coverage.ts`).
+- Migration: three new tables + RLS policies.
