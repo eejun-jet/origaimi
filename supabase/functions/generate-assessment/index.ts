@@ -1345,14 +1345,20 @@ Deno.serve(async (req) => {
     // discipline we round-robin topics, preferring ones whose learning
     // outcomes have not yet been claimed in this section so KO coverage is
     // maximised.
-    const isCombinedScience = /combined\s*science/i.test(String(subject ?? "")) ||
-      String(syllabusCode ?? "").trim() === "5086";
-
     const buildBalancedPlan = (s: Section): (SectionTopic | null)[] => {
       const n = s.num_questions;
       if (s.topic_pool.length === 0) return Array.from({ length: n }, () => null);
 
-      const wantBalanced = isCombinedScience && s.question_type === "mcq";
+      // Trigger discipline interleaving whenever the MCQ pool spans 2+
+      // distinct discipline labels (e.g. Combined Science: Physics +
+      // Chemistry). This used to gate on subject==="Combined Science", but
+      // SEAB lists 5086/5087/5088 under subject="Sciences", so the gate
+      // missed and the generator emitted Physics-only papers when the user
+      // had selected both Physics and Chemistry topics.
+      const distinctDisciplines = new Set(
+        s.topic_pool.map((t) => (t.section ?? "").trim()).filter(Boolean),
+      );
+      const wantBalanced = s.question_type === "mcq" && distinctDisciplines.size >= 2;
       if (!wantBalanced) {
         return Array.from({ length: n }, (_, i) => s.topic_pool[i % s.topic_pool.length]);
       }
