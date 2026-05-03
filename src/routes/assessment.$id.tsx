@@ -2864,6 +2864,8 @@ function CoveragePanel({
       }
     }
 
+    const koMarksMap = new Map(paper.kos.map((k) => [k.name, k] as const));
+
     const buckets: KoBucket[] = [];
     for (const [koName, contentMap] of ko.entries()) {
       const contents: ContentBucket[] = [];
