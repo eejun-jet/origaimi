@@ -143,6 +143,7 @@ function EditorPage() {
   const isMobile = useIsMobile();
   const [sidebarTab, setSidebarTab] = useState<"coverage" | "comments">("coverage");
   const [retagBusy, setRetagBusy] = useState(false);
+  const [paperInfo, setPaperInfo] = useState<SyllabusPaperInfo | null>(null);
 
   const loadAll = async () => {
     const { data: a } = await supabase.from("assessments").select("*").eq("id", id).single();
