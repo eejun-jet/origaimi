@@ -3124,7 +3124,7 @@ function CoveragePanel({
           <div className="mt-3 space-y-1.5">
             {koLoGroups.map((g) => {
               const meta = STATUS_META[g.status];
-              const koRemarks = g.name.startsWith("Unmapped") ? 0 : remarkCount("ko", g.name);
+              const koRemarks = remarkCount("ko", g.name);
               return (
                 <Collapsible key={g.name}>
                   <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-md border border-border bg-card px-2 py-1.5 text-left transition hover:bg-muted/50">
