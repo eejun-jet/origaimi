@@ -3012,6 +3012,13 @@ function CoveragePanel({
               <div className="inline-flex rounded-md border border-border bg-muted/30 p-0.5 text-[10px]">
                 <button
                   type="button"
+                  onClick={() => setLoView("list")}
+                  className={`rounded px-2 py-0.5 transition ${loView === "list" ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  By KO
+                </button>
+                <button
+                  type="button"
                   onClick={() => setLoView("topic")}
                   className={`rounded px-2 py-0.5 transition ${loView === "topic" ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
                 >
@@ -3023,13 +3030,6 @@ function CoveragePanel({
                   className={`rounded px-2 py-0.5 transition ${loView === "map" ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
                 >
                   Map
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLoView("list")}
-                  className={`rounded px-2 py-0.5 transition ${loView === "list" ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-                >
-                  By KO
                 </button>
               </div>
             )}
