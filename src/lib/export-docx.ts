@@ -258,8 +258,8 @@ export async function exportAssessmentDocx(
 
   const doc = new Document({
     creator: "origAImi",
-    title: assessment.title,
-    description: `${assessment.subject} — ${assessment.level}`,
+    title: clean(assessment.title),
+    description: clean(`${assessment.subject} — ${assessment.level}`),
     styles: {
       default: { document: { run: { font: ARIAL, size: 22 } } },
     },
