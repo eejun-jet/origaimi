@@ -405,6 +405,36 @@ function NewAssessment() {
       const seedCount = seedType === "mcq"
         ? Math.max(1, totalMarks)
         : Math.max(1, Math.min(masterPool.length, Math.ceil(totalMarks / 4)));
+      if (socialStudiesPaper) {
+        const defaultSkills: SbqSkill[] = ["inference", "comparison", "reliability", "purpose", "assertion"];
+        setSections([
+          {
+            ...defaultSection("A", 35),
+            name: "Source-Based Case Study",
+            question_type: "source_based",
+            marks: Math.min(35, totalMarks),
+            num_questions: 5,
+            topic_pool: masterPool,
+            sbq_skills: defaultSkills,
+            sbq_skill: undefined,
+            ao_codes: selectedAoCodes.slice(),
+            knowledge_outcomes: selectedKos.slice(),
+            learning_outcomes: selectedLos.slice(),
+          },
+          {
+            ...defaultSection("B", Math.max(1, totalMarks - Math.min(35, totalMarks))),
+            name: "Structured Response Questions",
+            question_type: "long",
+            marks: Math.max(1, totalMarks - Math.min(35, totalMarks)),
+            num_questions: 2,
+            topic_pool: masterPool,
+            ao_codes: selectedAoCodes.slice(),
+            knowledge_outcomes: selectedKos.slice(),
+            learning_outcomes: selectedLos.slice(),
+          },
+        ]);
+        return;
+      }
       setSections([{
         ...defaultSection("A", totalMarks),
         question_type: seedType,
@@ -417,7 +447,7 @@ function NewAssessment() {
     }
     // intentionally no `sections` dep — only seed when pool first becomes non-empty
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTopicIds, topics, useSyllabus, selected?.paper.assessmentMode]);
+  }, [selectedTopicIds, topics, useSyllabus, selected?.paper.assessmentMode, socialStudiesPaper]);
 
   // The full master pool of topics available to any section (derived from Step 2 selection).
   const masterTopicPool: SectionTopic[] = useMemo(() => {
