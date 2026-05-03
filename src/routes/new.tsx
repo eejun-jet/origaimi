@@ -372,10 +372,17 @@ function NewAssessment() {
               learning_outcome_code: t.learningOutcomeCode,
             }))
         : topics.map((t) => ({ topic: t }));
+      // Seed a sensible question count: MCQ defaults to 1 mark per question
+      // (so num_questions = totalMarks); other formats start near the marks
+      // budget rather than the topic pool size, so a 40-mark paper doesn't
+      // open with "97 questions" just because the syllabus pool is large.
+      const seedCount = seedType === "mcq"
+        ? Math.max(1, totalMarks)
+        : Math.max(1, Math.min(masterPool.length, Math.ceil(totalMarks / 4)));
       setSections([{
         ...defaultSection("A", totalMarks),
         question_type: seedType,
-        num_questions: Math.max(1, masterPool.length),
+        num_questions: seedCount,
         topic_pool: masterPool,
         ao_codes: selectedAoCodes.slice(),
         knowledge_outcomes: selectedKos.slice(),
