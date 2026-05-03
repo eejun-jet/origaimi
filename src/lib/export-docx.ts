@@ -19,6 +19,7 @@ import {
   PageOrientation,
   Footer,
   PageNumber,
+  ImageRun,
 } from "docx";
 import { saveAs } from "file-saver";
 import { toSectioned, getSbqSkill, type Section } from "@/lib/sections";
