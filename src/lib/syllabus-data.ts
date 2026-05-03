@@ -85,6 +85,7 @@ export type PaperTopic = {
   outcomeCategories: string[];
   aoCodes: string[];
   section: string | null;
+  koContent: Record<string, string[]>;
 };
 
 export async function loadPaperTopics(paperId: string): Promise<PaperTopic[]> {
