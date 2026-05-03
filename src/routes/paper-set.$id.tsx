@@ -87,7 +87,7 @@ function PaperSetView() {
       setLoading(true);
       const { data: srow } = await supabase
         .from("paper_sets")
-        .select("id,title,subject,level,syllabus_doc_id,notes")
+        .select("id,title,subject,level,syllabus_doc_id,notes,scoped_disciplines")
         .eq("id", id)
         .single();
       if (!srow) {
