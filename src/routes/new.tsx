@@ -861,6 +861,7 @@ function NewAssessment() {
                 subject,
                 level,
                 syllabusCode: selected?.doc.syllabusCode ?? null,
+                syllabusDocId: selected?.doc.id ?? null,
                 paperCode: selected?.paper.paperCode ?? null,
                 assessmentMode: selected?.paper.assessmentMode ?? "written",
                 totalMarks,
