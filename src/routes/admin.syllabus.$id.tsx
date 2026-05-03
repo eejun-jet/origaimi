@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { ArrowLeft, Save, Trash2, Plus, Loader2 } from "lucide-react";
 
@@ -60,6 +62,7 @@ type Topic = {
   depth: number;
   position: number;
   section: string | null;
+  ko_content: Record<string, string[]>;
 };
 
 type AO = {
@@ -138,6 +141,7 @@ function SyllabusReview() {
         outcome_categories: ["knowledge"], ao_codes: [],
         depth: 2, position: prev.length,
         section: null,
+        ko_content: {},
       },
     ]);
   };
@@ -202,6 +206,7 @@ function SyllabusReview() {
           subject: doc.subject,
           level: doc.level,
           section: t.section,
+          ko_content: t.ko_content ?? {},
         }));
         const { error: insErr } = await supabase.from("syllabus_topics").insert(rows);
         if (insErr) throw insErr;
@@ -656,7 +661,17 @@ function SyllabusReview() {
                         <Badge key={`b-${b}`} variant="outline" className="text-xs">{b}</Badge>
                       ))}
                       {(t.outcome_categories ?? []).map((c) => (
-                        <Badge key={`c-${c}`} variant="secondary" className="text-xs capitalize">{c}</Badge>
+                        <KOContentBadge
+                          key={`c-${c}`}
+                          ko={c}
+                          items={(t.ko_content ?? {})[c] ?? []}
+                          onChange={(items) => {
+                            const next = { ...(t.ko_content ?? {}) };
+                            if (items.length === 0) delete next[c];
+                            else next[c] = items;
+                            updateTopic(originalIdx, { ko_content: next });
+                          }}
+                        />
                       ))}
                       {(t.ao_codes ?? []).map((a) => (
                         <Badge key={`a-${a}`} className="bg-primary/15 text-xs font-mono text-primary hover:bg-primary/20">{a}</Badge>
@@ -670,5 +685,67 @@ function SyllabusReview() {
         )}
       </main>
     </div>
+  );
+}
+
+function KOContentBadge({
+  ko,
+  items,
+  onChange,
+}: {
+  ko: string;
+  items: string[];
+  onChange: (items: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(items.join("\n"));
+  useEffect(() => { if (open) setDraft(items.join("\n")); }, [open, items]);
+
+  const count = items.length;
+  const hasContent = count > 0;
+
+  const commit = () => {
+    const next = draft
+      .split("\n")
+      .map((x) => x.trim())
+      .filter((x) => x.length > 0);
+    onChange(next);
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={`inline-flex items-center gap-1 rounded-md border bg-secondary px-2 py-0.5 text-xs capitalize text-secondary-foreground transition hover:bg-secondary/80 ${hasContent ? "border-primary/40 underline decoration-dotted underline-offset-2" : "border-transparent"}`}
+          title={hasContent ? `${count} indicative content item${count === 1 ? "" : "s"} — click to view/edit` : "Click to add indicative content"}
+        >
+          <span>{ko}</span>
+          {hasContent && <span className="text-[10px] font-medium text-muted-foreground">· {count}</span>}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-80" align="start">
+        <div className="space-y-2">
+          <div>
+            <Label className="text-xs font-semibold capitalize">Indicative content — {ko}</Label>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              One item per line. Use this for events, case studies, dates and other factual content students must know — not LOs.
+            </p>
+          </div>
+          <Textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={8}
+            className="text-xs"
+            placeholder={"Treaty of Versailles\nReichstag Fire\nNight of the Long Knives"}
+          />
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button size="sm" className="h-7 text-xs" onClick={commit}>Save</Button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

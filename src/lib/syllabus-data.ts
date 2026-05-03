@@ -85,6 +85,7 @@ export type PaperTopic = {
   outcomeCategories: string[];
   aoCodes: string[];
   section: string | null;
+  koContent: Record<string, string[]>;
 };
 
 export async function loadPaperTopics(paperId: string): Promise<PaperTopic[]> {
@@ -99,7 +100,7 @@ export async function loadPaperTopics(paperId: string): Promise<PaperTopic[]> {
   if (linkedIds.length > 0) {
     const { data, error } = await supabase
       .from("syllabus_topics")
-      .select("id, topic_code, parent_code, title, depth, position, strand, sub_strand, learning_outcomes, learning_outcome_code, suggested_blooms, outcome_categories, ao_codes, section")
+      .select("id, topic_code, parent_code, title, depth, position, strand, sub_strand, learning_outcomes, learning_outcome_code, suggested_blooms, outcome_categories, ao_codes, section, ko_content")
       .in("id", linkedIds)
       .order("position", { ascending: true });
     if (error) throw error;
@@ -108,7 +109,7 @@ export async function loadPaperTopics(paperId: string): Promise<PaperTopic[]> {
   // Fallback: legacy single-paper ownership.
   const { data, error } = await supabase
     .from("syllabus_topics")
-    .select("id, topic_code, parent_code, title, depth, position, strand, sub_strand, learning_outcomes, learning_outcome_code, suggested_blooms, outcome_categories, ao_codes, section")
+    .select("id, topic_code, parent_code, title, depth, position, strand, sub_strand, learning_outcomes, learning_outcome_code, suggested_blooms, outcome_categories, ao_codes, section, ko_content")
     .eq("paper_id", paperId)
     .order("position", { ascending: true });
   if (error) throw error;
@@ -125,7 +126,7 @@ export async function loadPaperTopics(paperId: string): Promise<PaperTopic[]> {
 export async function loadDocTopics(docId: string): Promise<PaperTopic[]> {
   const { data, error } = await supabase
     .from("syllabus_topics")
-    .select("id, topic_code, parent_code, title, depth, position, strand, sub_strand, learning_outcomes, learning_outcome_code, suggested_blooms, outcome_categories, ao_codes, section")
+    .select("id, topic_code, parent_code, title, depth, position, strand, sub_strand, learning_outcomes, learning_outcome_code, suggested_blooms, outcome_categories, ao_codes, section, ko_content")
     .eq("source_doc_id", docId)
     .order("position", { ascending: true });
   if (error) throw error;
@@ -147,6 +148,7 @@ function mapTopicRow(t: {
   outcome_categories: string[] | null;
   ao_codes: string[] | null;
   section: string | null;
+  ko_content?: unknown;
 }): PaperTopic {
   return {
     id: t.id,
@@ -163,7 +165,20 @@ function mapTopicRow(t: {
     outcomeCategories: (t.outcome_categories ?? []) as string[],
     aoCodes: (t.ao_codes ?? []) as string[],
     section: t.section,
+    koContent: normaliseKoContent(t.ko_content),
   };
+}
+
+function normaliseKoContent(raw: unknown): Record<string, string[]> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, string[]> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (Array.isArray(v)) {
+      const items = v.filter((x): x is string => typeof x === "string" && x.trim().length > 0);
+      if (items.length > 0) out[k] = items;
+    }
+  }
+  return out;
 }
 
 export type AssessmentObjective = {

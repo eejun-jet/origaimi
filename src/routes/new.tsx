@@ -1671,6 +1671,7 @@ function SectionCard({
                   outcomeCategories: t.outcome_categories ?? [],
                   aoCodes: t.ao_codes ?? [],
                   section: t.section ?? null,
+                  koContent: {},
                 }))}
                 selected={sectionLos}
                 onToggle={(lo) => toggleLo(lo)}
