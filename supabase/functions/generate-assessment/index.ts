@@ -685,6 +685,7 @@ const TOPIC_GROUPS: { name: string; pattern: RegExp }[] = [
   { name: "end_cold_war", pattern: /(end of the cold war|gorbachev|perestroika|glasnost|tear down this wall|fall of the berlin wall|collapse of the (ussr|soviet union)|inf treaty)/i },
   { name: "wwii", pattern: /(world war ii|wwii|second world war|outbreak of war|appeasement|munich|league of nations|abyssinia|rhineland|anschluss|non-aggression pact|invasion of poland)/i },
   { name: "nazi", pattern: /(nazi|nazism|hitler|weimar|reichstag|enabling act|third reich|nuremberg laws|authoritarian.*germany|rise of authoritarian.*german|fascis)/i },
+  { name: "militarist_japan", pattern: /(militarist japan|japan.*militaris|militarism.*japan|imperial japan|tojo|hirohito|manchuria|mukden|kwantung|showa restoration|february 26|2-26 incident|kokutai|authoritarian.*japan)/i },
   { name: "stalin", pattern: /(stalin|soviet union|ussr|five-year plan|collectivisation|collectivization|gulag|great purge|show trial|authoritarian.*soviet|authoritarian.*russia|bolshevik)/i },
   { name: "decolonisation_sea", pattern: /(decolonisation|decolonization|singapore|merger|separation|lee kuan yew|malaysia|self-government|british withdrawal|konfrontasi|federation of malaya)/i },
   // Social Studies issue groups — keep these isolated from each other and from History bundles.
