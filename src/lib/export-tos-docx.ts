@@ -23,7 +23,9 @@ import type {
   TosCoverage,
   TosSection,
   TosQuestion,
+  TosTopicIndexEntry,
 } from "@/lib/export-tos-xlsx";
+import { buildKoLoGrouping } from "@/lib/export-tos-xlsx";
 
 const ARIAL = "Arial";
 
