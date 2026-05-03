@@ -2082,12 +2082,6 @@ function LOGroupedSelector({
                         {lo}
                       </span>
                     </label>
-                      key={lo}
-                      className={`flex cursor-pointer items-start gap-2 rounded p-1.5 text-xs ${checked ? "bg-primary-soft/40" : "hover:bg-muted/40"}`}
-                    >
-                      <Checkbox checked={checked} onCheckedChange={() => onToggle(lo)} />
-                      <span className="flex-1">{lo}</span>
-                    </label>
                   );
                 })}
               </div>
