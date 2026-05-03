@@ -1322,6 +1322,9 @@ function SectionCard({
   }, [section.topic_pool, globalKos, sectionKos]);
 
   // LO candidates: union of (a) LOs from this section's topic_pool, (b) global LOs, (c) anything already on the section.
+  // Fallback for syllabuses that publish only Skills Outcomes (e.g. Social
+  // Studies papers in 2260/2261/2262 — Paper 1) — surface SOs as picks so the
+  // box isn't empty.
   const loCandidates = useMemo(() => {
     const set = new Set<string>();
     for (const t of section.topic_pool) {
@@ -1330,10 +1333,20 @@ function SectionCard({
         if (v) set.add(v);
       }
     }
+    if (set.size === 0 && availableSos.length > 0) {
+      for (const so of availableSos) {
+        set.add(`${so.code}: ${so.statement}`);
+      }
+    }
     for (const lo of globalLos) set.add(lo);
     for (const lo of sectionLos) set.add(lo);
     return Array.from(set);
-  }, [section.topic_pool, globalLos, sectionLos]);
+  }, [section.topic_pool, globalLos, sectionLos, availableSos]);
+
+  const usingSoFallback = useMemo(() => {
+    if (availableSos.length === 0) return false;
+    return section.topic_pool.every((t) => (t.learning_outcomes ?? []).length === 0);
+  }, [section.topic_pool, availableSos]);
 
   const toggleAo = (code: string) => {
     const next = sectionAos.includes(code) ? sectionAos.filter((c) => c !== code) : [...sectionAos, code];
