@@ -36,14 +36,23 @@ function truncate(s: string, n: number): string {
   return s.length <= n ? s : s.slice(0, n - 1) + "…";
 }
 
+// Strip characters that are illegal in OOXML (control chars except \t \n \r).
+// Word refuses to open files containing them, which manifests as a generic
+// "file is corrupt" error on the user's machine.
+function sanitizeXmlText(s: string): string {
+  // eslint-disable-next-line no-control-regex
+  return s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, "");
+}
+
 const cellBorder = { style: BorderStyle.SINGLE, size: 4, color: "BFBFBF" };
 const cellBorders = { top: cellBorder, bottom: cellBorder, left: cellBorder, right: cellBorder };
 
 function txt(value: string | number | null | undefined, opts?: { bold?: boolean; size?: number }): Paragraph {
+  const raw = value == null || value === "" ? "" : String(value);
   return new Paragraph({
     children: [
       new TextRun({
-        text: value == null || value === "" ? "" : String(value),
+        text: sanitizeXmlText(raw),
         font: ARIAL,
         size: opts?.size ?? 18,
         bold: opts?.bold ?? false,
