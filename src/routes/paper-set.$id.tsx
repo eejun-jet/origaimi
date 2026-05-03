@@ -224,8 +224,13 @@ function PaperSetView() {
         map.set(ko, row);
       }
     }
-    return Array.from(map.values()).sort((a, b) => a.ko.localeCompare(b.ko));
-  }, [flatQuestions, topics]);
+    const all = Array.from(map.values()).sort((a, b) => a.ko.localeCompare(b.ko));
+    if (!inScope) return all;
+    return all.filter((r) => {
+      const d = discLookup.byKO.get(r.ko);
+      return !d || inScope.has(d);
+    });
+  }, [flatQuestions, topics, inScope, discLookup]);
 
   const loCoverage = useMemo(() => {
     const norm = (s: string) =>
