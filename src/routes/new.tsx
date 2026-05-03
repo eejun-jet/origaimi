@@ -52,6 +52,16 @@ type Blueprint = BlueprintRow[];
 type Band = "primary" | "secondary";
 type Stream = "standard" | "foundation" | "g3" | "g2";
 
+// Social Studies (2260/2261/2262) Knowledge Outcomes — these are the three
+// "Issues" that scope the syllabus. Picking these locks both SBQ and SRQ
+// sections to a coherent theme so the case-study sources and essay questions
+// stay aligned to the same Issue.
+const DEFAULT_SOCIAL_STUDIES_KOS: string[] = [
+  "Issue 1: Exploring Citizenship and Governance",
+  "Issue 2: Living in a Diverse Society",
+  "Issue 3: Living in a Globalised World",
+];
+
 const DEFAULT_SOCIAL_STUDIES_SOS: SkillsOutcome[] = [
   { code: "SO1", statement: "examine societal issues critically by gathering, interpreting, analysing and evaluating information from different sources to make well-reasoned and substantiated arguments, recommendations and conclusions on societal issues" },
   { code: "SO2", statement: "demonstrate sound reasoning and responsible decision-making that considers Singapore's unique contexts, constraints and vulnerabilities; and the consequences of one's actions on those around them" },
@@ -837,6 +847,7 @@ function NewAssessment() {
                   subject={subject}
                   allAOs={docAOs}
                   availableSos={socialStudiesPaper ? effectiveDocSOs : []}
+                  availableKos={socialStudiesPaper ? DEFAULT_SOCIAL_STUDIES_KOS : []}
 
                   globalAoCodes={selectedAoCodes}
                   globalKos={selectedKos}
@@ -1317,6 +1328,7 @@ type SectionCardProps = {
   subject: string;
   allAOs: AssessmentObjective[];
   availableSos?: SkillsOutcome[];
+  availableKos?: string[];
 
   globalAoCodes: string[];
   globalKos: string[];
@@ -1330,7 +1342,7 @@ type SectionCardProps = {
 
 function SectionCard({
   section, isFirst, isLast, masterPool, visibleQuestionTypes, subject,
-  allAOs, availableSos = [], globalAoCodes, globalKos, globalLos,
+  allAOs, availableSos = [], availableKos = [], globalAoCodes, globalKos, globalLos,
   specimenMix, specimenLabel,
   onUpdate, onRemove, onMove,
 }: SectionCardProps) {
@@ -1365,10 +1377,11 @@ function SectionCard({
     for (const t of section.topic_pool) {
       for (const c of t.outcome_categories ?? []) add(c);
     }
+    for (const c of availableKos) add(c);
     for (const c of globalKos) add(c);
     for (const c of sectionKos) add(c);
     return Array.from(seen.values());
-  }, [section.topic_pool, globalKos, sectionKos]);
+  }, [section.topic_pool, globalKos, sectionKos, availableKos]);
 
   // LO candidates: union of (a) LOs from this section's topic_pool, (b) global LOs, (c) anything already on the section.
   // Fallback for syllabuses that publish only Skills Outcomes (e.g. Social
@@ -1702,6 +1715,50 @@ function SectionCard({
             <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={addCustomAo} disabled={!customAo.trim()}>Add</Button>
           </div>
         </div>
+
+        {/* Knowledge Outcomes (KOs) — for SS, these are the three Issues that
+            scope the entire paper. Selecting them tightens both SBQ and SRQ
+            generation to a coherent theme. */}
+        {koCandidates.length > 0 && (
+          <div className="mt-3 rounded-lg border border-border bg-muted/20 p-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">Knowledge Outcomes (KOs)</Label>
+              <span className="text-xs text-muted-foreground">{sectionKos.length} / {koCandidates.length} selected</span>
+            </div>
+            {availableKos.length > 0 && (
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Pick the Issue(s) this section should target. Both SBQ sources and SRQ essays will be scoped to your selection.
+              </p>
+            )}
+            {(() => {
+              const allChecked = allKoSelected;
+              const someChecked = koCandidates.some((k) => sectionKos.includes(k)) && !allChecked;
+              return (
+                <label className="mt-3 flex cursor-pointer items-center gap-2 rounded-md border border-dashed border-border p-2 text-xs font-medium hover:bg-muted/40">
+                  <Checkbox
+                    checked={allChecked ? true : someChecked ? "indeterminate" : false}
+                    onCheckedChange={() => onUpdate({ knowledge_outcomes: allChecked ? [] : koCandidates.slice() })}
+                  />
+                  <span>{allChecked ? "Deselect all KOs" : "Select all KOs"}</span>
+                </label>
+              );
+            })()}
+            <div className="mt-2 space-y-1">
+              {koCandidates.map((ko) => {
+                const checked = sectionKos.includes(ko);
+                return (
+                  <label
+                    key={ko}
+                    className={`flex cursor-pointer items-start gap-3 rounded-md border p-2 text-sm transition-colors ${checked ? "border-primary bg-primary-soft/40" : "border-border hover:bg-muted/40"}`}
+                  >
+                    <Checkbox checked={checked} onCheckedChange={() => toggleKo(ko)} />
+                    <span className="flex-1">{ko}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Learning Outcomes — grouped by topic, expandable */}
         <div className="mt-3 rounded-lg border border-border bg-muted/20 p-3">
