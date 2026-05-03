@@ -9,7 +9,6 @@ import { toast } from "sonner";
 import {
   inferInScopeDisciplines,
   buildDisciplineLookup,
-  normaliseDiscipline,
 } from "@/lib/discipline-scope";
 
 export const Route = createFileRoute("/paper-set/$id")({
