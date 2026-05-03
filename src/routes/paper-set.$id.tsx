@@ -161,6 +161,32 @@ function PaperSetView() {
   const totalMarks = flatQuestions.reduce((s, x) => s + x.effectiveMarks, 0);
   const totalQuestions = flatQuestions.length;
 
+  const { inScope, disciplineUniverse, discLookup } = useMemo(() => {
+    const topicLikes = topics.map((t) => ({
+      title: t.title,
+      section: t.section,
+      outcome_categories: t.outcome_categories ?? [],
+      learning_outcomes: t.learning_outcomes ?? [],
+    }));
+    const lookup = buildDisciplineLookup(topicLikes);
+    const universe = Array.from(lookup.universe).filter((d) => d !== "General");
+    const scope = inferInScopeDisciplines({
+      questions: flatQuestions.map((x) => ({
+        topic: x.q.topic,
+        knowledge_outcomes: x.q.knowledge_outcomes,
+        learning_outcomes: x.q.learning_outcomes,
+      })),
+      topics: topicLikes,
+      override: setRow?.scoped_disciplines ?? null,
+    });
+    return { inScope: scope, disciplineUniverse: universe, discLookup: lookup };
+  }, [topics, flatQuestions, setRow?.scoped_disciplines]);
+
+  const updateScope = async (next: string[] | null) => {
+    if (setRow) setSetRow({ ...setRow, scoped_disciplines: next });
+    await supabase.from("paper_sets").update({ scoped_disciplines: next }).eq("id", id);
+  };
+
   const aoMarkShare = useMemo(() => {
     const aoTotals = new Map<string, number>();
     for (const { q, effectiveMarks } of flatQuestions) {
