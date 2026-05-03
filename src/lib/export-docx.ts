@@ -81,7 +81,7 @@ function bullet(text: string) {
 }
 
 function questionRow(qNumber: number, q: ExportQuestion): Table {
-  const stem = q.stem.trim();
+  const stem = clean(q.stem.trim());
   const optLines: Paragraph[] = [];
   if (q.question_type === "mcq" && q.options && q.options.length > 0) {
     q.options.forEach((opt, i) => {
@@ -90,7 +90,7 @@ function questionRow(qNumber: number, q: ExportQuestion): Table {
         new Paragraph({
           spacing: { after: 60 },
           indent: { left: 360 },
-          children: [new TextRun({ text: `${letter}. ${opt}`, size: 22, font: ARIAL })],
+          children: [new TextRun({ text: clean(`${letter}. ${opt}`), size: 22, font: ARIAL })],
         }),
       );
     });
