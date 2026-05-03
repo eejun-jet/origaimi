@@ -1965,9 +1965,21 @@ Deno.serve(async (req) => {
         const fallbackLOs = (section.learning_outcomes && section.learning_outcomes.length > 0)
           ? section.learning_outcomes
           : (t?.learning_outcomes ?? []);
-        const qAOs: string[] = Array.isArray(q.ao_codes) && q.ao_codes.length > 0 ? q.ao_codes : fallbackAOs;
-        const qKOs: string[] = Array.isArray(q.knowledge_outcomes) && q.knowledge_outcomes.length > 0 ? q.knowledge_outcomes : fallbackKOs;
-        const qLOs: string[] = Array.isArray(q.learning_outcomes) && q.learning_outcomes.length > 0 ? q.learning_outcomes : fallbackLOs;
+        // Placeholder padding stubs (inserted when the model returned fewer
+        // questions than requested) must NOT inherit the section's full
+        // LO/KO/AO pool — that would make every outcome appear "tested" N
+        // times and trigger spurious "overtested" flags across coverage.
+        const isPlaceholder = typeof q.stem === "string" && q.stem.startsWith("[Placeholder question ");
+
+        const qAOs: string[] = isPlaceholder
+          ? []
+          : (Array.isArray(q.ao_codes) && q.ao_codes.length > 0 ? q.ao_codes : fallbackAOs);
+        const qKOs: string[] = isPlaceholder
+          ? []
+          : (Array.isArray(q.knowledge_outcomes) && q.knowledge_outcomes.length > 0 ? q.knowledge_outcomes : fallbackKOs);
+        const qLOs: string[] = isPlaceholder
+          ? []
+          : (Array.isArray(q.learning_outcomes) && q.learning_outcomes.length > 0 ? q.learning_outcomes : fallbackLOs);
 
         // Semantic post-pass: add LOs/KOs/AOs the stem demonstrably exercises
         // even when the model under-tagged. Only ADDS, never removes.
@@ -1984,12 +1996,14 @@ Deno.serve(async (req) => {
         const poolLOs = (section.learning_outcomes && section.learning_outcomes.length > 0)
           ? section.learning_outcomes
           : Array.from(new Set(section.topic_pool.flatMap((tp) => tp.learning_outcomes ?? [])));
-        const expanded = expandQuestionTags(
-          { stem: q.stem ?? "", answer: q.answer ?? null, mark_scheme: q.mark_scheme ?? null, topic: q.topic ?? null, options: normalizeGeneratedOptions(q.options) },
-          { ao_codes: qAOs, knowledge_outcomes: qKOs, learning_outcomes: qLOs },
-          { loPool: poolLOs, koPool: poolKOs, aoPool: poolAOs },
-          inferKind,
-        );
+        const expanded = isPlaceholder
+          ? { ao_codes: [], knowledge_outcomes: [], learning_outcomes: [] }
+          : expandQuestionTags(
+              { stem: q.stem ?? "", answer: q.answer ?? null, mark_scheme: q.mark_scheme ?? null, topic: q.topic ?? null, options: normalizeGeneratedOptions(q.options) },
+              { ao_codes: qAOs, knowledge_outcomes: qKOs, learning_outcomes: qLOs },
+              { loPool: poolLOs, koPool: poolKOs, aoPool: poolAOs },
+              inferKind,
+            );
 
         allRows.push({
           assessment_id: assessmentId,
