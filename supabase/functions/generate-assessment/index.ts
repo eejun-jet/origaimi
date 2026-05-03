@@ -1799,6 +1799,7 @@ Deno.serve(async (req) => {
             const curated = curatedHumanitiesSourcePool(
               sectionTopic.topic,
               sectionTopic.learning_outcomes ?? [],
+              section.knowledge_outcomes ?? [],
             );
             // Backfill PASS 1: prefer NEW hosts not already represented in
             // the pool, to keep source diversity.
