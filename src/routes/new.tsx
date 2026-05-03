@@ -786,6 +786,9 @@ function NewAssessment() {
                   visibleQuestionTypes={visibleQuestionTypes}
                   subject={subject}
                   allAOs={docAOs}
+                  availableSos={
+                    /^social studies$/i.test(selected?.paper.componentName ?? "") ? docSOs : []
+                  }
 
                   globalAoCodes={selectedAoCodes}
                   globalKos={selectedKos}
