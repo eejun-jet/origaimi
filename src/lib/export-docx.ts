@@ -37,7 +37,79 @@ export type ExportQuestion = {
   mark_scheme: string | null;
   diagram_url?: string | null;
   diagram_caption?: string | null;
+  source_excerpt?: string | null;
+  source_url?: string | null;
 };
+
+// Parse a concatenated SBQ pool back into discrete labelled sources.
+// Mirrors parseSharedSourcePool in src/routes/assessment.$id.tsx.
+type ParsedExportSource =
+  | { label: string; kind: "text"; text: string; provenance?: string; sourceUrl?: string }
+  | { label: string; kind: "image"; caption: string; imageUrl: string; provenance?: string; sourceUrl?: string };
+
+function parseExportSourcePool(excerpt: string): ParsedExportSource[] {
+  const matches = [...excerpt.matchAll(/Source\s+([A-F])\s*:\s*([\s\S]*?)(?=\n\s*Source\s+[A-F]\s*:|$)/g)];
+  const raw = matches.length === 0
+    ? [{ label: "A", text: excerpt.trim() }]
+    : matches.map((m) => ({ label: m[1], text: m[2].trim() }));
+  return raw.map((entry): ParsedExportSource => {
+    const imgMeta = entry.text.match(/^\[IMAGE\]\s*([\s\S]*?)\s+—\s+(https?:\/\/\S+?)\s+\[PROV\]\s*([\s\S]*?)\s+\[URL\]\s*(\S+)\s*$/);
+    if (imgMeta) {
+      return { label: entry.label, kind: "image", caption: imgMeta[1].trim(), imageUrl: imgMeta[2].trim(), provenance: imgMeta[3].trim(), sourceUrl: imgMeta[4].trim() };
+    }
+    const imgLegacy = entry.text.match(/^\[IMAGE\]\s*([\s\S]*?)\s+—\s+(https?:\/\/\S+)\s*$/);
+    if (imgLegacy) {
+      return { label: entry.label, kind: "image", caption: imgLegacy[1].trim(), imageUrl: imgLegacy[2].trim() };
+    }
+    const textMeta = entry.text.match(/^\[PROV\]\s*([\s\S]*?)\s+\[URL\]\s*(\S+)\s+\[TEXT\]\s*([\s\S]*)$/);
+    if (textMeta) {
+      return { label: entry.label, kind: "text", text: textMeta[3].trim(), provenance: textMeta[1].trim(), sourceUrl: textMeta[2].trim() };
+    }
+    return { label: entry.label, kind: "text", text: entry.text };
+  });
+}
+
+function sourceParagraphs(sources: ParsedExportSource[]): Paragraph[] {
+  const out: Paragraph[] = [];
+  out.push(new Paragraph({
+    spacing: { before: 120, after: 80 },
+    children: [new TextRun({ text: "SOURCES FOR THIS SECTION", bold: true, size: 22, font: ARIAL })],
+  }));
+  for (const s of sources) {
+    out.push(new Paragraph({
+      spacing: { before: 120, after: 40 },
+      children: [new TextRun({ text: `Source ${s.label}${s.kind === "image" ? " (pictorial)" : ""}`, bold: true, size: 22, font: ARIAL })],
+    }));
+    if (s.provenance) {
+      out.push(new Paragraph({
+        spacing: { after: 60 },
+        children: [new TextRun({ text: s.provenance, italics: true, size: 20, font: ARIAL })],
+      }));
+    }
+    if (s.kind === "text") {
+      out.push(new Paragraph({
+        spacing: { after: 80 },
+        children: [new TextRun({ text: s.text, size: 22, font: ARIAL })],
+      }));
+    } else {
+      out.push(new Paragraph({
+        spacing: { after: 40 },
+        children: [new TextRun({ text: `[Image: ${s.caption}]`, italics: true, size: 22, font: ARIAL })],
+      }));
+      out.push(new Paragraph({
+        spacing: { after: 80 },
+        children: [new TextRun({ text: s.imageUrl, size: 18, font: ARIAL, color: "555555" })],
+      }));
+    }
+    if (s.sourceUrl) {
+      out.push(new Paragraph({
+        spacing: { after: 80 },
+        children: [new TextRun({ text: `Citation: ${s.sourceUrl}`, size: 18, font: ARIAL, color: "555555" })],
+      }));
+    }
+  }
+  return out;
+}
 
 type FetchedDiagram = {
   data: ArrayBuffer;
