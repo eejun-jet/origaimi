@@ -285,6 +285,124 @@ export type Database = {
           },
         ]
       }
+      paper_set_papers: {
+        Row: {
+          created_at: string
+          paper_id: string
+          position: number
+          set_id: string
+        }
+        Insert: {
+          created_at?: string
+          paper_id: string
+          position?: number
+          set_id: string
+        }
+        Update: {
+          created_at?: string
+          paper_id?: string
+          position?: number
+          set_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "paper_set_papers_paper_id_fkey"
+            columns: ["paper_id"]
+            isOneToOne: false
+            referencedRelation: "past_papers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "paper_set_papers_set_id_fkey"
+            columns: ["set_id"]
+            isOneToOne: false
+            referencedRelation: "paper_sets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      paper_set_reviews: {
+        Row: {
+          created_at: string
+          id: string
+          model: string | null
+          ran_at: string
+          set_id: string
+          snapshot: Json
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          model?: string | null
+          ran_at?: string
+          set_id: string
+          snapshot: Json
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          model?: string | null
+          ran_at?: string
+          set_id?: string
+          snapshot?: Json
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "paper_set_reviews_set_id_fkey"
+            columns: ["set_id"]
+            isOneToOne: false
+            referencedRelation: "paper_sets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      paper_sets: {
+        Row: {
+          created_at: string
+          id: string
+          level: string | null
+          notes: string | null
+          subject: string | null
+          syllabus_doc_id: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          level?: string | null
+          notes?: string | null
+          subject?: string | null
+          syllabus_doc_id?: string | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          level?: string | null
+          notes?: string | null
+          subject?: string | null
+          syllabus_doc_id?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "paper_sets_syllabus_doc_id_fkey"
+            columns: ["syllabus_doc_id"]
+            isOneToOne: false
+            referencedRelation: "syllabus_documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       past_paper_diagrams: {
         Row: {
           bbox: Json | null

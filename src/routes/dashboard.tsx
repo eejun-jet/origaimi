@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, FileText, Search, Trash2 } from "lucide-react";
+import { Plus, FileText, Search, Trash2, Layers } from "lucide-react";
 import { toast } from "sonner";
 import { SUBJECTS, LEVELS } from "@/lib/syllabus";
 
@@ -27,9 +27,18 @@ type Assessment = {
   updated_at: string;
 };
 
+type PaperSet = {
+  id: string;
+  title: string;
+  subject: string | null;
+  level: string | null;
+  updated_at: string;
+};
+
 function Dashboard() {
   const { user } = useAuth();
   const [items, setItems] = useState<Assessment[]>([]);
+  const [sets, setSets] = useState<PaperSet[]>([]);
   const [fetching, setFetching] = useState(true);
   const [search, setSearch] = useState("");
   const [subjectFilter, setSubjectFilter] = useState<string>("all");
@@ -37,11 +46,18 @@ function Dashboard() {
 
   const load = async () => {
     setFetching(true);
-    const { data } = await supabase
-      .from("assessments")
-      .select("id,title,subject,level,status,total_marks,duration_minutes,updated_at")
-      .order("updated_at", { ascending: false });
+    const [{ data }, { data: setData }] = await Promise.all([
+      supabase
+        .from("assessments")
+        .select("id,title,subject,level,status,total_marks,duration_minutes,updated_at")
+        .order("updated_at", { ascending: false }),
+      supabase
+        .from("paper_sets")
+        .select("id,title,subject,level,updated_at")
+        .order("updated_at", { ascending: false }),
+    ]);
     setItems((data as Assessment[]) ?? []);
+    setSets((setData as PaperSet[]) ?? []);
     setFetching(false);
   };
 
@@ -81,12 +97,43 @@ function Dashboard() {
               Drafts, in review, and finalised papers — all in one place.
             </p>
           </div>
-          <Link to="/new">
-            <Button className="gap-2">
-              <Plus className="h-4 w-4" /> Create new assessment
-            </Button>
-          </Link>
+          <div className="flex gap-2">
+            <Link to="/paper-set/new">
+              <Button variant="outline" className="gap-2">
+                <Layers className="h-4 w-4" /> Review paper set
+              </Button>
+            </Link>
+            <Link to="/new">
+              <Button className="gap-2">
+                <Plus className="h-4 w-4" /> Create new assessment
+              </Button>
+            </Link>
+          </div>
         </div>
+
+        {sets.length > 0 ? (
+          <section className="mt-6 rounded-xl border border-border bg-card p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Layers className="h-4 w-4 text-primary" />
+              <h2 className="text-sm font-medium">Paper sets</h2>
+              <span className="text-xs text-muted-foreground">— macro coverage across multiple papers</span>
+            </div>
+            <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {sets.map((s) => (
+                <li key={s.id}>
+                  <Link
+                    to="/paper-set/$id"
+                    params={{ id: s.id }}
+                    className="block rounded-lg border border-border px-3 py-2 hover:border-primary/40"
+                  >
+                    <div className="text-sm font-medium truncate">{s.title}</div>
+                    <div className="text-xs text-muted-foreground">{s.subject} · {s.level}</div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
 
         <div className="mt-6 flex flex-wrap gap-3">
           <div className="relative flex-1 min-w-[200px]">
