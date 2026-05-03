@@ -108,6 +108,39 @@ Deno.serve(async (req) => {
       });
     }
 
+    let syllabusContext = "";
+    const syllabusDocId = (snapshot as { syllabus_doc_id?: string | null })?.syllabus_doc_id ?? null;
+    if (syllabusDocId) {
+      try {
+        const supabase = createClient(
+          Deno.env.get("SUPABASE_URL")!,
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+        );
+        const { data: sd } = await supabase
+          .from("syllabus_documents")
+          .select("aims, assessment_rationale, pedagogical_notes, command_word_glossary")
+          .eq("id", syllabusDocId)
+          .maybeSingle();
+        if (sd && (sd.aims || sd.assessment_rationale || sd.pedagogical_notes)) {
+          const cw = Array.isArray(sd.command_word_glossary)
+            ? (sd.command_word_glossary as Array<{ word: string; definition: string }>)
+                .slice(0, 6)
+                .map((g) => `${g.word}: ${g.definition}`)
+                .join("; ")
+            : "";
+          syllabusContext = [
+            "\n\nSYLLABUS CONTEXT (use only to ground tone and intent — do not invent topic codes):",
+            sd.aims ? `Aims: ${sd.aims}` : "",
+            sd.assessment_rationale ? `Assessment rationale: ${sd.assessment_rationale}` : "",
+            sd.pedagogical_notes ? `Pedagogical notes: ${sd.pedagogical_notes}` : "",
+            cw ? `Command words: ${cw}` : "",
+          ].filter(Boolean).join("\n");
+        }
+      } catch (e) {
+        console.error("coach-intent: syllabus context fetch failed", e);
+      }
+    }
+
     const userPayload = `Review this assessment plan and submit findings via the tool.\n\n${JSON.stringify(snapshot)}`;
 
     const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -116,7 +149,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
+          { role: "system", content: SYSTEM_PROMPT + syllabusContext },
           { role: "user", content: userPayload },
         ],
         tools: [INTENT_TOOL],
