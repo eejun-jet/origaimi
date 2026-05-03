@@ -27,9 +27,18 @@ type Assessment = {
   updated_at: string;
 };
 
+type PaperSet = {
+  id: string;
+  title: string;
+  subject: string | null;
+  level: string | null;
+  updated_at: string;
+};
+
 function Dashboard() {
   const { user } = useAuth();
   const [items, setItems] = useState<Assessment[]>([]);
+  const [sets, setSets] = useState<PaperSet[]>([]);
   const [fetching, setFetching] = useState(true);
   const [search, setSearch] = useState("");
   const [subjectFilter, setSubjectFilter] = useState<string>("all");
@@ -37,11 +46,18 @@ function Dashboard() {
 
   const load = async () => {
     setFetching(true);
-    const { data } = await supabase
-      .from("assessments")
-      .select("id,title,subject,level,status,total_marks,duration_minutes,updated_at")
-      .order("updated_at", { ascending: false });
+    const [{ data }, { data: setData }] = await Promise.all([
+      supabase
+        .from("assessments")
+        .select("id,title,subject,level,status,total_marks,duration_minutes,updated_at")
+        .order("updated_at", { ascending: false }),
+      supabase
+        .from("paper_sets")
+        .select("id,title,subject,level,updated_at")
+        .order("updated_at", { ascending: false }),
+    ]);
     setItems((data as Assessment[]) ?? []);
+    setSets((setData as PaperSet[]) ?? []);
     setFetching(false);
   };
 
