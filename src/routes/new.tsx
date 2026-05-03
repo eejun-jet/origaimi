@@ -1377,10 +1377,11 @@ function SectionCard({
     for (const t of section.topic_pool) {
       for (const c of t.outcome_categories ?? []) add(c);
     }
+    for (const c of availableKos) add(c);
     for (const c of globalKos) add(c);
     for (const c of sectionKos) add(c);
     return Array.from(seen.values());
-  }, [section.topic_pool, globalKos, sectionKos]);
+  }, [section.topic_pool, globalKos, sectionKos, availableKos]);
 
   // LO candidates: union of (a) LOs from this section's topic_pool, (b) global LOs, (c) anything already on the section.
   // Fallback for syllabuses that publish only Skills Outcomes (e.g. Social
