@@ -139,6 +139,7 @@ function SyllabusReview() {
         outcome_categories: ["knowledge"], ao_codes: [],
         depth: 2, position: prev.length,
         section: null,
+        ko_content: {},
       },
     ]);
   };
