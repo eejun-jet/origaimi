@@ -299,6 +299,37 @@ FORMATTING — the answer field MUST contain at least 5 distinct paragraphs sepa
 
 QUALITY BAR — the answer must demonstrate L4-level historical analysis so it is usable as a model exemplar for students. Do NOT write a generic outline; write a fully developed essay with concrete, accurate historical detail throughout.`;
 
+// ---------- Social Studies Section B (Structured Response Questions, SRQ) ----------
+// SS Paper 1 (2260/2261/2262) Section B is a 15-mark Structured Response with
+// part (a) worth 7 marks and part (b) worth 8 marks. Stems use SS command
+// words ("Explain …", "How far do you agree …", "Do you think …"). Case
+// studies / examples may be Singaporean OR global/international, provided
+// the issue aligns with the AO/KO/SO and content for the chosen topic.
+
+const SS_SRQ_PART_A_MARK_SCHEME = `LEVEL DESCRIPTORS for the 7-mark "Explain" part (a) (copy these lines VERBATIM into the mark_scheme field, then add 1–2 indicative-content bullets per level tailored to THIS specific question):
+
+L1 (1–2 marks): Identifies/describes a relevant point without explaining how/why it answers the question.
+L2 (3–5 marks): Explains ONE reason/factor/challenge with developed reasoning linked to the question. Maximum 5 marks if only one reason is explained.
+L3 (6–7 marks): Explains TWO distinct reasons/factors/challenges with developed reasoning linked to the question.`;
+
+const SS_SRQ_PART_B_MARK_SCHEME = `LEVEL DESCRIPTORS for the 8-mark evaluative "How far do you agree" / "Do you think" part (b) (copy these lines VERBATIM into the mark_scheme field, then add 1–2 indicative-content bullets per level tailored to THIS specific question):
+
+L1 (1–2 marks): Describes the issue without taking a position or without explanation.
+L2 (3–4 marks): One-sided explanation — supports OR challenges the view, with reasoning, but no counter-perspective.
+L3 (5–6 marks): Two-sided explanation — gives reasoned arguments BOTH supporting and challenging the view.
+L4 (7–8 marks): L3 + reaches a substantiated overall judgement on the question (e.g. weighs which side is stronger, distinguishes context-dependent factors, or qualifies the agreement) supported by the evidence already given.`;
+
+const SS_SRQ_ANSWER_TEMPLATE = `MODEL ANSWER (write the answer field as a complete student exemplar of ~250–400 words, structured EXACTLY as below — separate EVERY paragraph with a BLANK LINE):
+
+For the 7-mark part (a): TWO PEEL paragraphs, one per reason/factor/challenge. Each paragraph names the reason, gives ONE concrete supporting example (Singaporean OR global/international — what matters is alignment to the AO/KO/SO and content), explains the causal link to the question, and ends with a mini-link tying back to the question.
+
+For the 8-mark part (b): FOUR paragraphs — (1) brief stand, (2) PEEL agreeing with the view with one concrete example, (3) PEEL challenging the view with one concrete example, (4) evaluation paragraph that weighs both sides and reaches a reasoned overall judgement (e.g. "agree to a large extent because …", "depends on context X versus Y", "agree but only when …").
+
+FORMATTING — at least 2 distinct paragraphs for part (a) and 4 distinct paragraphs for part (b), separated by blank lines. Do NOT use bullet points. Write flowing prose.
+
+QUALITY BAR — concrete, accurate evidence in every paragraph (named policy / event / case study / statistic / organisation). The example used may be from Singapore or any other country, as long as the issue genuinely aligns with the AO/KO/SO theme. Do NOT default to Singapore-only when a stronger international case better fits the topic.`;
+
+
 // Resolve effective skill IDs for a section, supporting new sbq_skills array
 // and legacy single sbq_skill. Caps at 5 and filters unknown ids.
 function resolveEffectiveSkills(section: Section): string[] {
@@ -460,6 +491,51 @@ const CURATED_HUMANITIES_BUNDLES: CuratedBundle[] = [
       { excerpt: `Indonesia's policy of Konfrontasi (Confrontation), launched by President Sukarno in 1963, opposed the formation of Malaysia as a "neo-colonial" project. Indonesian forces carried out armed incursions and bombings in Malaysian and Singaporean territory, including the MacDonald House bombing in Singapore in March 1965. Konfrontasi exposed the fragility of the new Federation, strained relations between Singapore and Kuala Lumpur over defence policy, and reinforced the case in Singapore for a separate, more pragmatic approach to regional security.`, source_url: "https://www.nas.gov.sg/archivesonline/data/pdfdoc/19650311.pdf", source_title: "Indonesian Confrontation and the MacDonald House bombing, 1965", publisher: "National Archives of Singapore" },
     ],
   },
+
+  // ════════════════════════════════════════════════════════════════════
+  // SOCIAL STUDIES (Combined Humanities Paper 1, 2260/2261/2262) BUNDLES
+  // ════════════════════════════════════════════════════════════════════
+  // Per project memory: SS source-based case studies can be global /
+  // international — alignment to the AO/KO/SO and the issue is what matters,
+  // not whether the case is set in Singapore. Each bundle below mixes
+  // Singapore + international sources so the SBQ pool reflects a single
+  // ISSUE that the assertion / evaluation question can interrogate.
+
+  // --- Citizenship & governance (Issue 1) ---
+  {
+    trigger: /(citizenship|civic|national identity|governance|government|rule of law|public policy|leadership|good government|exploring citizenship)/i,
+    sources: [
+      { excerpt: `The Singapore Pledge, recited daily in schools, declares: "We, the citizens of Singapore, pledge ourselves as one united people, regardless of race, language or religion, to build a democratic society based on justice and equality so as to achieve happiness, prosperity and progress for our nation." Composed by S. Rajaratnam in 1966, the pledge frames citizenship as a shared commitment to the nation that crosses ethnic and religious lines, and ties belonging to active participation rather than birth alone.`, source_url: "https://www.nlb.gov.sg/main/article-detail?cmsuuid=42561e98-d950-44b1-9b46-fbb9d9a9eed7", source_title: "The Singapore Pledge, 1966", publisher: "National Library Board, Singapore" },
+      { excerpt: `Article 14 of the Constitution of the Republic of Singapore guarantees the right of every citizen to freedom of speech, assembly and association, but qualifies these rights: "Parliament may by law impose … such restrictions as it considers necessary or expedient in the interest of the security of Singapore … public order or morality." Together with the Internal Security Act and the Public Order Act, these provisions show the Singapore approach to citizenship — civic rights are real but bounded by collective interests in stability and harmony.`, source_url: "https://sso.agc.gov.sg/Act/CONS1963", source_title: "Constitution of the Republic of Singapore, Article 14", publisher: "Singapore Statutes Online" },
+      { excerpt: `In its 2023 Worldwide Governance Indicators, the World Bank ranked countries on six dimensions including government effectiveness, regulatory quality, rule of law and control of corruption. The data show wide variation between similarly developed states: Singapore, Switzerland and New Zealand consistently score in the top decile across most dimensions, while several richer economies score lower on rule-of-law or voice-and-accountability measures. The Bank argues that good governance — not GDP per capita — best predicts long-run development outcomes.`, source_url: "https://www.worldbank.org/en/publication/worldwide-governance-indicators", source_title: "Worldwide Governance Indicators 2023", publisher: "World Bank" },
+      { excerpt: `On 9 February 2021, Switzerland held a national referendum on whether to ban the wearing of full face coverings in public. Supporters argued the ban affirmed shared civic norms and women's equality; opponents argued it singled out a religious minority and breached individual liberty. The proposal passed with 51.2% of the vote. The case shows how democratic citizenship can produce contested outcomes when civic values (equality, public order) are weighed against individual rights — and how the legitimacy of the rule depends on the process more than the outcome.`, source_url: "https://www.bbc.com/news/world-europe-56314173", source_title: "Switzerland votes to ban full face coverings, March 2021", publisher: "BBC News" },
+      { excerpt: `The Universal Declaration of Human Rights, adopted by the United Nations General Assembly in December 1948, states in Article 21: "Everyone has the right to take part in the government of his country, directly or through freely chosen representatives" and that "the will of the people shall be the basis of the authority of government". The declaration set an international benchmark for participatory citizenship, but governments interpret and implement it differently — through elections, consultation exercises, town halls and other channels — depending on history, demography and political culture.`, source_url: "https://www.un.org/en/about-us/universal-declaration-of-human-rights", source_title: "Universal Declaration of Human Rights, Article 21, 1948", publisher: "United Nations" },
+    ],
+  },
+
+  // --- Living in a diverse society (Issue 2) ---
+  {
+    trigger: /(diverse society|diversity|multicultural|multiracial|multi[- ]?religious|racial harmony|ethnic|inclusion|immigration|integrat|prejudice|discrimination|social cohesion)/i,
+    sources: [
+      { excerpt: `Singapore's housing policy uses an Ethnic Integration Policy (EIP), introduced in 1989, to set ethnic quotas in every HDB block and neighbourhood. The policy reflects the proportions of Chinese, Malay and Indian/Other residents in the national population. The Ministry of National Development argues that without the EIP, ethnic enclaves would re-form, weakening daily inter-racial contact. Critics note that the policy can constrain resale prices for minority sellers; supporters argue it has been central to producing routine inter-ethnic interaction in schools and shared spaces.`, source_url: "https://www.hdb.gov.sg/residential/buying-a-flat/resale/ethnic-integration-policy-and-spr-quota", source_title: "Ethnic Integration Policy in HDB estates", publisher: "Housing & Development Board, Singapore" },
+      { excerpt: `Speaking in Parliament in 1971, Canada's Prime Minister Pierre Trudeau declared multiculturalism within a bilingual framework as official federal policy: "Although there are two official languages, there is no official culture, nor does any ethnic group take precedence over any other." The policy committed the federal government to support cultural communities, remove barriers to participation and promote creative encounters between groups. Canada later embedded the principle in the 1988 Multiculturalism Act, making it one of the first states to legislate diversity as a national value.`, source_url: "https://www.canada.ca/en/canadian-heritage/services/canadian-multiculturalism-act.html", source_title: "Canadian Multiculturalism Act, 1988", publisher: "Government of Canada" },
+      { excerpt: `In June 2019, the National Assembly of Quebec passed Bill 21, "An Act respecting the laicity of the State". The law prohibits public servants in positions of authority — including teachers, police officers and judges — from wearing religious symbols at work. The Quebec government argued the law affirmed state secularism shared by the majority of Quebeckers. Muslim, Sikh and Jewish groups challenged the law as discriminatory in effect. The case illustrates how a diverse society can disagree fundamentally on what neutrality and integration require.`, source_url: "https://www.theguardian.com/world/2019/jun/17/quebec-religious-symbols-bill-21-secularism", source_title: "Quebec passes Bill 21 banning religious symbols at work, 2019", publisher: "The Guardian" },
+      { excerpt: `The OECD's 2018 report Working Together: Skills and Labour Market Integration of Immigrants and their Children examined integration outcomes across 35 member countries. It found that second-generation immigrants in countries with strong civic-integration programmes (language training, recognition of foreign qualifications, anti-discrimination enforcement) reach near-parity in employment rates with native-born peers; in countries that rely mainly on assimilation expectations, gaps persist into the third generation. The report concludes that diverse societies are not automatically cohesive — institutions actively shape outcomes.`, source_url: "https://www.oecd.org/els/mig/working-together-skills-and-labour-market-integration-of-immigrants-and-their-children-9789264085985-en.htm", source_title: "Working Together: Skills and Labour Market Integration of Immigrants, 2018", publisher: "OECD" },
+      { excerpt: `In November 2018, the United Nations Educational, Scientific and Cultural Organization adopted the Recommendation on Open Educational Resources, framing intercultural understanding as "a foundation of peaceful coexistence in plural societies". UNESCO's accompanying World Report on Cultural Diversity (2009, updated 2022) argues that "managing diversity well" — through inclusive curricula, equitable participation, intercultural dialogue and protection against hate speech — produces measurable gains in trust, civic engagement and resilience to extremism, while neglecting it produces the opposite.`, source_url: "https://unesdoc.unesco.org/ark:/48223/pf0000185202", source_title: "UNESCO World Report on Cultural Diversity", publisher: "UNESCO" },
+    ],
+  },
+
+  // --- Being part of a globalised world (Issue 3) ---
+  {
+    trigger: /(globalisation|globalization|globalised world|global economy|trade|wto|asean|free trade|migrant|migration|interdependence|cross[- ]border|transnational|outsourcing|supply chain)/i,
+    sources: [
+      { excerpt: `In a 2023 speech, Singapore's Minister for Trade and Industry argued that the country's economic strategy depends on staying "deeply plugged into the global economy". He noted that Singapore's external trade was about 3.5 times its GDP, and that the country has signed 27 free-trade agreements (FTAs) with major economies. Free trade, the minister said, raises consumer choice, attracts foreign investment and creates jobs — but also exposes workers to global competition, which is why active retraining and SkillsFuture programmes are integral to the open-economy strategy.`, source_url: "https://www.mti.gov.sg/Newsroom/Speeches", source_title: "Singapore's open-economy strategy, 2023", publisher: "Ministry of Trade and Industry, Singapore" },
+      { excerpt: `The World Trade Organization's 2023 World Trade Report observed that "the share of world output traded internationally rose from 20% in 1995 to a peak of 31% in 2008, and has hovered around 30% since". The report notes that integration has lifted hundreds of millions out of extreme poverty, but has also concentrated production in specific regions, exposing supply chains to disruption — as the COVID-19 pandemic and the Russia–Ukraine war demonstrated. The WTO argues for "re-globalisation" — broader, more inclusive integration, not retreat.`, source_url: "https://www.wto.org/english/res_e/booksp_e/wtr23_e/wtr23_e.pdf", source_title: "WTO World Trade Report 2023", publisher: "World Trade Organization" },
+      { excerpt: `On 15 November 2020, fifteen Asia-Pacific economies signed the Regional Comprehensive Economic Partnership (RCEP), the world's largest free-trade agreement, covering about 30% of global GDP and population. RCEP harmonises rules of origin across the region and lowers tariffs on goods over time. Supporters argue RCEP locks regional supply chains together; critics, including labour groups in some signatory countries, argue it pressures wages and weakens domestic industry. The agreement illustrates how globalisation now happens through regional blocs as much as through global institutions.`, source_url: "https://asean.org/our-communities/economic-community/regional-comprehensive-economic-partnership-rcep/", source_title: "Regional Comprehensive Economic Partnership signed, November 2020", publisher: "ASEAN Secretariat" },
+      { excerpt: `The International Labour Organization's 2021 Global Estimates on International Migrant Workers reported that 169 million international migrant workers contributed to host economies worldwide, with 41% concentrated in high-income North American and European labour markets. The ILO documents both gains — remittances of US$702 billion in 2020 supported families and education in origin countries — and risks: wage theft, restricted labour rights and exposure during downturns. The report urges states to manage labour migration through bilateral frameworks rather than unilateral closures.`, source_url: "https://www.ilo.org/global/topics/labour-migration/publications/WCMS_808935/lang--en/index.htm", source_title: "ILO Global Estimates on International Migrant Workers, 2021", publisher: "International Labour Organization" },
+      { excerpt: `On 23 June 2016, the United Kingdom voted by 51.9% to 48.1% to leave the European Union. The Leave campaign argued that EU membership had eroded national control over borders, regulation and trade policy; the Remain campaign argued that economic interdependence with EU partners — half of UK trade — was the foundation of British prosperity. Subsequent UK studies suggest Brexit has reduced UK trade in goods by around 7% relative to a non-Brexit baseline by 2023. The case shows how voters in advanced economies can push back against deep integration.`, source_url: "https://www.bbc.com/news/uk-politics-32810887", source_title: "UK votes to leave the European Union, June 2016", publisher: "BBC News" },
+    ],
+  },
 ];
 
 /** Mutually-exclusive topic groups: if the SECTION TOPIC matches one of these
@@ -474,7 +550,12 @@ const TOPIC_GROUPS: { name: string; pattern: RegExp }[] = [
   { name: "nazi", pattern: /(nazi|nazism|hitler|weimar|reichstag|enabling act|third reich|nuremberg laws|authoritarian.*germany|rise of authoritarian.*german|fascis)/i },
   { name: "stalin", pattern: /(stalin|soviet union|ussr|five-year plan|collectivisation|collectivization|gulag|great purge|show trial|authoritarian.*soviet|authoritarian.*russia|bolshevik)/i },
   { name: "decolonisation_sea", pattern: /(decolonisation|decolonization|singapore|merger|separation|lee kuan yew|malaysia|self-government|british withdrawal|konfrontasi|federation of malaya)/i },
+  // Social Studies issue groups — keep these isolated from each other and from History bundles.
+  { name: "ss_citizenship", pattern: /(citizenship|civic|national identity|governance|good government|rule of law|public policy|leadership|exploring citizenship)/i },
+  { name: "ss_diversity", pattern: /(diverse society|diversity|multicultural|multiracial|multi[- ]?religious|racial harmony|inclusion|social cohesion|prejudice|discrimination)/i },
+  { name: "ss_globalisation", pattern: /(globalisation|globalization|globalised world|global economy|wto|asean|free trade|migrant|migration|interdependence|cross[- ]border|transnational|outsourcing|supply chain)/i },
 ];
+
 
 function topicGroupOf(text: string): string | null {
   for (const g of TOPIC_GROUPS) if (g.pattern.test(text)) return g.name;
@@ -853,8 +934,11 @@ function buildSectionUserPrompt(opts: {
   const typeLabel = QUESTION_TYPE_LABELS[section.question_type] ?? section.question_type;
   const isHumanitiesSBQ =
     opts.subjectKind === "humanities" && section.question_type === "source_based";
-  const isHistoryEssay =
+  const isSocialStudies = /social studies/i.test(opts.subject);
+  const isHumanitiesEssayLong =
     opts.subjectKind === "humanities" && section.question_type === "long";
+  const isHistoryEssay = isHumanitiesEssayLong && !isSocialStudies;
+  const isSSStructured = isHumanitiesEssayLong && isSocialStudies;
 
   const topicLines = section.topic_pool.map((t, i) => {
     const code = t.topic_code ? ` [${t.topic_code}]` : "";
@@ -1110,6 +1194,35 @@ HARD REQUIREMENTS:
   - Do NOT shorten the answer to a bullet outline. Write full prose paragraphs.
 ` : "";
 
+  const ssStructuredBlock = isSSStructured ? `
+
+SOCIAL STUDIES SECTION B — STRUCTURED RESPONSE QUESTIONS (SRQ) FORMAT (mandatory for every question in this section):
+
+This section MUST contain EXACTLY 2 questions. The first is worth 7 marks (part a), the second is worth 8 marks (part b). Do NOT write a single multi-part question — write TWO separate question objects.
+
+QUESTION 1 (7 marks — "Explain" type):
+  - Stem MUST start with "Explain two reasons why …", "Explain two challenges of …", "Explain two ways …" or similar SS command-word opener that asks for TWO explained points.
+  - The stem must NAME a clear SS issue / context (the example may be Singaporean OR global/international, as long as it aligns with the AO/KO/SO).
+  - marks field on this question MUST equal 7.
+  - mark_scheme field MUST contain VERBATIM:
+${SS_SRQ_PART_A_MARK_SCHEME}
+  followed by 1–2 indicative-content bullets per level tailored to the question.
+
+QUESTION 2 (8 marks — evaluative "How far / Do you think" type):
+  - Stem MUST start with "How far do you agree that …" or "Do you think … is the most effective way to …? Explain your answer." — asking for a reasoned judgement on the issue.
+  - marks field on this question MUST equal 8.
+  - mark_scheme field MUST contain VERBATIM:
+${SS_SRQ_PART_B_MARK_SCHEME}
+  followed by 1–2 indicative-content bullets per level tailored to the question.
+
+ANSWER fields (both questions): ${SS_SRQ_ANSWER_TEMPLATE}
+
+HARD REQUIREMENTS:
+  - DO NOT use the History two-factor template ("How far X, rather than Y, …"). SS Section B is NOT a comparative two-factor essay.
+  - Examples / case studies in stems and answers may be Singaporean OR global/international — judge on AO/KO/SO alignment, not locale.
+  - Write full prose answers, not bullet outlines.
+` : "";
+
   return `${grounding}You are drafting ${sectionLabel} of "${opts.title}" (${opts.level} ${opts.subject}, ${opts.assessmentType}, ${opts.durationMinutes} min, ${opts.totalMarks} total marks across ${opts.totalSections} sections).
 
 THIS SECTION:
@@ -1121,7 +1234,7 @@ THIS SECTION:
   - Bloom's level focus: ${section.bloom ?? "Apply"} (use other levels only if the topic clearly demands it)
   ${section.instructions ? `- Section instructions for the rubric: ${section.instructions}` : ""}
 ${skillBlock}${difficultyBlock}${objectivesBlock}
-${humanitiesSourceGuidance}${sbqSectionPreamble}${historyEssayBlock}
+${humanitiesSourceGuidance}${sbqSectionPreamble}${historyEssayBlock}${ssStructuredBlock}
 ${(() => {
   // When the caller has narrowed topic_pool to exactly one entry per question
   // (e.g. Combined Science Paper 1 with a planned Physics/Chemistry split), we
@@ -1876,11 +1989,20 @@ Deno.serve(async (req) => {
       if (questions.length > 0) {
         const lockedIndices = new Set<number>();
         if (isHumanitiesSBQ) {
-          // Lock SBQ skills marked `locked: true` (currently: assertion at 8 marks).
           for (let qi = 0; qi < perQSkillsForFetch.length && qi < questions.length; qi++) {
             const sk = perQSkillsForFetch[qi];
             if (sk?.locked) lockedIndices.add(qi);
           }
+        }
+        // Social Studies Section B SRQ: hard-lock part(a)=7, part(b)=8.
+        if (
+          subjectKind === "humanities" && section.question_type === "long" &&
+          /social studies/i.test(subject) && questions.length >= 2
+        ) {
+          (questions[0] as any).marks = 7;
+          (questions[1] as any).marks = 8;
+          lockedIndices.add(0);
+          lockedIndices.add(1);
         }
         const before = questions.reduce((a, q: any) => a + (q.marks ?? 0), 0);
         normalizeSectionMarks(questions as any, section.marks, lockedIndices);
