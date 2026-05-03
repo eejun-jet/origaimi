@@ -842,12 +842,15 @@ function buildDeterministicSbqQuestions(
     const templates = SBQ_STEM_TEMPLATES[skillId] ?? SBQ_STEM_TEMPLATES.inference;
     // Rotate template choice by question index so the paper varies its phrasings.
     const tpl = templates[i % templates.length];
-    const prompt = tpl
+    let prompt = tpl
       .replace(/\{S1\}/g, single)
       .replace(/\{S2\}/g, second)
       .replace(/\{ALL\}/g, allLabels)
       .replace(/\{T\}/g, topicNoun)
       .replace(/\{P\}/g, part);
+    if (ssBundle && skillId === "assertion") {
+      prompt = `Study Sources ${allLabels}. (${part}) "${ssBundle.assertion}" How far do Sources ${allLabels} support this assertion? Use ALL the sources and your own knowledge to explain your answer.`;
+    }
 
     // Pull a short snippet from the bound source(s) so the deterministic
     // exemplar can quote real text. Trim to ~120 chars and end on a word.
