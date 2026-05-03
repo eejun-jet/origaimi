@@ -52,6 +52,21 @@ type Blueprint = BlueprintRow[];
 type Band = "primary" | "secondary";
 type Stream = "standard" | "foundation" | "g3" | "g2";
 
+const DEFAULT_SOCIAL_STUDIES_SOS: SkillsOutcome[] = [
+  { code: "SO1", statement: "examine societal issues critically by gathering, interpreting, analysing and evaluating information from different sources to make well-reasoned and substantiated arguments, recommendations and conclusions on societal issues" },
+  { code: "SO2", statement: "demonstrate sound reasoning and responsible decision-making that considers Singapore's unique contexts, constraints and vulnerabilities; and the consequences of one's actions on those around them" },
+  { code: "SO3", statement: "demonstrate perspective-taking when encountering differing views" },
+  { code: "SO4", statement: "demonstrate reflective thinking when reviewing their understanding of societal issues and examining personal assumptions and beliefs about others" },
+];
+
+function isSocialStudiesPaper(doc?: SyllabusLibraryDoc | null, paper?: SyllabusLibraryPaper | null): boolean {
+  const haystack = [doc?.subject, doc?.title, doc?.syllabusCode, paper?.componentName, paper?.paperCode, paper?.topicTheme]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return haystack.includes("social studies") || /\b226[0-2]\/01\b/.test(haystack);
+}
+
 function classifyLevel(level?: string | null): { band: Band; stream: Stream } | null {
   if (!level) return null;
   const l = level.toLowerCase();
@@ -192,6 +207,11 @@ function NewAssessment() {
   }, [selectedPaperKey, library]);
 
   const useSyllabus = !!selected;
+  const socialStudiesPaper = isSocialStudiesPaper(selected?.doc, selected?.paper);
+  const effectiveDocSOs = useMemo(
+    () => (socialStudiesPaper && docSOs.length === 0 ? DEFAULT_SOCIAL_STUDIES_SOS : docSOs),
+    [socialStudiesPaper, docSOs],
+  );
 
   // When the selected paper changes, load its topics + prefill metadata.
   // For multi-track MCQ papers (e.g. 5086/01) topics live on sibling
@@ -385,6 +405,36 @@ function NewAssessment() {
       const seedCount = seedType === "mcq"
         ? Math.max(1, totalMarks)
         : Math.max(1, Math.min(masterPool.length, Math.ceil(totalMarks / 4)));
+      if (socialStudiesPaper) {
+        const defaultSkills: SbqSkill[] = ["inference", "comparison", "reliability", "purpose", "assertion"];
+        setSections([
+          {
+            ...defaultSection("A", 35),
+            name: "Source-Based Case Study",
+            question_type: "source_based",
+            marks: Math.min(35, totalMarks),
+            num_questions: 5,
+            topic_pool: masterPool,
+            sbq_skills: defaultSkills,
+            sbq_skill: undefined,
+            ao_codes: selectedAoCodes.slice(),
+            knowledge_outcomes: selectedKos.slice(),
+            learning_outcomes: selectedLos.slice(),
+          },
+          {
+            ...defaultSection("B", Math.max(1, totalMarks - Math.min(35, totalMarks))),
+            name: "Structured Response Questions",
+            question_type: "long",
+            marks: Math.max(1, totalMarks - Math.min(35, totalMarks)),
+            num_questions: 2,
+            topic_pool: masterPool,
+            ao_codes: selectedAoCodes.slice(),
+            knowledge_outcomes: selectedKos.slice(),
+            learning_outcomes: selectedLos.slice(),
+          },
+        ]);
+        return;
+      }
       setSections([{
         ...defaultSection("A", totalMarks),
         question_type: seedType,
@@ -397,7 +447,7 @@ function NewAssessment() {
     }
     // intentionally no `sections` dep — only seed when pool first becomes non-empty
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTopicIds, topics, useSyllabus, selected?.paper.assessmentMode]);
+  }, [selectedTopicIds, topics, useSyllabus, selected?.paper.assessmentMode, socialStudiesPaper]);
 
   // The full master pool of topics available to any section (derived from Step 2 selection).
   const masterTopicPool: SectionTopic[] = useMemo(() => {
@@ -786,9 +836,7 @@ function NewAssessment() {
                   visibleQuestionTypes={visibleQuestionTypes}
                   subject={subject}
                   allAOs={docAOs}
-                  availableSos={
-                    /^social studies$/i.test(selected?.paper.componentName ?? "") ? docSOs : []
-                  }
+                  availableSos={socialStudiesPaper ? effectiveDocSOs : []}
 
                   globalAoCodes={selectedAoCodes}
                   globalKos={selectedKos}
@@ -1328,15 +1376,16 @@ function SectionCard({
   // box isn't empty.
   const loCandidates = useMemo(() => {
     const set = new Set<string>();
+    if (availableSos.length > 0) {
+      for (const so of availableSos) set.add(`${so.code}: ${so.statement}`);
+      for (const lo of globalLos) set.add(lo);
+      for (const lo of sectionLos) set.add(lo);
+      return Array.from(set);
+    }
     for (const t of section.topic_pool) {
       for (const lo of t.learning_outcomes ?? []) {
         const v = lo.trim();
         if (v) set.add(v);
-      }
-    }
-    if (set.size === 0 && availableSos.length > 0) {
-      for (const so of availableSos) {
-        set.add(`${so.code}: ${so.statement}`);
       }
     }
     for (const lo of globalLos) set.add(lo);
@@ -1345,9 +1394,8 @@ function SectionCard({
   }, [section.topic_pool, globalLos, sectionLos, availableSos]);
 
   const usingSoFallback = useMemo(() => {
-    if (availableSos.length === 0) return false;
-    return section.topic_pool.every((t) => (t.learning_outcomes ?? []).length === 0);
-  }, [section.topic_pool, availableSos]);
+    return availableSos.length > 0;
+  }, [availableSos]);
 
   const toggleAo = (code: string) => {
     const next = sectionAos.includes(code) ? sectionAos.filter((c) => c !== code) : [...sectionAos, code];

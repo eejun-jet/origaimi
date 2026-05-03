@@ -329,6 +329,11 @@ FORMATTING — at least 2 distinct paragraphs for part (a) and 4 distinct paragr
 
 QUALITY BAR — concrete, accurate evidence in every paragraph (named policy / event / case study / statistic / organisation). The example used may be from Singapore or any other country, as long as the issue genuinely aligns with the AO/KO/SO theme. Do NOT default to Singapore-only when a stronger international case better fits the topic.`;
 
+function isSocialStudiesAssessment(subject?: string | null, paperCode?: string | null, syllabusCode?: string | null): boolean {
+  const haystack = [subject, paperCode, syllabusCode].filter(Boolean).join(" ").toLowerCase();
+  return haystack.includes("social studies") || /\b226[0-2]\/(?:0)?1\b/.test(haystack);
+}
+
 
 // Resolve effective skill IDs for a section, supporting new sbq_skills array
 // and legacy single sbq_skill. Caps at 5 and filters unknown ids.
@@ -762,6 +767,53 @@ function buildDeterministicSbqQuestions(section: Section, sources: GroundedSourc
       mark_scheme: scheme,
     };
   });
+}
+
+function buildDeterministicSsSrqQuestions(section: Section): any[] {
+  const rawTopic = section.topic_pool[0]?.topic ?? section.learning_outcomes?.[0] ?? "the issue";
+  const sectionLOs = section.learning_outcomes?.length ? section.learning_outcomes : (section.topic_pool[0]?.learning_outcomes ?? []);
+  const issue = deriveTopicNoun(rawTopic, sectionLOs);
+  const topicTag = stripCodePrefix(rawTopic).replace(/\*+$/, "").trim() || issue;
+  const commonTags = {
+    question_type: "long",
+    topic: topicTag,
+    bloom_level: section.bloom ?? "Evaluate",
+    difficulty: "medium",
+    options: null,
+    ao_codes: section.ao_codes ?? [],
+    knowledge_outcomes: section.knowledge_outcomes ?? [],
+    learning_outcomes: section.learning_outcomes?.length ? section.learning_outcomes : sectionLOs,
+  };
+  return [
+    {
+      ...commonTags,
+      marks: 7,
+      stem: `(${section.letter.toLowerCase()}a) Explain two reasons why ${issue} can create challenges for society.`,
+      answer: `One reason is that ${issue} can create tensions when different groups have competing needs and priorities. For example, Singapore's approach to social cohesion recognises that policies must balance individual preferences with shared spaces and common norms. When people feel that their concerns are ignored, trust can weaken and public discussion becomes more polarised. This makes the issue challenging because governments and communities must persuade people that trade-offs are fair, not merely impose decisions.
+
+Another reason is that ${issue} often involves long-term consequences that are not immediately visible. Internationally, countries dealing with migration, diversity or globalisation show that short-term benefits can come with adjustment costs for workers, families or minority groups. If these costs are not managed through support, education and consultation, affected groups may resist change. Hence, the issue is challenging because solutions must address both immediate concerns and future resilience.`,
+      mark_scheme: `${SS_SRQ_PART_A_MARK_SCHEME}
+
+Indicative content:
+- Credit any two well-explained reasons tied to ${issue}, including tensions between individual and collective interests, differing perspectives, unequal impact on groups, or long-term trade-offs.
+- Award stronger answers for concrete Singaporean or international examples that are clearly aligned to the AO/KO/SO focus.`,
+    },
+    {
+      ...commonTags,
+      marks: 8,
+      stem: `(${section.letter.toLowerCase()}b) How far do you agree that government action is the most effective way to respond to ${issue}? Explain your answer.`,
+      answer: `I agree to a large extent that government action is important because governments have the authority and resources to coordinate a response. For example, laws, public policies and national programmes can set clear expectations, protect vulnerable groups and provide funding at a scale that individuals cannot achieve alone. This is especially important when ${issue} affects society widely and requires consistent rules.
+
+However, government action by itself is not always the most effective response. Community groups, schools, families, businesses and individuals also shape daily attitudes and behaviour. International examples of integration, civic participation and responses to globalisation show that formal policy works best when people understand and support the purpose behind it. Without public trust and participation, even well-designed policies may be resisted or applied superficially.
+
+Overall, I agree only to a large extent. Government action is necessary because it provides structure, resources and legitimacy, but it is most effective when paired with active citizen participation and perspective-taking. The strongest response to ${issue} therefore combines top-down coordination with bottom-up responsibility.`,
+      mark_scheme: `${SS_SRQ_PART_B_MARK_SCHEME}
+
+Indicative content:
+- Credit reasoned arguments supporting government action, such as law-making, resource allocation, regulation, consultation or national coordination.
+- Credit counter-arguments about citizen responsibility, community action, business roles, education, perspective-taking and context-specific limits. Strong answers make an overall judgement.`,
+    },
+  ];
 }
 
 /** Enforce a HARD CAP: the sum of `marks` across the questions in a section
@@ -1401,7 +1453,7 @@ Deno.serve(async (req) => {
     const userId = bodyUserId ?? "00000000-0000-0000-0000-000000000001";
 
     const fallbackTypes = Array.isArray(questionTypes) ? questionTypes : [];
-    const sections = toSections(blueprint, "structured", fallbackTypes);
+    let sections = toSections(blueprint, "structured", fallbackTypes);
     if (sections.length === 0) {
         await markAssessmentStatus("generation_failed");
         return new Response(JSON.stringify({ error: "Blueprint has no sections" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -1409,6 +1461,18 @@ Deno.serve(async (req) => {
 
     const subjectKind = classifySubject(subject);
     const scienceMathKind = classifyScienceMath(subject);
+    const isSSPaper = isSocialStudiesAssessment(subject, paperCode, syllabusCode);
+    if (isSSPaper) {
+      const masterPool = sections.flatMap((s) => s.topic_pool ?? []);
+      const base = sections[0] ?? { letter: "A", topic_pool: [] } as Section;
+      const sourceBased = sections.find((s) => s.question_type === "source_based");
+      const srq = sections.find((s) => s.question_type === "long");
+      const defaultSkills = ["inference", "comparison", "reliability", "purpose", "assertion"];
+      sections = [
+        { ...base, ...(sourceBased ?? {}), letter: "A", name: sourceBased?.name ?? "Source-Based Case Study", question_type: "source_based", marks: 35, num_questions: 5, topic_pool: (sourceBased?.topic_pool?.length ? sourceBased.topic_pool : masterPool), sbq_skills: sourceBased?.sbq_skills?.length ? sourceBased.sbq_skills : defaultSkills, sbq_skill: undefined },
+        { ...base, ...(srq ?? {}), letter: "B", name: srq?.name ?? "Structured Response Questions", question_type: "long", marks: 15, num_questions: 2, topic_pool: (srq?.topic_pool?.length ? srq.topic_pool : masterPool), sbq_skills: undefined, sbq_skill: undefined },
+      ];
+    }
 
     // Fetch past-paper exemplars once for the whole paper (style anchor).
     let exemplarBlock = "";
@@ -1859,6 +1923,9 @@ Deno.serve(async (req) => {
       if (isHumanitiesSBQ && sharedSourcePool.length > 0) {
         console.log(`[generate] section ${section.letter}: using deterministic SBQ builder to avoid long AI timeout`);
         questions = buildDeterministicSbqQuestions(section, sharedSourcePool, perQSkillsForFetch);
+      } else if (isSSPaper && section.question_type === "long") {
+        console.log(`[generate] section ${section.letter}: using deterministic SS SRQ builder to avoid AI timeout`);
+        questions = buildDeterministicSsSrqQuestions(section);
       } else {
         // Chunk large sections so a single AI call never has to emit too many
         // questions at once (gateway times out around 60s; 40 MCQs in one shot
