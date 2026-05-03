@@ -169,6 +169,7 @@ export async function exportTosDocx(args: {
     { k: "Title", v: meta.title },
     { k: "Subject", v: meta.subject },
     { k: "Syllabus code", v: meta.syllabus_code ?? "—" },
+    { k: "Paper", v: meta.paper_number ?? "—" },
     { k: "Level", v: meta.level },
     { k: "Duration (min)", v: meta.duration_minutes },
     { k: "Total marks", v: `${meta.total_actual} / ${meta.total_marks}` },
