@@ -23,7 +23,9 @@ import type {
   TosCoverage,
   TosSection,
   TosQuestion,
+  TosTopicIndexEntry,
 } from "@/lib/export-tos-xlsx";
+import { buildKoLoGrouping } from "@/lib/export-tos-xlsx";
 
 const ARIAL = "Arial";
 
@@ -151,8 +153,9 @@ export async function exportTosDocx(args: {
   coverage: TosCoverage;
   sections: TosSection[];
   questions: TosQuestion[];
+  topicIndex?: TosTopicIndexEntry[];
 }): Promise<void> {
-  const { meta, coverage, sections, questions } = args;
+  const { meta, coverage, sections, questions, topicIndex } = args;
   const today = new Date().toISOString().slice(0, 10);
 
   // Landscape A4-ish: keep the matrix readable when many sections exist.
@@ -166,6 +169,7 @@ export async function exportTosDocx(args: {
     { k: "Title", v: meta.title },
     { k: "Subject", v: meta.subject },
     { k: "Syllabus code", v: meta.syllabus_code ?? "—" },
+    { k: "Paper", v: meta.paper_number ?? "—" },
     { k: "Level", v: meta.level },
     { k: "Duration (min)", v: meta.duration_minutes },
     { k: "Total marks", v: `${meta.total_actual} / ${meta.total_marks}` },
@@ -223,7 +227,65 @@ export async function exportTosDocx(args: {
     return [ko.name, ko.target, ko.actual, ko.actual - ko.target, ...perSection] as (string | number)[];
   });
 
-  // (LO matrix removed — KO-level breakdown is sufficient for the TOS)
+  // ── KO → LO grouping (condensed, optionally per-discipline)
+  const koLoGrouping = topicIndex && topicIndex.length > 0
+    ? buildKoLoGrouping(coverage, topicIndex)
+    : null;
+
+  // Build a multiline-aware grid table for the KO→LO section.
+  const buildMultilineGrid = (
+    headers: string[],
+    rows: (string | number)[][],
+    columnWidths: number[],
+  ): Table => {
+    const total = columnWidths.reduce((a, b) => a + b, 0);
+    const multilineCell = (val: string | number, width: number): TableCell => {
+      const text = val == null ? "" : String(val);
+      const lines = text.split("\n");
+      return new TableCell({
+        borders: cellBorders,
+        width: { size: width, type: WidthType.DXA },
+        margins: { top: 60, bottom: 60, left: 120, right: 120 },
+        children: lines.map((line) =>
+          new Paragraph({
+            children: [new TextRun({ text: sanitizeXmlText(line), font: ARIAL, size: 18 })],
+          })
+        ),
+      });
+    };
+    return new Table({
+      width: { size: total, type: WidthType.DXA },
+      columnWidths,
+      rows: [
+        new TableRow({
+          tableHeader: true,
+          children: headers.map((h, i) => headerCell(h, columnWidths[i])),
+        }),
+        ...rows.map((r) =>
+          new TableRow({
+            children: r.map((cell, i) => multilineCell(cell, columnWidths[i])),
+          })
+        ),
+      ],
+    });
+  };
+
+  let koLoTable: Table | null = null;
+  if (koLoGrouping && koLoGrouping.rows.length > 0) {
+    const fixedWeights = [3, 0.8, 0.8, 0.6];
+    const loColWeights = koLoGrouping.disciplines.map(() => 4);
+    const koLoWidths = distributeWidths(contentWidth, [...fixedWeights, ...loColWeights]);
+    const koLoHeaders = ["Knowledge Outcome", "Target", "Actual", "Δ", ...koLoGrouping.disciplines];
+    const koLoRows = koLoGrouping.rows.map((r) => [
+      r.name,
+      r.target,
+      r.actual,
+      r.delta,
+      ...koLoGrouping.disciplines.map((d) => r.cells[d] ?? ""),
+    ] as (string | number)[]);
+    koLoTable = buildMultilineGrid(koLoHeaders, koLoRows, koLoWidths);
+  }
+
 
   // ── Question map
   const sectionLetterForPosition = (position: number): string => {
@@ -292,6 +354,13 @@ export async function exportTosDocx(args: {
           spacer(),
           heading("Knowledge Outcomes (KO)", HeadingLevel.HEADING_2),
           buildGridTable(koHeaders, koRows.length > 0 ? koRows : [koHeaders.map(() => "")], koWidths),
+          ...(koLoTable
+            ? [
+                spacer(),
+                heading("KO → LO coverage  (✓ covered · uncovered)", HeadingLevel.HEADING_2),
+                koLoTable,
+              ]
+            : []),
           spacer(),
           heading("Question map", HeadingLevel.HEADING_2),
           buildGridTable(qHeaders, qRows.length > 0 ? qRows : [qHeaders.map(() => "")], qWidths),

@@ -5,12 +5,16 @@
 
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
+import { normaliseDiscipline } from "./discipline-scope";
 
 export type TosAssessmentMeta = {
   title: string;
   subject: string;
   level: string;
   syllabus_code: string | null;
+  /** Paper number rendered as its own row in the summary, separate from the
+   *  syllabus code (e.g. syllabus 5086/5087/5088 with paper "1"). */
+  paper_number?: string | null;
   duration_minutes: number;
   total_marks: number;
   total_actual: number;
@@ -60,6 +64,14 @@ export type TosQuestion = {
   learning_outcomes: string[];
 };
 
+/** One row per syllabus topic, used to map LOs ⇄ KOs ⇄ discipline so the
+ *  TOS can render a condensed "KO → LO" coverage table. */
+export type TosTopicIndexEntry = {
+  learning_outcomes: string[];
+  outcome_categories: string[];
+  section: string | null;
+};
+
 function slug(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "assessment";
 }
@@ -82,6 +94,111 @@ function sectionLetterForPosition(sections: TosSection[], position: number): str
   return sections[sections.length - 1]?.letter ?? "";
 }
 
+// ── KO → LO grouping ───────────────────────────────────────────────────────
+
+const DISCIPLINE_ORDER = ["Physics", "Chemistry", "Biology", "Practical", "Other"];
+
+export type KoLoGrouping = {
+  /** Disciplines actually present (in display order). One column per entry. */
+  disciplines: string[];
+  /** Per-KO row data — `lines[discipline]` is a multi-line string of LOs,
+   *  each prefixed with ✓ when covered and · otherwise. */
+  rows: {
+    name: string;
+    target: number;
+    actual: number;
+    delta: number;
+    cells: Record<string, string>;
+  }[];
+};
+
+export function buildKoLoGrouping(
+  coverage: TosCoverage,
+  topicIndex: TosTopicIndexEntry[],
+): KoLoGrouping {
+  // LO → covered? lookup from coverage.
+  const coveredByLo = new Map<string, boolean>();
+  for (const lo of coverage.paper.los) coveredByLo.set(lo.text, lo.covered);
+
+  // Build (KO → discipline → ordered LOs) from the topic index.
+  const koMap = new Map<string, Map<string, string[]>>();
+  const seen = new Map<string, Set<string>>(); // ko → loSet (dedupe)
+  const presentDisciplines = new Set<string>();
+
+  for (const t of topicIndex) {
+    const disc = normaliseDiscipline(t.section ?? null);
+    presentDisciplines.add(disc);
+    const kos = (t.outcome_categories ?? []).filter(Boolean);
+    const los = (t.learning_outcomes ?? []).filter(Boolean);
+    if (kos.length === 0 || los.length === 0) continue;
+    for (const ko of kos) {
+      if (!koMap.has(ko)) koMap.set(ko, new Map());
+      if (!seen.has(ko)) seen.set(ko, new Set());
+      const dMap = koMap.get(ko)!;
+      const loSet = seen.get(ko)!;
+      if (!dMap.has(disc)) dMap.set(disc, []);
+      const arr = dMap.get(disc)!;
+      for (const lo of los) {
+        const key = `${disc}::${lo}`;
+        if (loSet.has(key)) continue;
+        loSet.add(key);
+        arr.push(lo);
+      }
+    }
+  }
+
+  // Decide column layout.
+  const ordered = DISCIPLINE_ORDER.filter((d) => presentDisciplines.has(d));
+  // Drop "Other" if some named disciplines exist alongside it AND Other is empty across all KOs.
+  const hasNamed = ordered.some((d) => d !== "Other");
+  let disciplines = ordered;
+  if (disciplines.length === 0) disciplines = ["Other"];
+  // Collapse to a single "Learning Outcomes" column when only one discipline.
+  const singleColumn = disciplines.length < 2;
+  const columnKeys = singleColumn ? ["__all__"] : disciplines;
+
+  // Build rows in coverage.paper.kos order (already syllabus-ordered).
+  const rows: KoLoGrouping["rows"] = coverage.paper.kos.map((ko) => {
+    const dMap = koMap.get(ko.name) ?? new Map<string, string[]>();
+    const cells: Record<string, string> = {};
+    if (singleColumn) {
+      const allLos: string[] = [];
+      for (const arr of dMap.values()) allLos.push(...arr);
+      cells["__all__"] = formatLoList(allLos, coveredByLo);
+    } else {
+      for (const d of disciplines) {
+        const list = dMap.get(d) ?? [];
+        cells[d] = formatLoList(list, coveredByLo);
+      }
+    }
+    return {
+      name: ko.name,
+      target: ko.target,
+      actual: ko.actual,
+      delta: ko.actual - ko.target,
+      cells,
+    };
+  });
+
+  return {
+    disciplines: singleColumn ? ["Learning Outcomes"] : disciplines,
+    rows: rows.map((r) => {
+      if (!singleColumn) return r;
+      // Re-key the cell under the display column name.
+      return { ...r, cells: { "Learning Outcomes": r.cells["__all__"] ?? "" } };
+    }),
+  };
+  // (hasNamed kept for potential future trimming of empty Other column)
+  void hasNamed;
+}
+
+function formatLoList(los: string[], covered: Map<string, boolean>): string {
+  if (los.length === 0) return "";
+  return los
+    .map((lo) => `${covered.get(lo) ? "✓" : "·"} ${lo}`)
+    .join("\n");
+}
+
 function buildSummarySheet(meta: TosAssessmentMeta, coverage: TosCoverage, sections: TosSection[]): XLSX.WorkSheet {
   const today = new Date().toISOString().slice(0, 10);
   const aoa: (string | number)[][] = [
@@ -90,6 +207,7 @@ function buildSummarySheet(meta: TosAssessmentMeta, coverage: TosCoverage, secti
     ["Title", meta.title],
     ["Subject", meta.subject],
     ["Syllabus code", meta.syllabus_code ?? "—"],
+    ["Paper", meta.paper_number ?? "—"],
     ["Level", meta.level],
     ["Duration (min)", meta.duration_minutes],
     ["Total marks", `${meta.total_actual} / ${meta.total_marks}`],
@@ -191,6 +309,41 @@ function buildMatrixSheet(coverage: TosCoverage, sections: TosSection[]): XLSX.W
   return ws;
 }
 
+function buildKoLoSheet(grouping: KoLoGrouping): XLSX.WorkSheet {
+  const aoa: (string | number)[][] = [];
+  aoa.push(["KO → LO coverage (✓ = covered by ≥1 question, · = uncovered)"]);
+  aoa.push([]);
+  const headers = ["Knowledge Outcome", "Target", "Actual", "Δ", ...grouping.disciplines];
+  aoa.push(headers);
+  for (const r of grouping.rows) {
+    aoa.push([
+      r.name,
+      r.target,
+      r.actual,
+      r.delta,
+      ...grouping.disciplines.map((d) => r.cells[d] ?? ""),
+    ]);
+  }
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws["!cols"] = [
+    { wch: 36 },
+    { wch: 10 },
+    { wch: 10 },
+    { wch: 6 },
+    ...grouping.disciplines.map(() => ({ wch: 60 })),
+  ];
+  // Wrap LO cells.
+  const range = XLSX.utils.decode_range(ws["!ref"] ?? "A1");
+  for (let R = 3; R <= range.e.r; R++) {
+    for (let C = 4; C <= range.e.c; C++) {
+      const addr = XLSX.utils.encode_cell({ r: R, c: C });
+      const cell = ws[addr];
+      if (cell) cell.s = { ...(cell.s ?? {}), alignment: { wrapText: true, vertical: "top" } };
+    }
+  }
+  return ws;
+}
+
 function buildQuestionMapSheet(questions: TosQuestion[], sections: TosSection[]): XLSX.WorkSheet {
   const aoa: (string | number)[][] = [];
   aoa.push([
@@ -234,11 +387,18 @@ export function exportTosXlsx(args: {
   coverage: TosCoverage;
   sections: TosSection[];
   questions: TosQuestion[];
+  topicIndex?: TosTopicIndexEntry[];
 }): void {
-  const { meta, coverage, sections, questions } = args;
+  const { meta, coverage, sections, questions, topicIndex } = args;
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, buildSummarySheet(meta, coverage, sections), "Summary");
   XLSX.utils.book_append_sheet(wb, buildMatrixSheet(coverage, sections), "AO-KO Matrix");
+  if (topicIndex && topicIndex.length > 0) {
+    const grouping = buildKoLoGrouping(coverage, topicIndex);
+    if (grouping.rows.length > 0) {
+      XLSX.utils.book_append_sheet(wb, buildKoLoSheet(grouping), "KO → LO");
+    }
+  }
   XLSX.utils.book_append_sheet(wb, buildQuestionMapSheet(questions, sections), "Question Map");
 
   const out = XLSX.write(wb, { bookType: "xlsx", type: "array" });

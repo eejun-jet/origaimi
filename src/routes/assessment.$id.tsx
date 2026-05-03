@@ -113,9 +113,12 @@ type Assessment = {
   instructions: string | null;
   syllabus_doc_id: string | null;
   syllabus_code?: string | null;
+  syllabus_paper_id?: string | null;
   assessment_type?: string | null;
   scoped_disciplines?: string[] | null;
 };
+
+type SyllabusPaperInfo = { paper_number: string | null; paper_code: string | null };
 
 type AODef = { code: string; title: string | null; weighting_percent: number | null };
 
@@ -140,6 +143,7 @@ function EditorPage() {
   const isMobile = useIsMobile();
   const [sidebarTab, setSidebarTab] = useState<"coverage" | "comments">("coverage");
   const [retagBusy, setRetagBusy] = useState(false);
+  const [paperInfo, setPaperInfo] = useState<SyllabusPaperInfo | null>(null);
 
   const loadAll = async () => {
     const { data: a } = await supabase.from("assessments").select("*").eq("id", id).single();
@@ -156,6 +160,16 @@ function EditorPage() {
       setAoDefs((aos as AODef[]) ?? []);
     } else {
       setAoDefs([]);
+    }
+    if (asm?.syllabus_paper_id) {
+      const { data: pp } = await supabase
+        .from("syllabus_papers")
+        .select("paper_number,paper_code")
+        .eq("id", asm.syllabus_paper_id)
+        .maybeSingle();
+      setPaperInfo((pp as SyllabusPaperInfo | null) ?? null);
+    } else {
+      setPaperInfo(null);
     }
     const { data: cs } = await supabase
       .from("assessment_comments")
@@ -609,6 +623,7 @@ function EditorPage() {
     subject: assessment.subject,
     level: assessment.level,
     syllabus_code: assessment.syllabus_code ?? null,
+    paper_number: paperInfo?.paper_number ?? null,
     duration_minutes: assessment.duration_minutes,
     total_marks: assessment.total_marks,
     total_actual: totalActual,
@@ -638,6 +653,14 @@ function EditorPage() {
       knowledge_outcomes: q.knowledge_outcomes ?? [],
       learning_outcomes: q.learning_outcomes ?? [],
     }));
+  const tosTopicIndex = () =>
+    sectionedBlueprint.sections.flatMap((s) =>
+      (s.topic_pool ?? []).map((t) => ({
+        learning_outcomes: t.learning_outcomes ?? [],
+        outcome_categories: t.outcome_categories ?? [],
+        section: t.section ?? null,
+      })),
+    );
 
   const handleDownloadDocx = async () => {
     try {
@@ -677,6 +700,7 @@ function EditorPage() {
         coverage,
         sections: tosSections(),
         questions: tosQuestions(),
+        topicIndex: tosTopicIndex(),
       });
       toast.success("Downloaded TOS .xlsx");
     } catch (e) {
@@ -691,6 +715,7 @@ function EditorPage() {
         coverage,
         sections: tosSections(),
         questions: tosQuestions(),
+        topicIndex: tosTopicIndex(),
       });
       toast.success("Downloaded TOS .docx");
     } catch (e) {
