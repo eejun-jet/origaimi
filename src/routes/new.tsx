@@ -1988,3 +1988,51 @@ function LOGroupedSelector({
     </div>
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Flat, expandable Skills Outcomes selector — used when the syllabus paper
+// publishes SOs instead of topic-level LOs (e.g. Combined Humanities Social
+// Studies Paper 1, 2260/2261/2262). Each SO row is a checkbox; the panel
+// itself is collapsible so teachers can scan the full list.
+// ─────────────────────────────────────────────────────────────────────────
+function SOFlatSelector({
+  items,
+  selected,
+  onToggle,
+}: {
+  items: string[];
+  selected: string[];
+  onToggle: (item: string) => void;
+}) {
+  const [open, setOpen] = useState(true);
+  const selectedCount = items.filter((i) => selected.includes(i)).length;
+  return (
+    <div className="mt-3 rounded-md border border-border bg-background">
+      <button
+        type="button"
+        className="flex w-full items-center gap-2 p-2 text-left"
+        onClick={() => setOpen((o) => !o)}
+      >
+        {open ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+        <span className="text-sm font-medium">Skills Outcomes</span>
+        <span className="ml-auto text-xs text-muted-foreground">{selectedCount} / {items.length}</span>
+      </button>
+      {open && (
+        <div className="max-h-96 space-y-1 overflow-auto border-t border-border p-2">
+          {items.map((so) => {
+            const checked = selected.includes(so);
+            return (
+              <label
+                key={so}
+                className={`flex cursor-pointer items-start gap-2 rounded p-1.5 text-xs ${checked ? "bg-primary-soft/40" : "hover:bg-muted/40"}`}
+              >
+                <Checkbox checked={checked} onCheckedChange={() => onToggle(so)} />
+                <span className="flex-1">{so}</span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
