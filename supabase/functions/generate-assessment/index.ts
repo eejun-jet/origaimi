@@ -329,6 +329,11 @@ FORMATTING — at least 2 distinct paragraphs for part (a) and 4 distinct paragr
 
 QUALITY BAR — concrete, accurate evidence in every paragraph (named policy / event / case study / statistic / organisation). The example used may be from Singapore or any other country, as long as the issue genuinely aligns with the AO/KO/SO theme. Do NOT default to Singapore-only when a stronger international case better fits the topic.`;
 
+function isSocialStudiesAssessment(subject?: string | null, paperCode?: string | null, syllabusCode?: string | null): boolean {
+  const haystack = [subject, paperCode, syllabusCode].filter(Boolean).join(" ").toLowerCase();
+  return haystack.includes("social studies") || /\b226[0-2]\/(?:0)?1\b/.test(haystack);
+}
+
 
 // Resolve effective skill IDs for a section, supporting new sbq_skills array
 // and legacy single sbq_skill. Caps at 5 and filters unknown ids.
