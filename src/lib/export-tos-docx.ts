@@ -153,8 +153,9 @@ export async function exportTosDocx(args: {
   coverage: TosCoverage;
   sections: TosSection[];
   questions: TosQuestion[];
+  topicIndex?: TosTopicIndexEntry[];
 }): Promise<void> {
-  const { meta, coverage, sections, questions } = args;
+  const { meta, coverage, sections, questions, topicIndex } = args;
   const today = new Date().toISOString().slice(0, 10);
 
   // Landscape A4-ish: keep the matrix readable when many sections exist.
