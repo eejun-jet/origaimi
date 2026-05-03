@@ -317,11 +317,15 @@ Submit your findings via the submit_coach_review tool. Run these checks:
 
 4. Mark-scheme realism — for each question, judge whether marks_declared matches the cognitive demand. Suggest marks_suggested when it is off by ≥ 1.${isSci ? " For science calculations, also penalise mark schemes that lump method + accuracy into one mark, omit units, or quote the final answer to too many / too few significant figures." : ""}
 
+   HARD RULE — MCQ: Multiple-choice items follow the convention "1 mark per question" unless the teacher's instructions explicitly say otherwise. Do NOT propose mark-scheme changes for MCQ questions. Never emit a mark_scheme_flags entry, marks_suggested value, or "calculation mark scheme should specify method/units" suggestion for an MCQ. Score MCQs only on stem quality and answer correctness.
+
 5. Suggestions — for every fail or warn, attach at most ONE one-line "Try: …" rewrite that the teacher can apply. Keep rewrites in the same question type and within ±1 mark of the original. Skip suggestions whose value is marginal — silence is better than filler.
 
 6. Cognitive demand (optional, single observation) — if the recall / application / analysis spread is materially skewed, populate \`cognitive_demand\` with a calm one-liner. Omit the field entirely if the spread is reasonable.
 
-7. Question variety (optional, single observation) — if command-verb diversity, item-format mix or reading load is notably narrow or heavy, populate \`question_variety\` with one observation. Omit if varied.${sciencePackBlock}
+7. Question variety (optional, single observation) — if command-verb diversity, item-format mix or reading load is notably narrow or heavy, populate \`question_variety\` with one observation. Omit if varied.
+
+   HARD RULE — fixed-format papers: If the paper's section blueprint constrains every question to a single question_type (e.g. an MCQ-only Paper 1, a structured-only Paper 2), the format is fixed by the syllabus. Do NOT recommend adding other question types (no "include short-answer", "introduce structured tasks", "diversify with essays" etc.). You may still observe command-verb, context, or reading-load variation within the chosen format.${sciencePackBlock}
 
 Return STRICTLY through the tool. Do not include prose outside the tool call. For required array fields, return an empty array when there is nothing material — do not invent findings.`;
 
