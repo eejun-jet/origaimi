@@ -743,6 +743,46 @@ function curatedHumanitiesSourcePool(
   return matched;
 }
 
+function normalizeMatchText(s: string): string {
+  return s.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function selectHumanitiesAnchorTopic(section: Section): SectionTopic | null {
+  const pool = section.topic_pool ?? [];
+  if (pool.length === 0) return null;
+
+  const sectionTargets = (section.learning_outcomes ?? [])
+    .map(normalizeMatchText)
+    .filter(Boolean);
+  const targetSet = new Set(sectionTargets);
+  const desiredGroup = topicGroupOf([...(section.learning_outcomes ?? []), ...(section.knowledge_outcomes ?? [])].join(" "));
+
+  const ranked = pool.map((topic, index) => {
+    const topicBlob = [topic.topic, ...(topic.learning_outcomes ?? [])].join(" ");
+    const normalizedTopicBlob = normalizeMatchText(topicBlob);
+    const topicGroup = topicGroupOf(topicBlob);
+    let score = 0;
+
+    if (desiredGroup && topicGroup === desiredGroup) score += 100;
+    else if (desiredGroup && topicGroup && topicGroup !== desiredGroup) score -= 40;
+    if (/\bnon[- ]?examinable\b/i.test(topic.topic)) score -= 30;
+    if (topic.section && section.letter && topic.section.split(/\s*,\s*/).includes(section.letter)) score += 10;
+    if ((section.ao_codes ?? []).includes("AO3") && (topic.ao_codes ?? []).includes("AO3")) score += 8;
+
+    for (const lo of topic.learning_outcomes ?? []) {
+      const normalizedLo = normalizeMatchText(lo);
+      if (targetSet.has(normalizedLo)) score += 80;
+    }
+    for (const target of sectionTargets) {
+      if (normalizedTopicBlob.includes(target)) score += 50;
+    }
+
+    return { topic, index, score };
+  }).sort((a, b) => b.score - a.score || a.index - b.index);
+
+  return ranked[0]?.score > 0 ? ranked[0].topic : pool[0];
+}
+
 // ---------- Topic / Inquiry derivation for SBQ stems ----------
 //
 // The "topic" string stored on a section is whatever the syllabus document
@@ -1847,6 +1887,7 @@ Deno.serve(async (req) => {
       const sharedImageSources: GroundedImageSource[] = [];
       const sourcesForSection: (GroundedSource | null)[][] = [];
       let ssSubIssueForSection: SsSubIssueBundle | null = null;
+      let humanitiesAnchorTopic: SectionTopic | null = null;
 
       if (isHumanitiesSBQ) {
         // SEAB History SBQ papers cap at ~6 sources total. We reserve up to 1
@@ -1865,7 +1906,8 @@ Deno.serve(async (req) => {
         const MAX_IMAGE_SOURCES = 1;
         const maxMinSources = effectiveSkillDefs.reduce((m, s) => Math.max(m, s.minSources), 0);
         const poolSize = Math.min(MAX_TOTAL_SOURCES, Math.max(4, maxMinSources));
-        const sectionTopic = section.topic_pool[0] ?? null;
+        const sectionTopic = selectHumanitiesAnchorTopic(section);
+        humanitiesAnchorTopic = sectionTopic;
         // ssSubIssueForSection declared above section scope
         const POOL_QUERY_HINTS = [
           "official government statement",
@@ -2130,7 +2172,10 @@ Deno.serve(async (req) => {
       let questions: any[] = [];
       if (isHumanitiesSBQ && sharedSourcePool.length > 0) {
         console.log(`[generate] section ${section.letter}: using deterministic SBQ builder to avoid long AI timeout`);
-        questions = buildDeterministicSbqQuestions(section, sharedSourcePool, perQSkillsForFetch, ssSubIssueForSection);
+        const deterministicSection = humanitiesAnchorTopic
+          ? { ...section, topic_pool: [humanitiesAnchorTopic, ...section.topic_pool.filter((t) => t !== humanitiesAnchorTopic)] }
+          : section;
+        questions = buildDeterministicSbqQuestions(deterministicSection, sharedSourcePool, perQSkillsForFetch, ssSubIssueForSection);
       } else if (isSSPaper && section.question_type === "long") {
         console.log(`[generate] section ${section.letter}: using deterministic SS SRQ builder to avoid AI timeout`);
         questions = buildDeterministicSsSrqQuestions(section);
