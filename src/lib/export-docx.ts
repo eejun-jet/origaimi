@@ -124,7 +124,7 @@ function bullet(text: string) {
   });
 }
 
-function questionRow(qNumber: number, q: ExportQuestion): Table {
+function questionRow(qNumber: number, q: ExportQuestion, diagram: FetchedDiagram | null): Table {
   const stem = clean(q.stem.trim());
   const optLines: Paragraph[] = [];
   if (q.question_type === "mcq" && q.options && q.options.length > 0) {
@@ -152,8 +152,39 @@ function questionRow(qNumber: number, q: ExportQuestion): Table {
       spacing: { after: 80 },
       children: [new TextRun({ text: stem, size: 22, font: ARIAL })],
     }),
-    ...optLines,
   ];
+
+  if (diagram) {
+    bodyChildren.push(
+      new Paragraph({
+        spacing: { before: 60, after: 60 },
+        alignment: AlignmentType.CENTER,
+        children: [
+          new ImageRun({
+            type: diagram.type,
+            data: diagram.data,
+            transformation: { width: diagram.width, height: diagram.height },
+            altText: {
+              title: diagram.caption ?? "Diagram",
+              description: diagram.caption ?? "Question diagram",
+              name: "diagram",
+            },
+          }),
+        ],
+      }),
+    );
+    if (diagram.caption) {
+      bodyChildren.push(
+        new Paragraph({
+          spacing: { after: 120 },
+          alignment: AlignmentType.CENTER,
+          children: [new TextRun({ text: clean(diagram.caption), italics: true, size: 18, font: ARIAL })],
+        }),
+      );
+    }
+  }
+
+  bodyChildren.push(...optLines);
   if (q.question_type !== "mcq") {
     // Answer-writing space hint
     const lines = Math.min(12, Math.max(2, q.marks * 2));
