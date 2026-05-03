@@ -2696,7 +2696,7 @@ function CoveragePanel({
   const uncoveredLOs = paper.los.filter((l) => !l.covered);
   const [target, setTarget] = useState<CoverageTarget | null>(null);
   const isScience = isScienceSubject(subject);
-  const [loView, setLoView] = useState<"topic" | "map" | "list">(isScience ? "topic" : "list");
+  const [loView, setLoView] = useState<"topic" | "map" | "list">("list");
   const topicsMap = useMemo(() => buildTopicsMap(paper.los, sections), [paper.los, sections]);
 
   // Card-level open/closed state, persisted per assessment.
@@ -2747,6 +2747,11 @@ function CoveragePanel({
     const koDiscipline = new Map<string, string>();
     const seen = new Set<string>();
 
+    // Normalised LO text -> {ko, content, code} for fuzzy re-mapping of orphans.
+    const normaliseLo = (s: string) =>
+      s.toLowerCase().replace(/\s+/g, " ").replace(/[.;:,!?\s]+$/g, "").trim();
+    const normIndex = new Map<string, { ko: string; content: string; code: string | null }>();
+
     const ensureKo = (name: string) => {
       if (!ko.has(name)) ko.set(name, new Map());
       return ko.get(name)!;
@@ -2771,39 +2776,95 @@ function CoveragePanel({
           koDiscipline.set(koName, normaliseDiscipline(t.section));
         }
         los.forEach((loText, i) => {
-          if (!loText || seen.has(loText)) return;
-          seen.add(loText);
-          // If the syllabus parser merged N LO statements under one stem,
-          // index them as <stem>.1, <stem>.2, ... for the display code.
+          if (!loText) return;
           const code = codeStem
             ? (los.length === 1 ? codeStem : `${codeStem}.${i + 1}`)
             : null;
-          const stat = loStat.get(loText);
-          bucket.set(loText, {
-            code,
-            text: loText,
-            covered: stat?.covered ?? false,
-            actual: stat?.actual ?? 0,
-          });
+          if (!seen.has(loText)) {
+            seen.add(loText);
+            const stat = loStat.get(loText);
+            bucket.set(loText, {
+              code,
+              text: loText,
+              covered: stat?.covered ?? false,
+              actual: stat?.actual ?? 0,
+            });
+          }
+          const norm = normaliseLo(loText);
+          if (norm && !normIndex.has(norm)) {
+            normIndex.set(norm, { ko: koName, content: contentName, code });
+          }
         });
       }
     }
 
-    // Any LO that's in the paper rollup but never appeared in the syllabus
-    // topic pool (orphan / data gap) goes into a single clearly-labelled
-    // bucket so it can be investigated.
-    const orphanContent = new Map<string, LoEntry>();
+    // Re-map any LO that's in the paper rollup but didn't string-match the
+    // syllabus walk above. We try, in order:
+    //   1) normalised text match against the syllabus index;
+    //   2) the owning section's KO list (or topic_pool outcome_categories).
+    // Truly unmapped LOs are logged only — we no longer surface a misleading
+    // "Unmapped LO metadata" bucket.
+    const sectionsForLo = (text: string): Section[] => {
+      const out: Section[] = [];
+      for (const sec of sections) {
+        const inSec =
+          (sec.learning_outcomes ?? []).includes(text) ||
+          questions.some(
+            (q) => (q.learning_outcomes ?? []).includes(text) && sectionByPosition(q.position) === sec,
+          );
+        if (inSec) out.push(sec);
+      }
+      return out;
+    };
+    function sectionByPosition(pos: number): Section | null {
+      let cursor = 0;
+      for (const s of sections) {
+        if (pos < cursor + (s.num_questions || 0)) return s;
+        cursor += s.num_questions || 0;
+      }
+      return null;
+    }
+
     for (const l of paper.los) {
-      if (!seen.has(l.text)) {
-        orphanContent.set(l.text, { code: null, text: l.text, covered: l.covered, actual: l.actual });
+      if (seen.has(l.text)) continue;
+      const norm = normaliseLo(l.text);
+      const hit = norm ? normIndex.get(norm) : null;
+      if (hit) {
+        const bucket = ensureContent(hit.ko, hit.content);
+        if (!bucket.has(l.text)) {
+          bucket.set(l.text, { code: hit.code, text: l.text, covered: l.covered, actual: l.actual });
+          seen.add(l.text);
+        }
+        continue;
+      }
+      const owners = sectionsForLo(l.text);
+      let placed = false;
+      for (const sec of owners) {
+        const koCandidates =
+          (sec.knowledge_outcomes && sec.knowledge_outcomes.length > 0)
+            ? sec.knowledge_outcomes
+            : Array.from(new Set((sec.topic_pool ?? []).flatMap((t) => t.outcome_categories ?? [])));
+        const koName = koCandidates[0];
+        if (!koName) continue;
+        const contentName = sec.name?.trim()
+          ? `Section ${sec.letter} — ${sec.name}`
+          : `Section ${sec.letter}`;
+        if (!koDiscipline.has(koName)) {
+          const firstTopic = (sec.topic_pool ?? [])[0];
+          koDiscipline.set(koName, normaliseDiscipline(firstTopic?.section ?? null));
+        }
+        const bucket = ensureContent(koName, contentName);
+        bucket.set(l.text, { code: null, text: l.text, covered: l.covered, actual: l.actual });
+        seen.add(l.text);
+        placed = true;
+        break;
+      }
+      if (!placed) {
+        console.warn("[coverage] LO has no syllabus or section KO mapping — skipping", l.text);
       }
     }
 
-    // KO marks rollup (from the existing paper.kos which still carries the
-    // generic Knowledge/Understanding/Application/Skills marks where the
-    // syllabus uses them — ignored here unless the strand name happens to
-    // match, which is the correct behaviour).
-    const koMarks = new Map(paper.kos.map((k) => [k.name, k] as const));
+    const koMarksMap = new Map(paper.kos.map((k) => [k.name, k] as const));
 
     const buckets: KoBucket[] = [];
     for (const [koName, contentMap] of ko.entries()) {
@@ -2819,7 +2880,7 @@ function CoveragePanel({
       }
       contents.sort((a, b) => a.name.localeCompare(b.name));
       const covered = flat.filter((l) => l.covered).length;
-      const m = koMarks.get(koName);
+      const m = koMarksMap.get(koName);
       const status: OverviewStatus = classifyTopic(flat);
       buckets.push({
         name: koName,
@@ -2835,32 +2896,13 @@ function CoveragePanel({
       });
     }
 
-    if (orphanContent.size > 0) {
-      const items = Array.from(orphanContent.values()).sort((a, b) => a.text.localeCompare(b.text));
-      const covered = items.filter((l) => l.covered).length;
-      buckets.push({
-        name: "Unmapped LO metadata",
-        discipline: "General",
-        contents: [{ name: "(no syllabus mapping)", los: items }],
-        los: items,
-        coveredLOs: covered,
-        totalLOs: items.length,
-        actualMarks: items.reduce((s, l) => s + l.actual, 0),
-        targetMarks: 0,
-        status: classifyTopic(items),
-        hasCodes: false,
-      });
-    }
-
     return buckets.sort((a, b) => {
-      if (a.name === "Unmapped LO metadata") return 1;
-      if (b.name === "Unmapped LO metadata") return -1;
       const ai = STATUS_META[a.status].sortKey;
       const bi = STATUS_META[b.status].sortKey;
       if (ai !== bi) return ai - bi;
       return a.name.localeCompare(b.name);
     });
-  }, [paper.kos, paper.los, sections]);
+  }, [paper.kos, paper.los, sections, questions]);
 
   const visibleKOs = explorerFilter === "all"
     ? koLoGroups
@@ -3012,6 +3054,13 @@ function CoveragePanel({
               <div className="inline-flex rounded-md border border-border bg-muted/30 p-0.5 text-[10px]">
                 <button
                   type="button"
+                  onClick={() => setLoView("list")}
+                  className={`rounded px-2 py-0.5 transition ${loView === "list" ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  By KO
+                </button>
+                <button
+                  type="button"
                   onClick={() => setLoView("topic")}
                   className={`rounded px-2 py-0.5 transition ${loView === "topic" ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
                 >
@@ -3023,13 +3072,6 @@ function CoveragePanel({
                   className={`rounded px-2 py-0.5 transition ${loView === "map" ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
                 >
                   Map
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLoView("list")}
-                  className={`rounded px-2 py-0.5 transition ${loView === "list" ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-                >
-                  By KO
                 </button>
               </div>
             )}
@@ -3082,7 +3124,7 @@ function CoveragePanel({
           <div className="mt-3 space-y-1.5">
             {koLoGroups.map((g) => {
               const meta = STATUS_META[g.status];
-              const koRemarks = g.name.startsWith("Unmapped") ? 0 : remarkCount("ko", g.name);
+              const koRemarks = remarkCount("ko", g.name);
               return (
                 <Collapsible key={g.name}>
                   <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-md border border-border bg-card px-2 py-1.5 text-left transition hover:bg-muted/50">
