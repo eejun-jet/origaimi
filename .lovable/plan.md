@@ -1,67 +1,85 @@
 ## Goal
 
-Three fixes scoped to Combined Humanities **Social Studies (Paper 1, 2260/2261/2262)**, in line with how SEAB actually structures the paper and the memory rule that SS case studies can be global/international.
+Two SS-only fixes:
+
+1. The KO list in the Assessment Builder must show only the three SS Issues — no generic "Knowledge" or "Skills" buckets.
+2. The SBQ source pool must cohere around a *specific sub-issue* (e.g. "Housing in Singapore — haves vs have-nots and national identity"), not generic Issue-level grab-bags. The 5–6 sources must all interrogate that one sub-issue so the assertion question (Q5) actually has something to evaluate.
 
 ---
 
-## 1. Skills Outcomes (SO) visible & expandable in the builder
+## 1. KO list: Issues only (no Knowledge / Skills entries)
 
-**Problem.** `LOGroupedSelector` only renders LOs that live under a topic. SS Paper 1 topics carry no LOs (only SOs at the paper level), so the SO list is silently dropped and the box appears empty.
+**Problem.** When SS topics carry `outcomeCategories` like "Knowledge", "Skills", "Values", those leak into `availableKos` and appear as KO checkboxes alongside the three Issues.
 
 **Fix in `src/routes/new.tsx`:**
 
-- When `usingSoFallback` is true, render a dedicated, collapsible **"Skills Outcomes"** group above (or instead of) `LOGroupedSelector`, listing every `${code}: ${statement}` from `availableSos` as expandable rows with checkboxes.
-- Header shows `selected / total`, with "Select all / Deselect all" plus a chevron toggle (mirroring `LOGroupedSelector`'s topic group UI), defaulting to expanded so people can see what they are.
-- Selected SO strings continue to flow into `section.learning_outcomes` (existing wiring) so the generator + coach pick them up unchanged.
+- In the page-level `availableKos` memo, when `socialStudiesPaper` is true, return `DEFAULT_SOCIAL_STUDIES_KOS` directly and ignore `outcomeCategories` from topics.
+- In `SectionCard`'s `koCandidates` memo, when `availableKos` is the SS issue list, restrict candidates to that list only (drop topic-pool `outcome_categories` like Knowledge/Skills/Values for SS).
+- Result: SS users see exactly three KO checkboxes — Issue 1 / 2 / 3 — and nothing else.
 
 ---
 
-## 2. SS source pool keeps showing "1 source — skipping"
+## 2. SS SBQ sources: cohere around a specific sub-issue
 
-**Problem.** `curatedHumanitiesSourcePool` only contains History bundles (WWII, Nazis, Stalin, Cold War, Decolonisation). SS topics (citizenship & governance, diverse society, globalised world, bonding, impact of migration, etc.) seed 0, live web fetch times out, and the section dies at the `< 2` floor.
-
-**Fix in `supabase/functions/generate-assessment/index.ts`:**
-
-- Add SS curated bundles, each with 5 distinct-host primary/secondary excerpts so the SBQ pool can hit the 5–6 cap from curated alone (no live fetch dependency). Per the memory rule, sources may be **global/international** as long as the issue maps to the AO/KO/SO theme:
-  - **Citizenship & governance** — e.g. Singapore Pledge / Constitution; UK / US citizenship-by-birth debates; Swiss naturalisation case; UN Universal Declaration; comparative governance commentary.
-  - **Living in a diverse society** — e.g. Singapore racial-harmony policy; Canadian multiculturalism speech; Quebec religious-symbols law debate; UK Brexit social-cohesion reportage; UNESCO diversity report.
-  - **Being part of a globalised world** — e.g. WTO / IMF statements; ASEAN trade agreement excerpt; Brexit / RCEP commentary; UN ILO migrant-worker report; Singapore MTI globalisation speech.
-  - **Bonding Singapore / managing tensions** — e.g. NDR speeches on bonding; news report on a bonding initiative abroad (e.g. Australia reconciliation); academic commentary on social trust.
-- Each bundle uses 5 different hosts (gov.sg / nas.gov.sg / nlb.gov.sg / un.org / oecd.org / bbc / nytimes / academic.oup.com etc.) so distinct-host seeding fills the pool to 4–5 without live fetches.
-- All 5-6 sources should come from different sources, with at least 1 pictorial source. 
-- All the sources should come together to talk about an ISSUE, which is what the 5th Source Based question (Assertion/Evaluation) would be about (i.e. how far do the sources agree....). 
-- Trigger regexes match SS LO/SO/topic phrasings (e.g. `/(citizenship|governance|civic|national identity)/i`).
-- Add SS topic groups to `TOPIC_GROUPS` so SS bundles don't cross-leak into History generation and vice versa.
-
-This alone should produce 5–6 sources per SS SBQ section, including the optional pictorial slot already supported.
-
----
-
-## 3. SS Section B is SRQ (7+8m), not History two-factor essays
-
-**Problem.** Humanities + `question_type === "long"` is routed to `HISTORY_ESSAY_*` (two-factor "How far …", 9–10 mark scheme, model essay). SS Paper 1 Section B is **Structured Response Questions**: 15 marks split as part (a) **7 marks** + part (b) **8 marks**, asking for explanation + evaluative judgement on an SS issue.
+**Problem.** Current curated bundles are organised at the *Issue* level (citizenship, diversity, globalisation). The 5 sources within an Issue jump across unrelated cases (Singapore Pledge → Worldwide Governance Indicators → Swiss face-covering → UDHR). They don't form a single *inquiry*, so the Q5 assertion ("how far do the sources agree…") has nothing coherent to assert. The user's example: under Issue 1, an SBQ should explore something concrete like *Housing in Singapore* and use sources that all illuminate the haves/have-nots tension and what that means for Singaporean identity/citizenship.
 
 **Fix in `supabase/functions/generate-assessment/index.ts`:**
 
-- Detect SS via `subject` ("Social Studies") OR section context (paper component name / syllabus code 2260/2261/2262 Paper 1). Pass `isSocialStudies` from the caller (pull from `assessment.subject` / paper meta).
-- Branch the humanities `long` path:
-  - **History** → existing `HISTORY_ESSAY_MARK_SCHEME` + `HISTORY_ESSAY_ANSWER_TEMPLATE` (untouched).
-  - **Social Studies** → new `SS_SRQ_MARK_SCHEME` + `SS_SRQ_ANSWER_TEMPLATE`:
-    - Part (a) **7 marks** — "Explain two reasons why …" / "Explain two challenges of …": L1 Describe (1–2), L2 One reason explained (3–5), L3 Two reasons explained (6–7)
-    - Part (b) **8 marks** — "How far do you agree …" / "Do you think … is the most effective way to …? Explain your answer.": L1 Describe (1–2), L2 One-sided explanation (3–4), L3 Two-sided explanation (5–6), L4 Two-sided + reasoned overall judgement (7–8).
-    - Stems must use SEAB SS command words ("Explain …", "How far do you agree that …", "Do you think …") and never the History two-factor "How far X, rather than Y …" template.
-    - Answer field = full prose model response (~250–400 words) with concrete contemporary or comparative examples; the example may be **global/international** as long as it serves the AO/KO/SO.
-- Force `section.num_questions === 2` and **lock marks to [7, 8]** via `normalizeSectionMarks` lockedIndices when SS SRQ is detected, so the pair always lands on 7+8 regardless of what the model returns.
+### 2a. Restructure curated bundles around *sub-issues*, not Issues
+
+Replace the three big SS bundles with multiple sub-issue bundles per Issue. Each sub-issue bundle has 5 sources that **all speak to the same concrete tension/case** so they can be compared, contrasted, and evaluated against a single assertion. Each bundle now carries:
+
+- `issue: 1 | 2 | 3` (which SS Issue it belongs to, used for KO matching)
+- `subIssue: string` (concrete inquiry framing, e.g. "Housing inequality and Singaporean identity")
+- `assertion: string` (the controlling claim the 5 sources collectively interrogate — feeds Q5)
+- `inquiryQuestion: string` (the Key Inquiry framing for Q1's intro)
+- `sources: GroundedSource[]` — 5 sources, all about that specific sub-issue, including at least one *pictorial/data* source (chart, photo, infographic) per the SEAB SBQ format.
+
+Sub-issues to seed (2–3 per Issue, expandable later):
+
+- **Issue 1 — Citizenship & Governance**
+  - *Housing inequality & national identity* — HDB EIP policy text, an NLB article on the "haves and have-nots" debate, an ST/CNA piece on million-dollar HDB resale flats, an academic/IPS commentary on class fault lines, plus a chart of Gini / housing affordability over time.
+  - *Civic participation & dissent* — Pledge text, Article 14 of the Constitution, a contrasting case (e.g. Hong Kong protests / Swiss referendum), a domestic example of public consultation (Forward Singapore / Our Singapore Conversation), and a cartoon or infographic on civic engagement.
+- **Issue 2 — Diverse Society**
+  - *Managing racial harmony* — EIP text, MRHA / Maintenance of Religious Harmony commentary, a tudung/workplace religious-symbol case, a foreign comparator (Quebec Bill 21), and an image source (racial-harmony-day photo or poster).
+  - *Migrant workers & social cohesion* — TWC2 / MOM statement, a news report on dormitory conditions during COVID, a remittance/economic-contribution data source, an opinion piece on belonging, and a photo/chart.
+- **Issue 3 — Globalised World**
+  - *Trade openness & worker displacement* — MTI speech on FTAs, WTO trade-share data chart, a story on a Singapore worker retrained via SkillsFuture, an international counter-case (Brexit / US tariffs), and an ILO/migrant-worker excerpt.
+  - *Cultural globalisation & identity* — a Singlish/heritage commentary, a K-pop / Hollywood reach data source, a domestic counter (Speak Mandarin / SG culture pass), an academic piece on hybridisation, and an image/infographic.
+
+Each bundle uses 5 **different hosts** so distinct-host seeding hits the 5–6 cap from curated alone.
+
+### 2b. Bundle selection: pick *one* sub-issue per generation
+
+Update `curatedHumanitiesSourcePool` (and the SS code path that calls it) so that for SS sections it:
+
+1. Filters bundles whose `issue` matches the section's selected KO (Issue 1/2/3).
+2. From those, picks **exactly one** sub-issue bundle (deterministic seeded pick using section id + topic, so re-runs are stable but different sections vary).
+3. Returns those 5 sources only — no cross-mixing across sub-issues, no Issue-level grab-bag.
+
+If no Issue KO is selected, fall back to a sub-issue bundle whose trigger best matches the section topic / LOs (existing topic-group regex logic, but now over sub-issue triggers).
+
+### 2c. Wire sub-issue framing into the SBQ stems
+
+Currently `deriveTopicNoun` produces noun phrases from raw syllabus topic text (e.g. "exploring citizenship and governance"), which is exactly the generic phrasing the user is unhappy with. For SS:
+
+- When an SS sub-issue bundle is selected, override `topicNoun` and `inquiry` with the bundle's `subIssue` and `inquiryQuestion`.
+- Pass the bundle's `assertion` into the assertion-skill question (Q5), so the prompt reads e.g. *"'Housing inequality is undermining Singaporean identity.' How far do Sources A–E support this assertion? Use all the sources and your own knowledge."* instead of a generic "shaped by the actions of the major actors involved" stem.
+- Q1–Q4 stems continue to use the SBQ skill templates but with the concrete sub-issue noun phrase, so e.g. inference reads "What can you infer from Source A about *housing inequality in Singapore*?" rather than "about *exploring citizenship and governance*".
+
+### 2d. Pictorial source slot
+
+Each sub-issue bundle marks one source as `pictorial: true` (chart / photo / poster / infographic). The SBQ generator already supports an optional pictorial slot; ensure it picks the pictorial source when the bundle provides one so every SS SBQ paper has at least one image-based source as SEAB requires.
 
 ---
 
 ## Files touched
 
-- `src/routes/new.tsx` — collapsible SO group when `usingSoFallback`.
-- `supabase/functions/generate-assessment/index.ts` — SS curated bundles, SS topic groups, `isSocialStudies` plumbing, SS SRQ prompt block, locked 7+8 mark distribution.
+- `src/routes/new.tsx` — restrict `availableKos` and `koCandidates` to the three SS Issues for SS papers.
+- `supabase/functions/generate-assessment/index.ts` — replace Issue-level SS bundles with sub-issue bundles (5 sources each, 1 pictorial), add deterministic sub-issue picker, route sub-issue framing into SBQ stems and the Q5 assertion.
 
 ## Out of scope
 
-- No schema changes.
-- No changes to History essays, MCQ, or non-humanities subjects.
-- Coach prompts already inject syllabus narrative + AO/KO/SO; no changes needed there for this round.
+- No changes to History bundles, Section B SRQ logic, MCQ, or other subjects.
+- No new schema; `pictorial` flag lives only inside the edge function bundle struct.
+- Coach prompts unchanged (they read the resulting questions, which now carry the concrete sub-issue framing automatically).

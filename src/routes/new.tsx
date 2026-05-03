@@ -347,6 +347,10 @@ function NewAssessment() {
   // rather than forcing a fixed bucket list.
   const availableKos = useMemo(() => {
     if (!useSyllabus) return [] as string[];
+    // For Social Studies (2260/2261/2262), the only valid KO categories are
+    // the three Issues. Topics may carry generic "Knowledge"/"Skills"/"Values"
+    // bucket labels — those must NOT appear as KO checkboxes.
+    if (socialStudiesPaper) return DEFAULT_SOCIAL_STUDIES_KOS.slice();
     const seen = new Map<string, string>(); // lower -> original casing
     for (const t of selectableSyllabusTopics) {
       if (!selectedTopicIds.includes(t.id)) continue;
@@ -358,7 +362,7 @@ function NewAssessment() {
       }
     }
     return Array.from(seen.values());
-  }, [useSyllabus, selectableSyllabusTopics, selectedTopicIds]);
+  }, [useSyllabus, socialStudiesPaper, selectableSyllabusTopics, selectedTopicIds]);
 
   // Reset objective picks whenever topics change, keeping any custom LOs the
   // teacher typed (anything not in derivedLos is preserved as custom).
@@ -1374,6 +1378,17 @@ function SectionCard({
       const key = trimmed.toLowerCase();
       if (!seen.has(key)) seen.set(key, trimmed);
     };
+    // SS papers: only the three Issues are valid KOs. Don't merge in topic-pool
+    // outcome_categories (which include generic "Knowledge"/"Skills"/"Values"
+    // buckets) or stale globalKos that came from non-SS topics.
+    const isSocialStudiesKos =
+      availableKos.length > 0 && availableKos.every((k) => /^issue\s*\d/i.test(k));
+    if (isSocialStudiesKos) {
+      for (const c of availableKos) add(c);
+      // Preserve any already-selected SS issue on the section.
+      for (const c of sectionKos) if (/^issue\s*\d/i.test(c)) add(c);
+      return Array.from(seen.values());
+    }
     for (const t of section.topic_pool) {
       for (const c of t.outcome_categories ?? []) add(c);
     }
