@@ -207,6 +207,11 @@ function NewAssessment() {
   }, [selectedPaperKey, library]);
 
   const useSyllabus = !!selected;
+  const socialStudiesPaper = isSocialStudiesPaper(selected?.doc, selected?.paper);
+  const effectiveDocSOs = useMemo(
+    () => (socialStudiesPaper && docSOs.length === 0 ? DEFAULT_SOCIAL_STUDIES_SOS : docSOs),
+    [socialStudiesPaper, docSOs],
+  );
 
   // When the selected paper changes, load its topics + prefill metadata.
   // For multi-track MCQ papers (e.g. 5086/01) topics live on sibling
@@ -801,9 +806,7 @@ function NewAssessment() {
                   visibleQuestionTypes={visibleQuestionTypes}
                   subject={subject}
                   allAOs={docAOs}
-                  availableSos={
-                    /^social studies$/i.test(selected?.paper.componentName ?? "") ? docSOs : []
-                  }
+                  availableSos={socialStudiesPaper ? effectiveDocSOs : []}
 
                   globalAoCodes={selectedAoCodes}
                   globalKos={selectedKos}
