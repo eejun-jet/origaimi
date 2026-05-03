@@ -1795,6 +1795,7 @@ Deno.serve(async (req) => {
       const sharedSourcePool: GroundedSource[] = [];
       const sharedImageSources: GroundedImageSource[] = [];
       const sourcesForSection: (GroundedSource | null)[][] = [];
+      let ssSubIssueForSection: SsSubIssueBundle | null = null;
 
       if (isHumanitiesSBQ) {
         // SEAB History SBQ papers cap at ~6 sources total. We reserve up to 1
