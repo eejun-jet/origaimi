@@ -659,7 +659,17 @@ function SyllabusReview() {
                         <Badge key={`b-${b}`} variant="outline" className="text-xs">{b}</Badge>
                       ))}
                       {(t.outcome_categories ?? []).map((c) => (
-                        <Badge key={`c-${c}`} variant="secondary" className="text-xs capitalize">{c}</Badge>
+                        <KOContentBadge
+                          key={`c-${c}`}
+                          ko={c}
+                          items={(t.ko_content ?? {})[c] ?? []}
+                          onChange={(items) => {
+                            const next = { ...(t.ko_content ?? {}) };
+                            if (items.length === 0) delete next[c];
+                            else next[c] = items;
+                            updateTopic(originalIdx, { ko_content: next });
+                          }}
+                        />
                       ))}
                       {(t.ao_codes ?? []).map((a) => (
                         <Badge key={`a-${a}`} className="bg-primary/15 text-xs font-mono text-primary hover:bg-primary/20">{a}</Badge>
