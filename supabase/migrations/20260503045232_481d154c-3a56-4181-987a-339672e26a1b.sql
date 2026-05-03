@@ -1,0 +1,1 @@
+ALTER TABLE public.syllabus_documents ADD COLUMN IF NOT EXISTS skills_outcomes jsonb NOT NULL DEFAULT '[]'::jsonb;

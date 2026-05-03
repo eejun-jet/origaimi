@@ -1,47 +1,73 @@
-# Per-KO indicative content (history / SS)
+# Skills Outcomes for Social Studies (document-level, cross-cutting)
 
-## Problem
-History/SS syllabuses carry a lot of factual content (events, case studies, dates) that isn't an LO and doesn't fit cleanly under a topic title. Putting it inline on every topic card breaks visual consistency with Combined Science. We want it hidden by default but one click away, scoped per KO category (Knowledge / Understanding / Skills).
+## Model
 
-## Data model
-Add one JSONB column to `syllabus_topics`:
+- **4 SOs live once** on the SS `syllabus_documents` row and apply to every Issue / sub-issue / question in that syllabus.
+- **Issues + sub-issues** stay as `syllabus_topics` (unchanged).
+- **Indicative content** stays in `ko_content` per topic (already shipped).
+- **`learning_outcomes`** column on SS topics goes unused — SS questions are tagged with `{topic, KOs, AOs, SO codes}` instead of LOs.
 
-- `ko_content jsonb` — shape `{ "Knowledge": string[], "Understanding": string[], "Skills": string[] }`. Defaults to `{}`. Keys are the same KO labels already used in `outcome_categories`, so a missing key = no extra content for that KO.
+Coverage question becomes: *"Across the whole paper, did we exercise SO1–SO4 enough times?"* — not per-Issue, not per-question-mandatory.
 
-No existing data migration needed; column is nullable / defaults to empty.
+## Schema
 
-## UI — admin.syllabus.$id.tsx
+One additive column:
 
-The topic card today renders a single row of KO badges (`{(t.outcome_categories ?? []).map(...)}`). Replace each KO badge with a small button that:
-
-- Looks identical to today's `<Badge variant="secondary">` when there is no content under that KO (no chevron, no count).
-- When `ko_content[KO]` has items, renders the badge with a faint count suffix (e.g. `Knowledge · 12`) and a subtle dotted underline so users learn it's clickable.
-- Click → opens a `Popover` (existing `src/components/ui/popover.tsx`) anchored to the badge, showing:
-  - Header: "Indicative content — {KO}".
-  - Editable list (one item per line in a `Textarea`, like LOs are edited elsewhere). Add / remove handled by line-splitting on save.
-  - In read-only mode (non-edit), render the items as a `<ul>` for clean scanning.
-
-Cards stay visually identical to Combined Science when no extra content is attached. Authors only see complexity when they ask for it.
-
-```text
-[topic card]
-  Title ............................................. ⋮
-  Learning outcomes
-    • LO 1
-    • LO 2
-  [Knowledge · 12]  [Understanding · 5]  [Skills]   ← badges
-                ^click → popover with list / editor
+```sql
+ALTER TABLE syllabus_documents
+  ADD COLUMN skills_outcomes jsonb NOT NULL DEFAULT '[]'::jsonb;
 ```
 
-## Files to change
-- New migration: add `ko_content jsonb default '{}'::jsonb` to `syllabus_topics`.
-- `src/lib/syllabus-data.ts` — include `ko_content` in selects + mapper.
-- `src/routes/admin.syllabus.$id.tsx`:
-  - Extend `Topic` type with `ko_content: Record<string, string[]>`.
-  - Replace the KO badge map with a new `<KOContentBadge>` inline component using `Popover` + `Textarea`.
-  - Wire save through existing `updateTopic` flow (persist `ko_content` alongside the other topic fields).
-- `src/integrations/supabase/types.ts` regenerates automatically.
+Shape: `[{ "code": "SO1", "statement": "examine societal issues critically..." }, ...]`. Populated on the SS doc only; empty/ignored everywhere else.
 
-## Out of scope (for this pass)
-- Surfacing `ko_content` inside the generator prompt or coverage explorer. We can wire that in a follow-up once authoring is live — flag if you want it bundled.
-- LO-level content. Per your input, this lives at the KO level only.
+No change to `syllabus_topics`. No per-Issue SO storage.
+
+## Ingestion from your .xlsx
+
+One-off script (`scripts-tmp/ingest_ss_skills.mjs`):
+1. Read 4 rows of `code | statement`.
+2. Write the array to `skills_outcomes` on the SS `syllabus_documents` row (looked up by `syllabus_code` or doc id you confirm).
+
+Idempotent — replaces the array.
+
+## UI changes (SS-only branches; non-SS unchanged)
+
+### `admin.syllabus.$id.tsx`
+- Add a top-of-page **"Skills Outcomes"** card (visible only when subject is SS): editable list of `{code, statement}`. Persists to `syllabus_documents.skills_outcomes`.
+- Topic editor: hide the LO editor for SS topics; keep KO + `ko_content` editors as today.
+
+### `new.tsx` (Assessment Builder)
+- For SS papers, render an **"SO targets"** panel listing the 4 SOs with a per-SO target count (default e.g. 1–2 questions each). Stored on `assessments.blueprint`.
+- Non-SS unchanged.
+
+### `assessment.$id.tsx` (Coverage)
+- For SS, replace "LO Coverage" with **"Skills Outcome Coverage"**: a 4-row bar showing `hits vs target` per SO, with the existing under/well/over colour grammar.
+- Non-SS unchanged.
+
+## Generator + coach
+
+### `generate-assessment/index.ts`
+- For SS: inject the 4 SOs and their per-SO targets as **paper-level skill targets** in the prompt. Instruct the model to tag each generated question with the SO code(s) it exercises (multi-tag allowed). Per-Q LO tagging is dropped for SS.
+- Persist `so_codes` on `assessment_questions` — use the existing `learning_outcomes` text array as the storage column to avoid a schema change (semantically: "outcomes the question hits"; for SS these are SO codes, for other subjects LO codes — same column, different vocabulary). Document this in the function header.
+
+### `coverage-infer.ts` (×3 copies — `src/lib/`, `supabase/functions/coach-review/`, `supabase/functions/generate-assessment/`)
+- Add `inferSOs(text, soPool)` keyed off SS verb cues:
+  - "infer / from the source / how useful / how reliable / surprised" → source-handling SO
+  - "to what extent / weighing / judgement" → reasoned-argument SO
+  - "compare / contrast / similar / different" → comparison SO
+  - "appreciate / multiple perspectives / different views" → perspectives SO
+- The cue→SO mapping is built from the SO `statement` tokens at runtime so it adapts to whatever the .xlsx defines (no hardcoded statement text).
+
+### `coach-review/index.ts` + `paper-set-review/index.ts`
+- Pass the 4 SOs + targets into the coach payload. Coach reports paper-level SO engagement and flags under/over-tested SOs only — no per-Q LO overtesting flags for SS.
+
+## Migration / rollout
+
+1. Schema migration: add `skills_outcomes` column.
+2. You upload .xlsx → I run ingest → verify in admin editor.
+3. UI + generator + coach branches gated behind `subject === "Social Studies"` (or the SS syllabus doc's subject) so Sci/Hist are untouched.
+
+## What I need from you
+
+- The .xlsx with the 4 SOs (`code | statement`).
+- Confirm which `syllabus_documents` row is the SS doc to bind to (title or syllabus_code), so the ingest script targets it precisely.

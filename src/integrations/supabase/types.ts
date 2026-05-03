@@ -757,6 +757,7 @@ export type Database = {
           parse_error: string | null
           parse_status: string
           raw_text: string | null
+          skills_outcomes: Json
           subject: string | null
           syllabus_code: string | null
           syllabus_year: number | null
@@ -776,6 +777,7 @@ export type Database = {
           parse_error?: string | null
           parse_status?: string
           raw_text?: string | null
+          skills_outcomes?: Json
           subject?: string | null
           syllabus_code?: string | null
           syllabus_year?: number | null
@@ -795,6 +797,7 @@ export type Database = {
           parse_error?: string | null
           parse_status?: string
           raw_text?: string | null
+          skills_outcomes?: Json
           subject?: string | null
           syllabus_code?: string | null
           syllabus_year?: number | null
