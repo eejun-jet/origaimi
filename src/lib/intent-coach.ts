@@ -173,6 +173,7 @@ export function snapshotForAI(snap: BuilderSnapshot) {
     subject: snap.subject,
     level: snap.level,
     syllabus_code: snap.syllabusCode ?? null,
+    syllabus_doc_id: snap.syllabusDocId ?? null,
     paper_code: snap.paperCode ?? null,
     assessment_mode: snap.assessmentMode ?? "written",
     total_marks: snap.totalMarks,
