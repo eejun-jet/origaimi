@@ -2002,11 +2002,25 @@ function LOGroupedSelector({
   onToggle: (lo: string) => void;
   onToggleMany: (los: string[], select: boolean) => void;
 }) {
-  // Dedupe LOs across topics — the same LO can appear under multiple topics;
-  // we keep its first-seen topic grouping so the user picks once.
-  const groups = useMemo(() => {
+  // Dedupe LOs across topics — the same LO can appear under multiple topics
+  // (and across multiple sections, e.g. both Section A and Section B). We
+  // keep its first-seen topic grouping so the user picks once, but also
+  // record every section it covers so we can mark cross-section LOs with "*".
+  const { groups, loSections } = useMemo(() => {
     const seen = new Set<string>();
+    const sectionsByLo = new Map<string, Set<string>>();
     const out: { topicId: string; title: string; los: string[]; section: string | null }[] = [];
+    for (const t of topics) {
+      for (const raw of t.learningOutcomes ?? []) {
+        const lo = raw.trim();
+        if (!lo) continue;
+        if (t.section) {
+          const set = sectionsByLo.get(lo) ?? new Set<string>();
+          set.add(t.section);
+          sectionsByLo.set(lo, set);
+        }
+      }
+    }
     for (const t of topics) {
       const los: string[] = [];
       for (const raw of t.learningOutcomes ?? []) {
@@ -2017,23 +2031,8 @@ function LOGroupedSelector({
       }
       if (los.length > 0) out.push({ topicId: t.id, title: t.title, los, section: t.section ?? null });
     }
-    return out;
+    return { groups: out, loSections: sectionsByLo };
   }, [topics]);
-
-  // Section buckets (e.g. Physics / Chemistry / Biology on Combined Science 5086/5087/5088,
-  // or a single "Paper 1" bucket on a one-section MCQ paper). We always surface bulk
-  // "Select all" controls so teachers can pick every LO in a section with one click.
-  const sectionBuckets = useMemo(() => {
-    const m = new Map<string, string[]>(); // section label -> LO list (preserves first-seen order)
-    for (const g of groups) {
-      if (!g.section) continue;
-      const key = g.section;
-      const arr = m.get(key) ?? [];
-      arr.push(...g.los);
-      m.set(key, arr);
-    }
-    return Array.from(m.entries()).map(([label, los]) => ({ label, los }));
-  }, [groups]);
 
   const [open, setOpen] = useState<Record<string, boolean>>({});
 
