@@ -1887,6 +1887,7 @@ Deno.serve(async (req) => {
       const sharedImageSources: GroundedImageSource[] = [];
       const sourcesForSection: (GroundedSource | null)[][] = [];
       let ssSubIssueForSection: SsSubIssueBundle | null = null;
+      let humanitiesAnchorTopic: SectionTopic | null = null;
 
       if (isHumanitiesSBQ) {
         // SEAB History SBQ papers cap at ~6 sources total. We reserve up to 1
@@ -1906,6 +1907,7 @@ Deno.serve(async (req) => {
         const maxMinSources = effectiveSkillDefs.reduce((m, s) => Math.max(m, s.minSources), 0);
         const poolSize = Math.min(MAX_TOTAL_SOURCES, Math.max(4, maxMinSources));
         const sectionTopic = selectHumanitiesAnchorTopic(section);
+        humanitiesAnchorTopic = sectionTopic;
         // ssSubIssueForSection declared above section scope
         const POOL_QUERY_HINTS = [
           "official government statement",
@@ -2170,8 +2172,8 @@ Deno.serve(async (req) => {
       let questions: any[] = [];
       if (isHumanitiesSBQ && sharedSourcePool.length > 0) {
         console.log(`[generate] section ${section.letter}: using deterministic SBQ builder to avoid long AI timeout`);
-        const deterministicSection = sectionTopic
-          ? { ...section, topic_pool: [sectionTopic, ...section.topic_pool.filter((t) => t !== sectionTopic)] }
+        const deterministicSection = humanitiesAnchorTopic
+          ? { ...section, topic_pool: [humanitiesAnchorTopic, ...section.topic_pool.filter((t) => t !== humanitiesAnchorTopic)] }
           : section;
         questions = buildDeterministicSbqQuestions(deterministicSection, sharedSourcePool, perQSkillsForFetch, ssSubIssueForSection);
       } else if (isSSPaper && section.question_type === "long") {
