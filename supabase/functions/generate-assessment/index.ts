@@ -1795,6 +1795,7 @@ Deno.serve(async (req) => {
       const sharedSourcePool: GroundedSource[] = [];
       const sharedImageSources: GroundedImageSource[] = [];
       const sourcesForSection: (GroundedSource | null)[][] = [];
+      let ssSubIssueForSection: SsSubIssueBundle | null = null;
 
       if (isHumanitiesSBQ) {
         // SEAB History SBQ papers cap at ~6 sources total. We reserve up to 1
@@ -1814,7 +1815,7 @@ Deno.serve(async (req) => {
         const maxMinSources = effectiveSkillDefs.reduce((m, s) => Math.max(m, s.minSources), 0);
         const poolSize = Math.min(MAX_TOTAL_SOURCES, Math.max(4, maxMinSources));
         const sectionTopic = section.topic_pool[0] ?? null;
-        let ssSubIssueForSection: SsSubIssueBundle | null = null;
+        // ssSubIssueForSection declared above section scope
         const POOL_QUERY_HINTS = [
           "official government statement",
           "newspaper report contemporary",
