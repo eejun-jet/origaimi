@@ -2070,8 +2070,18 @@ function LOGroupedSelector({
               <div className="border-t border-border p-1.5 space-y-1">
                 {los.map((lo) => {
                   const checked = selected.includes(lo);
+                  const isCrossSection = (loSections.get(lo)?.size ?? 0) > 1;
                   return (
                     <label
+                      key={lo}
+                      className={`flex cursor-pointer items-start gap-2 rounded p-1.5 text-xs ${checked ? "bg-primary-soft/40" : "hover:bg-muted/40"}`}
+                    >
+                      <Checkbox checked={checked} onCheckedChange={() => onToggle(lo)} />
+                      <span className="flex-1">
+                        {isCrossSection && <span className="mr-1 font-semibold text-primary" title="Testable in multiple sections">*</span>}
+                        {lo}
+                      </span>
+                    </label>
                       key={lo}
                       className={`flex cursor-pointer items-start gap-2 rounded p-1.5 text-xs ${checked ? "bg-primary-soft/40" : "hover:bg-muted/40"}`}
                     >
