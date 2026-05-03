@@ -114,7 +114,7 @@ Deno.serve(async (req) => {
       .in("id", paperIds);
 
     let aoDefs: { code: string; title: string | null; description: string | null; weighting_percent: number | null }[] = [];
-    let topics: { outcome_categories: string[]; learning_outcomes: string[] }[] = [];
+    let topics: { title?: string | null; section: string | null; outcome_categories: string[]; learning_outcomes: string[] }[] = [];
     if (setRow.syllabus_doc_id) {
       const [{ data: aos }, { data: tps }] = await Promise.all([
         supabase
@@ -124,7 +124,7 @@ Deno.serve(async (req) => {
           .order("position"),
         supabase
           .from("syllabus_topics")
-          .select("outcome_categories,learning_outcomes")
+          .select("title,section,outcome_categories,learning_outcomes")
           .eq("source_doc_id", setRow.syllabus_doc_id),
       ]);
       aoDefs = (aos as typeof aoDefs) ?? [];
