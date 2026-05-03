@@ -934,8 +934,11 @@ function buildSectionUserPrompt(opts: {
   const typeLabel = QUESTION_TYPE_LABELS[section.question_type] ?? section.question_type;
   const isHumanitiesSBQ =
     opts.subjectKind === "humanities" && section.question_type === "source_based";
-  const isHistoryEssay =
+  const isSocialStudies = /social studies/i.test(opts.subject);
+  const isHumanitiesEssayLong =
     opts.subjectKind === "humanities" && section.question_type === "long";
+  const isHistoryEssay = isHumanitiesEssayLong && !isSocialStudies;
+  const isSSStructured = isHumanitiesEssayLong && isSocialStudies;
 
   const topicLines = section.topic_pool.map((t, i) => {
     const code = t.topic_code ? ` [${t.topic_code}]` : "";
