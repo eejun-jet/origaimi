@@ -299,6 +299,37 @@ FORMATTING — the answer field MUST contain at least 5 distinct paragraphs sepa
 
 QUALITY BAR — the answer must demonstrate L4-level historical analysis so it is usable as a model exemplar for students. Do NOT write a generic outline; write a fully developed essay with concrete, accurate historical detail throughout.`;
 
+// ---------- Social Studies Section B (Structured Response Questions, SRQ) ----------
+// SS Paper 1 (2260/2261/2262) Section B is a 15-mark Structured Response with
+// part (a) worth 7 marks and part (b) worth 8 marks. Stems use SS command
+// words ("Explain …", "How far do you agree …", "Do you think …"). Case
+// studies / examples may be Singaporean OR global/international, provided
+// the issue aligns with the AO/KO/SO and content for the chosen topic.
+
+const SS_SRQ_PART_A_MARK_SCHEME = `LEVEL DESCRIPTORS for the 7-mark "Explain" part (a) (copy these lines VERBATIM into the mark_scheme field, then add 1–2 indicative-content bullets per level tailored to THIS specific question):
+
+L1 (1–2 marks): Identifies/describes a relevant point without explaining how/why it answers the question.
+L2 (3–5 marks): Explains ONE reason/factor/challenge with developed reasoning linked to the question. Maximum 5 marks if only one reason is explained.
+L3 (6–7 marks): Explains TWO distinct reasons/factors/challenges with developed reasoning linked to the question.`;
+
+const SS_SRQ_PART_B_MARK_SCHEME = `LEVEL DESCRIPTORS for the 8-mark evaluative "How far do you agree" / "Do you think" part (b) (copy these lines VERBATIM into the mark_scheme field, then add 1–2 indicative-content bullets per level tailored to THIS specific question):
+
+L1 (1–2 marks): Describes the issue without taking a position or without explanation.
+L2 (3–4 marks): One-sided explanation — supports OR challenges the view, with reasoning, but no counter-perspective.
+L3 (5–6 marks): Two-sided explanation — gives reasoned arguments BOTH supporting and challenging the view.
+L4 (7–8 marks): L3 + reaches a substantiated overall judgement on the question (e.g. weighs which side is stronger, distinguishes context-dependent factors, or qualifies the agreement) supported by the evidence already given.`;
+
+const SS_SRQ_ANSWER_TEMPLATE = `MODEL ANSWER (write the answer field as a complete student exemplar of ~250–400 words, structured EXACTLY as below — separate EVERY paragraph with a BLANK LINE):
+
+For the 7-mark part (a): TWO PEEL paragraphs, one per reason/factor/challenge. Each paragraph names the reason, gives ONE concrete supporting example (Singaporean OR global/international — what matters is alignment to the AO/KO/SO and content), explains the causal link to the question, and ends with a mini-link tying back to the question.
+
+For the 8-mark part (b): FOUR paragraphs — (1) brief stand, (2) PEEL agreeing with the view with one concrete example, (3) PEEL challenging the view with one concrete example, (4) evaluation paragraph that weighs both sides and reaches a reasoned overall judgement (e.g. "agree to a large extent because …", "depends on context X versus Y", "agree but only when …").
+
+FORMATTING — at least 2 distinct paragraphs for part (a) and 4 distinct paragraphs for part (b), separated by blank lines. Do NOT use bullet points. Write flowing prose.
+
+QUALITY BAR — concrete, accurate evidence in every paragraph (named policy / event / case study / statistic / organisation). The example used may be from Singapore or any other country, as long as the issue genuinely aligns with the AO/KO/SO theme. Do NOT default to Singapore-only when a stronger international case better fits the topic.`;
+
+
 // Resolve effective skill IDs for a section, supporting new sbq_skills array
 // and legacy single sbq_skill. Caps at 5 and filters unknown ids.
 function resolveEffectiveSkills(section: Section): string[] {
