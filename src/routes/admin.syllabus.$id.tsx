@@ -32,6 +32,10 @@ type Doc = {
   level: string | null;
   parse_status: string;
   skills_outcomes: SkillsOutcome[];
+  aims: string | null;
+  assessment_rationale: string | null;
+  pedagogical_notes: string | null;
+  command_word_glossary: Array<{ word: string; definition: string }>;
 };
 
 type Paper = {
@@ -364,6 +368,74 @@ function SyllabusReview() {
               <Input value={doc.level ?? ""} onChange={(e) => setDoc({ ...doc, level: e.target.value || null })} />
             </div>
           </div>
+        </Card>
+
+        {/* Syllabus narrative — aims, rationale, pedagogical notes, command-word glossary. */}
+        <Card className="mb-6 p-4">
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-medium">Syllabus narrative (Coach context)</h2>
+              <p className="text-xs text-muted-foreground">
+                Aims, assessment rationale, pedagogical notes and command-word glossary extracted from the syllabus PDF. Used to ground the Assessment Coach — does not affect AOs/KOs/LOs.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={saving}
+              onClick={async () => {
+                setSaving(true);
+                try {
+                  const { error } = await supabase.functions.invoke("extract-syllabus-narrative", {
+                    body: { documentId: id },
+                  });
+                  if (error) throw error;
+                  toast.success("Narrative re-extracted");
+                  await load();
+                } catch (e: any) {
+                  toast.error(e.message ?? "Re-extract failed");
+                } finally {
+                  setSaving(false);
+                }
+              }}
+            >
+              Re-extract narrative
+            </Button>
+          </div>
+          {!doc.aims && !doc.assessment_rationale && !doc.pedagogical_notes && (doc.command_word_glossary?.length ?? 0) === 0 ? (
+            <div className="text-xs text-muted-foreground">No narrative extracted yet. Click "Re-extract narrative" to run.</div>
+          ) : (
+            <div className="space-y-3 text-sm">
+              {doc.aims && (
+                <div>
+                  <div className="mb-1 text-xs font-medium uppercase text-muted-foreground">Aims</div>
+                  <div className="whitespace-pre-wrap">{doc.aims}</div>
+                </div>
+              )}
+              {doc.assessment_rationale && (
+                <div>
+                  <div className="mb-1 text-xs font-medium uppercase text-muted-foreground">Assessment rationale</div>
+                  <div className="whitespace-pre-wrap">{doc.assessment_rationale}</div>
+                </div>
+              )}
+              {doc.pedagogical_notes && (
+                <div>
+                  <div className="mb-1 text-xs font-medium uppercase text-muted-foreground">Pedagogical notes</div>
+                  <div className="whitespace-pre-wrap">{doc.pedagogical_notes}</div>
+                </div>
+              )}
+              {(doc.command_word_glossary?.length ?? 0) > 0 && (
+                <div>
+                  <div className="mb-1 text-xs font-medium uppercase text-muted-foreground">Command words</div>
+                  <ul className="ml-4 list-disc space-y-1">
+                    {doc.command_word_glossary.map((g, i) => (
+                      <li key={i}><span className="font-medium">{g.word}:</span> {g.definition}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
         </Card>
 
         {/* Skills Outcomes — cross-cutting, paper-wide. Mainly for Social Studies. */}
