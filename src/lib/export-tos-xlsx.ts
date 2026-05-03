@@ -343,11 +343,12 @@ function buildKoLoSheet(grouping: KoLoGrouping): XLSX.WorkSheet {
   const aoa: (string | number)[][] = [];
   aoa.push(["KO → LO coverage (✓ = covered by ≥1 question, · = uncovered)"]);
   aoa.push([]);
-  const headers = ["Knowledge Outcome", "Target", "Actual", "Δ", ...grouping.disciplines];
+  const headers = ["Knowledge Outcome", "LOs covered", "Target", "Actual", "Δ", ...grouping.disciplines];
   aoa.push(headers);
   for (const r of grouping.rows) {
     aoa.push([
       r.name,
+      r.loCoverage,
       r.target,
       r.actual,
       r.delta,
@@ -357,6 +358,7 @@ function buildKoLoSheet(grouping: KoLoGrouping): XLSX.WorkSheet {
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   ws["!cols"] = [
     { wch: 36 },
+    { wch: 12 },
     { wch: 10 },
     { wch: 10 },
     { wch: 6 },
@@ -365,7 +367,7 @@ function buildKoLoSheet(grouping: KoLoGrouping): XLSX.WorkSheet {
   // Wrap LO cells.
   const range = XLSX.utils.decode_range(ws["!ref"] ?? "A1");
   for (let R = 3; R <= range.e.r; R++) {
-    for (let C = 4; C <= range.e.c; C++) {
+    for (let C = 5; C <= range.e.c; C++) {
       const addr = XLSX.utils.encode_cell({ r: R, c: C });
       const cell = ws[addr];
       if (cell) cell.s = { ...(cell.s ?? {}), alignment: { wrapText: true, vertical: "top" } };
