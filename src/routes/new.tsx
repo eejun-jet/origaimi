@@ -1342,7 +1342,7 @@ type SectionCardProps = {
 
 function SectionCard({
   section, isFirst, isLast, masterPool, visibleQuestionTypes, subject,
-  allAOs, availableSos = [], globalAoCodes, globalKos, globalLos,
+  allAOs, availableSos = [], availableKos = [], globalAoCodes, globalKos, globalLos,
   specimenMix, specimenLabel,
   onUpdate, onRemove, onMove,
 }: SectionCardProps) {
