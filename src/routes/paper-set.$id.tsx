@@ -44,6 +44,7 @@ type SetRow = {
   level: string | null;
   syllabus_doc_id: string | null;
   notes: string | null;
+  scoped_disciplines: string[] | null;
 };
 
 type AODef = { code: string; title: string | null; description: string | null; weighting_percent: number | null };
