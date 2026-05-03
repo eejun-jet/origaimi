@@ -201,6 +201,7 @@ function NewAssessment() {
     if (!selected) {
       setPaperTopics([]);
       setDocAOs([]);
+      setDocSOs([]);
       return;
     }
     const { doc, paper } = selected;
@@ -220,10 +221,12 @@ function NewAssessment() {
         return t;
       }),
       loadDocAssessmentObjectives(doc.id),
+      loadDocSkillsOutcomes(doc.id).catch(() => []),
     ])
-      .then(([t, aos]) => {
+      .then(([t, aos, sos]) => {
         setPaperTopics(t);
         setDocAOs(aos);
+        setDocSOs(sos);
       })
       .catch((e) => toast.error(e.message ?? "Could not load topics"))
       .finally(() => setTopicsLoading(false));
