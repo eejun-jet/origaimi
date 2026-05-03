@@ -6,6 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Layers, Sparkles, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
+import {
+  inferInScopeDisciplines,
+  buildDisciplineLookup,
+} from "@/lib/discipline-scope";
 
 export const Route = createFileRoute("/paper-set/$id")({
   component: PaperSetView,
@@ -39,6 +43,7 @@ type SetRow = {
   level: string | null;
   syllabus_doc_id: string | null;
   notes: string | null;
+  scoped_disciplines: string[] | null;
 };
 
 type AODef = { code: string; title: string | null; description: string | null; weighting_percent: number | null };
@@ -81,7 +86,7 @@ function PaperSetView() {
       setLoading(true);
       const { data: srow } = await supabase
         .from("paper_sets")
-        .select("id,title,subject,level,syllabus_doc_id,notes")
+        .select("id,title,subject,level,syllabus_doc_id,notes,scoped_disciplines")
         .eq("id", id)
         .single();
       if (!srow) {
@@ -155,6 +160,32 @@ function PaperSetView() {
   const totalMarks = flatQuestions.reduce((s, x) => s + x.effectiveMarks, 0);
   const totalQuestions = flatQuestions.length;
 
+  const { inScope, disciplineUniverse, discLookup } = useMemo(() => {
+    const topicLikes = topics.map((t) => ({
+      title: t.title,
+      section: t.section,
+      outcome_categories: t.outcome_categories ?? [],
+      learning_outcomes: t.learning_outcomes ?? [],
+    }));
+    const lookup = buildDisciplineLookup(topicLikes);
+    const universe = Array.from(lookup.universe).filter((d) => d !== "General");
+    const scope = inferInScopeDisciplines({
+      questions: flatQuestions.map((x) => ({
+        topic: x.q.topic,
+        knowledge_outcomes: x.q.knowledge_outcomes,
+        learning_outcomes: x.q.learning_outcomes,
+      })),
+      topics: topicLikes,
+      override: setRow?.scoped_disciplines ?? null,
+    });
+    return { inScope: scope, disciplineUniverse: universe, discLookup: lookup };
+  }, [topics, flatQuestions, setRow?.scoped_disciplines]);
+
+  const updateScope = async (next: string[] | null) => {
+    if (setRow) setSetRow({ ...setRow, scoped_disciplines: next });
+    await supabase.from("paper_sets").update({ scoped_disciplines: next }).eq("id", id);
+  };
+
   const aoMarkShare = useMemo(() => {
     const aoTotals = new Map<string, number>();
     for (const { q, effectiveMarks } of flatQuestions) {
@@ -192,8 +223,13 @@ function PaperSetView() {
         map.set(ko, row);
       }
     }
-    return Array.from(map.values()).sort((a, b) => a.ko.localeCompare(b.ko));
-  }, [flatQuestions, topics]);
+    const all = Array.from(map.values()).sort((a, b) => a.ko.localeCompare(b.ko));
+    if (!inScope) return all;
+    return all.filter((r) => {
+      const d = discLookup.byKO.get(r.ko);
+      return !d || inScope.has(d);
+    });
+  }, [flatQuestions, topics, inScope, discLookup]);
 
   const loCoverage = useMemo(() => {
     const norm = (s: string) =>
@@ -217,8 +253,13 @@ function PaperSetView() {
         map.set(k, row);
       }
     }
-    return Array.from(map.values()).sort((a, b) => a.lo.localeCompare(b.lo));
-  }, [flatQuestions, topics]);
+    const all = Array.from(map.values()).sort((a, b) => a.lo.localeCompare(b.lo));
+    if (!inScope) return all;
+    return all.filter((r) => {
+      const d = discLookup.byLO.get(r.lo);
+      return !d || inScope.has(d);
+    });
+  }, [flatQuestions, topics, inScope, discLookup]);
 
   const perPaper = useMemo(() => {
     return papers.map((p) => {
@@ -311,6 +352,15 @@ function PaperSetView() {
             {latestReview ? "Re-run macro review" : "Run macro review"}
           </Button>
         </header>
+
+        {disciplineUniverse.length >= 2 && (
+          <PaperSetScopeStrip
+            universe={disciplineUniverse}
+            inScope={inScope}
+            override={setRow.scoped_disciplines ?? null}
+            onChange={updateScope}
+          />
+        )}
 
         <div className="flex flex-wrap gap-2 border-b border-border">
           {tabs.map((t) => (
@@ -566,6 +616,64 @@ function MacroSummaryPanel({ review, running }: { review: ReviewSnapshot | null;
           ) : null}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function PaperSetScopeStrip({
+  universe,
+  inScope,
+  override,
+  onChange,
+}: {
+  universe: string[];
+  inScope: Set<string> | null;
+  override: string[] | null;
+  onChange: (next: string[] | null) => void | Promise<void>;
+}) {
+  const isAuto = !override || override.length === 0;
+  const active = (d: string) => (inScope ? inScope.has(d) : true);
+  const toggle = (d: string) => {
+    const current = new Set(universe.filter(active));
+    if (current.has(d)) current.delete(d);
+    else current.add(d);
+    if (current.size === 0) return;
+    onChange(Array.from(current));
+  };
+  return (
+    <div className="rounded-lg border border-border bg-card p-3 text-xs">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-medium text-foreground">Scope:</span>
+        {universe.map((d) => {
+          const on = active(d);
+          return (
+            <button
+              key={d}
+              type="button"
+              onClick={() => toggle(d)}
+              className={`rounded-full border px-2 py-0.5 transition ${
+                on
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "border-border bg-muted/30 text-muted-foreground hover:bg-muted"
+              }`}
+              title={on ? `${d} is in scope — click to exclude` : `${d} excluded — click to include`}
+            >
+              {on ? "✓ " : ""}{d}
+            </button>
+          );
+        })}
+        <span className="ml-auto text-muted-foreground">
+          {isAuto ? "Auto-detected from question tags" : "Manual override"}
+        </span>
+        {!isAuto && (
+          <button type="button" onClick={() => onChange(null)} className="text-primary hover:underline">
+            Reset to auto
+          </button>
+        )}
+      </div>
+      <p className="mt-1 text-[11px] text-muted-foreground">
+        Untested disciplines are hidden from KO / LO coverage and "Untested" flags.
+      </p>
     </div>
   );
 }

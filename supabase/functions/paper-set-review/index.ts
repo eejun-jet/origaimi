@@ -85,7 +85,7 @@ Deno.serve(async (req) => {
 
     const { data: setRow, error: setErr } = await supabase
       .from("paper_sets")
-      .select("id,user_id,title,subject,level,syllabus_doc_id")
+      .select("id,user_id,title,subject,level,syllabus_doc_id,scoped_disciplines")
       .eq("id", set_id)
       .single();
     if (setErr || !setRow) {
@@ -114,7 +114,7 @@ Deno.serve(async (req) => {
       .in("id", paperIds);
 
     let aoDefs: { code: string; title: string | null; description: string | null; weighting_percent: number | null }[] = [];
-    let topics: { outcome_categories: string[]; learning_outcomes: string[] }[] = [];
+    let topics: { title?: string | null; section: string | null; outcome_categories: string[]; learning_outcomes: string[] }[] = [];
     if (setRow.syllabus_doc_id) {
       const [{ data: aos }, { data: tps }] = await Promise.all([
         supabase
@@ -124,7 +124,7 @@ Deno.serve(async (req) => {
           .order("position"),
         supabase
           .from("syllabus_topics")
-          .select("outcome_categories,learning_outcomes")
+          .select("title,section,outcome_categories,learning_outcomes")
           .eq("source_doc_id", setRow.syllabus_doc_id),
       ]);
       aoDefs = (aos as typeof aoDefs) ?? [];
@@ -156,14 +156,67 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Discipline scoping (e.g. Combined Science where only 2 of 3 sciences
+    // are tested) — drop unrealised KOs/LOs from disciplines that aren't in
+    // scope so we don't tell the teacher Biology is "untested" when it
+    // wasn't in the assessment at all.
+    const normDiscipline = (s: string | null | undefined): string => {
+      if (!s) return "General";
+      const t = s.toLowerCase();
+      if (t.includes("physic")) return "Physics";
+      if (t.includes("chem")) return "Chemistry";
+      if (t.includes("bio")) return "Biology";
+      if (t.includes("practical") || t.includes("experimental")) return "Practical";
+      return s.split(/[—–-]/).slice(-1)[0]?.trim() || s;
+    };
+    const koDisc = new Map<string, string>();
+    const loDisc = new Map<string, string>();
+    const universe = new Set<string>();
+    for (const t of topics) {
+      const d = normDiscipline(t.section ?? null);
+      universe.add(d);
+      for (const k of t.outcome_categories ?? []) if (k && !koDisc.has(k)) koDisc.set(k.trim(), d);
+      for (const l of t.learning_outcomes ?? []) if (l && !loDisc.has(l)) loDisc.set(l, d);
+    }
+    let inScope: Set<string> | null = null;
+    if (universe.size >= 2) {
+      const override = (setRow as { scoped_disciplines?: string[] | null }).scoped_disciplines ?? null;
+      if (override && override.length > 0) {
+        inScope = new Set(override.map(normDiscipline));
+        inScope.add("General");
+      } else {
+        const detected = new Set<string>();
+        for (const p of (papers ?? []) as { questions_json: unknown }[]) {
+          const arr = Array.isArray(p.questions_json) ? (p.questions_json as ParsedQuestion[]) : [];
+          for (const q of arr) {
+            for (const k of q.knowledge_outcomes ?? []) {
+              const d = koDisc.get((k ?? "").trim()); if (d) detected.add(d);
+            }
+            for (const l of q.learning_outcomes ?? []) {
+              const d = loDisc.get(l ?? ""); if (d) detected.add(d);
+            }
+          }
+        }
+        if (detected.size === 0) inScope = new Set(universe);
+        else { detected.add("General"); inScope = detected; }
+      }
+    }
+
     const allKOs = new Set<string>();
     const allLOs = new Map<string, string>(); // norm -> original
     for (const t of topics) {
       for (const k of t.outcome_categories ?? []) if (k) allKOs.add(k.trim());
       for (const l of t.learning_outcomes ?? []) if (l) allLOs.set(norm(l), l);
     }
-    const unrealisedKOs = Array.from(allKOs).filter((k) => !kosSeen.has(k));
-    const unrealisedLOs = Array.from(allLOs.entries()).filter(([k]) => !losSeen.has(k)).map(([, v]) => v);
+    const koInScope = (k: string) => !inScope || inScope.has(koDisc.get(k) ?? "General");
+    const loInScope = (origLo: string) => !inScope || inScope.has(loDisc.get(origLo) ?? "General");
+    const unrealisedKOs = Array.from(allKOs).filter((k) => !kosSeen.has(k) && koInScope(k));
+    const unrealisedLOs = Array.from(allLOs.entries())
+      .filter(([k, v]) => !losSeen.has(k) && loInScope(v))
+      .map(([, v]) => v);
+    const scopeNote = inScope
+      ? `Scope filter active: only ${Array.from(inScope).filter((d) => d !== "General").join(", ")} are in scope.`
+      : "";
 
     const aoStats = Array.from(new Set([...aoDefs.map((a) => a.code), ...aoMarks.keys()])).map((code) => {
       const def = aoDefs.find((a) => a.code === code);
@@ -191,6 +244,7 @@ WHAT TO PRODUCE:
 - ao_drift: for each AO whose observed share differs from the declared weighting by > 8 pp (or declared is missing and the share is conspicuously low/high), one entry with a one-line note.
 - unrealised: list KOs and LOs from the syllabus that no question in the set exercises. Truncate each list to at most 12 items (most pedagogically central first); add a one-line note summarising the gap if you do.
 
+${scopeNote ? `\nSCOPE: ${scopeNote} Do NOT recommend coverage for out-of-scope disciplines and do NOT flag any of their KOs/LOs as gaps.\n` : ""}
 Submit STRICTLY through the submit_paper_set_review tool.`;
 
     const userPayload = {

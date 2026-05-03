@@ -1126,6 +1126,13 @@ function EditorPage() {
                     identity={identity}
                     subject={assessment.subject}
                     sections={sectionedBlueprint.sections}
+                    inScope={disciplineScope}
+                    disciplineUniverse={disciplineUniverse}
+                    scopedDisciplines={assessment.scoped_disciplines ?? null}
+                    onScopeChange={async (next) => {
+                      setAssessment({ ...assessment, scoped_disciplines: next });
+                      await supabase.from("assessments").update({ scoped_disciplines: next }).eq("id", id);
+                    }}
                     onAddComment={addComment}
                     onSetCommentStatus={setCommentStatus}
                     onDeleteComment={deleteComment}
@@ -2060,6 +2067,7 @@ function disciplineStyle(name: string | null | undefined): DisciplineStyle {
 function buildTopicsMap(
   paperLOs: Coverage["paper"]["los"],
   sections: Section[],
+  inScope: Set<string> | null = null,
 ): TopicsMap {
   // (discipline, topicTitle) → Map<loText, {covered, actual}>
   const grouped = new Map<string, Map<string, Map<string, { covered: boolean; actual: number }>>>();
@@ -2069,6 +2077,9 @@ function buildTopicsMap(
   const place = (discipline: string, topicTitle: string, loText: string) => {
     const stat = loStats.get(loText);
     if (!stat) return; // LO not in paper rollup → skip
+    // Discipline scoping: drop LOs that belong to out-of-scope disciplines
+    // (e.g. Biology when only Physics + Chemistry are tested).
+    if (inScope && !inScope.has(discipline)) return;
     if (!grouped.has(discipline)) grouped.set(discipline, new Map());
     const disc = grouped.get(discipline)!;
     if (!disc.has(topicTitle)) disc.set(topicTitle, new Map());
@@ -2133,6 +2144,68 @@ function statusTone(covered: number, total: number): "success" | "warn" | "destr
   if (covered === 0) return "destructive";
   if (covered >= total) return "success";
   return "warn";
+}
+
+function DisciplineScopeStrip({
+  universe,
+  inScope,
+  override,
+  onChange,
+}: {
+  universe: string[];
+  inScope: Set<string> | null;
+  override: string[] | null;
+  onChange: (next: string[] | null) => void | Promise<void>;
+}) {
+  const isAuto = !override || override.length === 0;
+  const active = (d: string) => (inScope ? inScope.has(d) : true);
+  const toggle = (d: string) => {
+    const current = new Set(universe.filter(active));
+    if (current.has(d)) current.delete(d);
+    else current.add(d);
+    if (current.size === 0) return; // refuse all-off
+    onChange(Array.from(current));
+  };
+  return (
+    <div className="rounded-xl border border-border bg-card p-3 text-xs">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-medium text-foreground">Scope:</span>
+        {universe.map((d) => {
+          const on = active(d);
+          return (
+            <button
+              key={d}
+              type="button"
+              onClick={() => toggle(d)}
+              className={`rounded-full border px-2 py-0.5 transition ${
+                on
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "border-border bg-muted/30 text-muted-foreground hover:bg-muted"
+              }`}
+              title={on ? `${d} is in scope — click to exclude` : `${d} excluded — click to include`}
+            >
+              {on ? "✓ " : ""}{d}
+            </button>
+          );
+        })}
+        <span className="ml-auto text-muted-foreground">
+          {isAuto ? "Auto-detected from question tags" : "Manual override"}
+        </span>
+        {!isAuto && (
+          <button
+            type="button"
+            onClick={() => onChange(null)}
+            className="text-primary hover:underline"
+          >
+            Reset to auto
+          </button>
+        )}
+      </div>
+      <p className="mt-1 text-[11px] text-muted-foreground">
+        Untested disciplines are hidden from KO / LO coverage and "Untested" flags.
+      </p>
+    </div>
+  );
 }
 
 function SegmentBar({ covered, total }: { covered: number; total: number }) {
@@ -2737,6 +2810,7 @@ function CollapsibleCard({
 function CoveragePanel({
   assessmentId,
   coverage, totalMarks, totalActual, questions, comments, identity, subject, sections,
+  inScope, disciplineUniverse, scopedDisciplines, onScopeChange,
   onAddComment, onSetCommentStatus, onDeleteComment, onScrollToQuestion,
   onRetag, retagBusy,
 }: {
@@ -2747,6 +2821,10 @@ function CoveragePanel({
   questions: Question[];
   subject: string;
   sections: Section[];
+  inScope: Set<string> | null;
+  disciplineUniverse: string[];
+  scopedDisciplines: string[] | null;
+  onScopeChange: (next: string[] | null) => void | Promise<void>;
   onScrollToQuestion: (questionId: string) => void;
   onRetag?: () => void | Promise<void>;
   retagBusy?: boolean;
@@ -2756,7 +2834,7 @@ function CoveragePanel({
   const [target, setTarget] = useState<CoverageTarget | null>(null);
   const isScience = isScienceSubject(subject);
   const [loView, setLoView] = useState<"topic" | "map" | "list">("list");
-  const topicsMap = useMemo(() => buildTopicsMap(paper.los, sections), [paper.los, sections]);
+  const topicsMap = useMemo(() => buildTopicsMap(paper.los, sections, inScope), [paper.los, sections, inScope]);
 
   // Card-level open/closed state, persisted per assessment.
   const cardOpen = useCardCollapseState(assessmentId, {
@@ -2955,13 +3033,16 @@ function CoveragePanel({
       });
     }
 
-    return buckets.sort((a, b) => {
+    const filtered = inScope
+      ? buckets.filter((b) => inScope.has(b.discipline))
+      : buckets;
+    return filtered.sort((a, b) => {
       const ai = STATUS_META[a.status].sortKey;
       const bi = STATUS_META[b.status].sortKey;
       if (ai !== bi) return ai - bi;
       return a.name.localeCompare(b.name);
     });
-  }, [paper.kos, paper.los, sections, questions]);
+  }, [paper.kos, paper.los, sections, questions, inScope]);
 
   const visibleKOs = explorerFilter === "all"
     ? koLoGroups
@@ -3013,6 +3094,15 @@ function CoveragePanel({
 
   return (
     <>
+      {disciplineUniverse.length >= 2 && (
+        <DisciplineScopeStrip
+          universe={disciplineUniverse}
+          inScope={inScope}
+          override={scopedDisciplines}
+          onChange={onScopeChange}
+        />
+      )}
+
       {/* Paper overview */}
       <div className="rounded-xl border border-border bg-card p-5">
         <h3 className="font-medium">Paper overview</h3>

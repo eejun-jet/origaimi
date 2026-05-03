@@ -325,7 +325,36 @@ Submit your findings via the submit_coach_review tool. Run these checks:
 
 7. Question variety (optional, single observation) — if command-verb diversity, item-format mix or reading load is notably narrow or heavy, populate \`question_variety\` with one observation. Omit if varied.
 
-   HARD RULE — fixed-format papers: If the paper's section blueprint constrains every question to a single question_type (e.g. an MCQ-only Paper 1, a structured-only Paper 2), the format is fixed by the syllabus. Do NOT recommend adding other question types (no "include short-answer", "introduce structured tasks", "diversify with essays" etc.). You may still observe command-verb, context, or reading-load variation within the chosen format.${sciencePackBlock}
+   HARD RULE — fixed-format papers: If the paper's section blueprint constrains every question to a single question_type (e.g. an MCQ-only Paper 1, a structured-only Paper 2), the format is fixed by the syllabus. Do NOT recommend adding other question types (no "include short-answer", "introduce structured tasks", "diversify with essays" etc.). You may still observe command-verb, context, or reading-load variation within the chosen format.${sciencePackBlock}${(() => {
+  // Discipline scope hint — only applies to multi-discipline subjects (e.g. Combined Science).
+  const ovr = (assessment as { scoped_disciplines?: string[] | null }).scoped_disciplines ?? null;
+  const universe = new Set<string>();
+  for (const s of (sectionedBlueprint as any[])) {
+    for (const t of (s?.topic_pool ?? [])) {
+      const sec = t?.section ?? null;
+      if (!sec) continue;
+      const tt = String(sec).toLowerCase();
+      if (tt.includes("physic")) universe.add("Physics");
+      else if (tt.includes("chem")) universe.add("Chemistry");
+      else if (tt.includes("bio")) universe.add("Biology");
+    }
+  }
+  if (universe.size < 2) return "";
+  let scope: string[] | null = null;
+  if (ovr && ovr.length > 0) scope = ovr;
+  else {
+    const detected = new Set<string>();
+    for (const q of compactQuestions) {
+      const blob = `${q.topic ?? ""} ${(q.knowledge_outcomes ?? []).join(" ")} ${(q.learning_outcomes ?? []).join(" ")}`.toLowerCase();
+      if (blob.includes("physic")) detected.add("Physics");
+      if (blob.includes("chem")) detected.add("Chemistry");
+      if (blob.includes("bio") || blob.includes("organism") || blob.includes("cell")) detected.add("Biology");
+    }
+    if (detected.size > 0) scope = Array.from(detected);
+  }
+  if (!scope || scope.length === 0) return "";
+  return `\n\nDISCIPLINE SCOPE: This paper only assesses ${scope.join(" + ")}. Do NOT flag KOs, LOs or topics from other disciplines as unrealised or untested — they are out of scope and not expected to appear.`;
+})()}
 
 Return STRICTLY through the tool. Do not include prose outside the tool call. For required array fields, return an empty array when there is nothing material — do not invent findings.`;
 
