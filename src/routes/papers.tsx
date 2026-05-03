@@ -267,8 +267,8 @@ function UploadForm({ userId, onUploaded }: { userId?: string; onUploaded: () =>
           <Input value={examBoard} onChange={(e) => setExamBoard(e.target.value)} placeholder="MOE" />
         </div>
         <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
-          <Label className="text-xs">PDF file</Label>
-          <Input ref={fileRef} type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+          <Label className="text-xs">PDF or Word file</Label>
+          <Input ref={fileRef} type="file" accept="application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
         </div>
       </div>
       <div className="mt-4 flex justify-end">
