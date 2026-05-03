@@ -254,6 +254,18 @@ export async function exportAssessmentDocx(
     if (tail.length > 0) grouped.push({ section: null, items: tail });
   }
 
+  // Prefetch diagrams in parallel; if any fail they're simply omitted (docx
+  // must remain valid and openable).
+  const diagramMap = new Map<number, FetchedDiagram>();
+  await Promise.all(
+    questions
+      .filter((q) => !!q.diagram_url)
+      .map(async (q) => {
+        const d = await fetchDiagram(q.diagram_url as string, q.diagram_caption ?? null);
+        if (d) diagramMap.set(q.position, d);
+      }),
+  );
+
   // ── Cover page ──
   const cover: Paragraph[] = [
     p(assessment.subject.toUpperCase(), { bold: true, size: 28, align: AlignmentType.CENTER, spacingAfter: 60 }),
