@@ -406,6 +406,46 @@ Return STRICTLY through the tool. Do not include prose outside the tool call. Fo
       });
     }
 
+    // Belt-and-braces server-side filtering: even if the model ignores the
+    // hard-rule prompt above, strip nonsensical findings before the teacher
+    // sees them.
+    try {
+      const qById = new Map<string, any>((questions as any[]).map((q) => [q.id, q]));
+      const qByPos = new Map<number, any>((questions as any[]).map((q) => [q.position, q]));
+      const isMcqQ = (qid?: string, pos?: number) => {
+        const q = (qid && qById.get(qid)) || (typeof pos === "number" && qByPos.get(pos)) || null;
+        return q?.question_type === "mcq";
+      };
+
+      // (a) Drop mark-scheme flags / mark-related suggestions for MCQ items.
+      if (Array.isArray(findings.mark_scheme_flags)) {
+        findings.mark_scheme_flags = findings.mark_scheme_flags.filter(
+          (f: any) => !isMcqQ(f?.question_id, f?.position),
+        );
+      }
+      if (Array.isArray(findings.suggestions)) {
+        findings.suggestions = findings.suggestions.filter((s: any) => {
+          if (!isMcqQ(s?.question_id, s?.position)) return true;
+          // Keep MCQ suggestions only if they're not about marks/mark-scheme.
+          if (s?.category === "marks") return false;
+          const blob = `${s?.rewrite ?? ""} ${s?.rationale ?? ""}`.toLowerCase();
+          if (/mark scheme|method and final answer|units|significant figures|s\.f\.|\bmarks?\b.*(suggest|increase|reduce|raise|drop)/.test(blob)) return false;
+          return true;
+        });
+      }
+
+      // (b) Suppress "diversify question types" on a fixed-format paper.
+      const uniqueTypes = new Set((questions as any[]).map((q) => q?.question_type).filter(Boolean));
+      if (uniqueTypes.size <= 1 && findings.question_variety) {
+        const blob = `${findings.question_variety?.note ?? ""} ${findings.question_variety?.suggestion ?? ""}`.toLowerCase();
+        if (/multiple-choice|short answer|short-answer|structured|essay|open-ended|diversif|introduc|includ|broaden|range of (response|item|question)/.test(blob)) {
+          delete findings.question_variety;
+        }
+      }
+    } catch (filterErr) {
+      console.warn("coach-review: post-filter step failed", filterErr);
+    }
+
     // Calibration vs specimen — deterministic, no AI cost. Pull the most
     // recent specimen paper for this subject + level (if any), compute the
     // observed paper's fingerprint, and diff. Result merged into findings so
