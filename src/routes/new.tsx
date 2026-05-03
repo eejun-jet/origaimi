@@ -2043,29 +2043,20 @@ function LOGroupedSelector({
       </p>
       {groups.map(({ topicId, title, los }) => {
         const selectedInGroup = los.filter((lo) => selected.includes(lo));
-        const allChecked = los.length > 0 && selectedInGroup.length === los.length;
-        const someChecked = selectedInGroup.length > 0 && !allChecked;
         const isOpen = !!open[topicId];
         return (
           <div key={topicId} className="rounded-md border border-border">
-            <div className="flex items-center gap-2 p-2">
-              <Checkbox
-                checked={allChecked ? true : someChecked ? "indeterminate" : false}
-                onCheckedChange={() => onToggleMany(los, !allChecked)}
-                aria-label={`Select all LOs for ${title}`}
-              />
-              <button
-                type="button"
-                className="flex flex-1 items-center gap-2 text-left"
-                onClick={() => setOpen((p) => ({ ...p, [topicId]: !isOpen }))}
-              >
-                {isOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-                <span className="text-sm font-medium">{title}</span>
-                <span className="ml-auto text-xs text-muted-foreground">
-                  {selectedInGroup.length} / {los.length}
-                </span>
-              </button>
-            </div>
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 p-2 text-left"
+              onClick={() => setOpen((p) => ({ ...p, [topicId]: !isOpen }))}
+            >
+              {isOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+              <span className="text-sm font-medium">{title}</span>
+              <span className="ml-auto text-xs text-muted-foreground">
+                {selectedInGroup.length} / {los.length}
+              </span>
+            </button>
             {isOpen && (
               <div className="border-t border-border p-1.5 space-y-1">
                 {los.map((lo) => {
