@@ -1949,7 +1949,7 @@ function computeCoverage(
   sections.forEach((s) => (s.learning_outcomes ?? []).forEach((lo) => loSet.add(lo)));
   questions.forEach((q) => loOf(q).forEach((lo) => loSet.add(lo)));
 
-  const paperLOs = Array.from(loSet).map((text) => {
+  const paperLOs = Array.from(loSet).filter(loInScope).map((text) => {
     const target = sections.reduce((sum, s) => sum + ((s.learning_outcomes ?? []).includes(text) ? 1 : 0), 0);
     const actual = questions.reduce((sum, q) => sum + (loOf(q).includes(text) ? 1 : 0), 0);
     return { text, target, actual, covered: actual > 0 };
