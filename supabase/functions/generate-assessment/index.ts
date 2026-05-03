@@ -1380,7 +1380,7 @@ Deno.serve(async (req) => {
 
       // Group by discipline (section label). Practical / unlabelled fall into "Other".
       const groups = new Map<string, SectionTopic[]>();
-      for (const t of s.topic_pool) {
+      for (const t of pool) {
         const key = (t.section ?? "Other").trim() || "Other";
         if (!groups.has(key)) groups.set(key, []);
         groups.get(key)!.push(t);
@@ -1393,7 +1393,7 @@ Deno.serve(async (req) => {
       ];
       if (trackKeys.length < 2) {
         // Pool is single-discipline — fall back to plain round-robin.
-        return Array.from({ length: n }, (_, i) => s.topic_pool[i % s.topic_pool.length]);
+        return Array.from({ length: n }, (_, i) => pool[i % pool.length]);
       }
 
       // For each track, maintain (a) a rotating index over its topics and
