@@ -1348,6 +1348,9 @@ function SectionCard({
     const set = new Set<string>();
     if (availableSos.length > 0) {
       for (const so of availableSos) set.add(`${so.code}: ${so.statement}`);
+      for (const lo of globalLos) set.add(lo);
+      for (const lo of sectionLos) set.add(lo);
+      return Array.from(set);
     }
     for (const t of section.topic_pool) {
       for (const lo of t.learning_outcomes ?? []) {
@@ -1362,7 +1365,7 @@ function SectionCard({
 
   const usingSoFallback = useMemo(() => {
     return availableSos.length > 0;
-  }, [section.topic_pool, availableSos]);
+  }, [availableSos]);
 
   const toggleAo = (code: string) => {
     const next = sectionAos.includes(code) ? sectionAos.filter((c) => c !== code) : [...sectionAos, code];
