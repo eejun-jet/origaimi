@@ -689,6 +689,8 @@ function EditorPage() {
           mark_scheme: q.mark_scheme,
           diagram_url: q.diagram_url,
           diagram_caption: q.diagram_caption,
+          source_excerpt: q.source_excerpt,
+          source_url: q.source_url,
         })),
       );
       toast.success("Downloaded .docx");
