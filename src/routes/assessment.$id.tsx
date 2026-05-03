@@ -161,6 +161,16 @@ function EditorPage() {
     } else {
       setAoDefs([]);
     }
+    if (asm?.syllabus_paper_id) {
+      const { data: pp } = await supabase
+        .from("syllabus_papers")
+        .select("paper_number,paper_code")
+        .eq("id", asm.syllabus_paper_id)
+        .maybeSingle();
+      setPaperInfo((pp as SyllabusPaperInfo | null) ?? null);
+    } else {
+      setPaperInfo(null);
+    }
     const { data: cs } = await supabase
       .from("assessment_comments")
       .select("*")
