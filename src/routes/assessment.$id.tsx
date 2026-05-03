@@ -687,6 +687,8 @@ function EditorPage() {
           options: normalizeOptions(q.options),
           answer: q.answer,
           mark_scheme: q.mark_scheme,
+          diagram_url: q.diagram_url,
+          diagram_caption: q.diagram_caption,
         })),
       );
       toast.success("Downloaded .docx");

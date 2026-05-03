@@ -19,6 +19,7 @@ import {
   PageOrientation,
   Footer,
   PageNumber,
+  ImageRun,
 } from "docx";
 import { saveAs } from "file-saver";
 import { toSectioned, getSbqSkill, type Section } from "@/lib/sections";
@@ -34,7 +35,50 @@ export type ExportQuestion = {
   options: string[] | null;
   answer: string | null;
   mark_scheme: string | null;
+  diagram_url?: string | null;
+  diagram_caption?: string | null;
 };
+
+type FetchedDiagram = {
+  data: ArrayBuffer;
+  type: "png" | "jpg" | "gif" | "bmp";
+  width: number;
+  height: number;
+  caption: string | null;
+};
+
+async function fetchDiagram(url: string, caption: string | null): Promise<FetchedDiagram | null> {
+  try {
+    const res = await fetch(url, { mode: "cors" });
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    const data = await blob.arrayBuffer();
+    const mime = (blob.type || "").toLowerCase();
+    let type: FetchedDiagram["type"] = "png";
+    if (mime.includes("jpeg") || mime.includes("jpg")) type = "jpg";
+    else if (mime.includes("gif")) type = "gif";
+    else if (mime.includes("bmp")) type = "bmp";
+    else if (mime.includes("svg")) return null; // docx-js ImageRun svg requires fallback; skip
+    // Probe natural dimensions to preserve aspect ratio
+    const dims = await new Promise<{ w: number; h: number }>((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve({ w: img.naturalWidth || 480, h: img.naturalHeight || 320 });
+      img.onerror = () => resolve({ w: 480, h: 320 });
+      img.src = URL.createObjectURL(blob);
+    });
+    const maxW = 480;
+    const ratio = dims.w > 0 ? Math.min(1, maxW / dims.w) : 1;
+    return {
+      data,
+      type,
+      width: Math.round(dims.w * ratio),
+      height: Math.round(dims.h * ratio),
+      caption,
+    };
+  } catch {
+    return null;
+  }
+}
 
 export type ExportAssessment = {
   title: string;
@@ -80,7 +124,7 @@ function bullet(text: string) {
   });
 }
 
-function questionRow(qNumber: number, q: ExportQuestion): Table {
+function questionRow(qNumber: number, q: ExportQuestion, diagram: FetchedDiagram | null): Table {
   const stem = clean(q.stem.trim());
   const optLines: Paragraph[] = [];
   if (q.question_type === "mcq" && q.options && q.options.length > 0) {
@@ -108,8 +152,39 @@ function questionRow(qNumber: number, q: ExportQuestion): Table {
       spacing: { after: 80 },
       children: [new TextRun({ text: stem, size: 22, font: ARIAL })],
     }),
-    ...optLines,
   ];
+
+  if (diagram) {
+    bodyChildren.push(
+      new Paragraph({
+        spacing: { before: 60, after: 60 },
+        alignment: AlignmentType.CENTER,
+        children: [
+          new ImageRun({
+            type: diagram.type,
+            data: diagram.data,
+            transformation: { width: diagram.width, height: diagram.height },
+            altText: {
+              title: diagram.caption ?? "Diagram",
+              description: diagram.caption ?? "Question diagram",
+              name: "diagram",
+            },
+          }),
+        ],
+      }),
+    );
+    if (diagram.caption) {
+      bodyChildren.push(
+        new Paragraph({
+          spacing: { after: 120 },
+          alignment: AlignmentType.CENTER,
+          children: [new TextRun({ text: clean(diagram.caption), italics: true, size: 18, font: ARIAL })],
+        }),
+      );
+    }
+  }
+
+  bodyChildren.push(...optLines);
   if (q.question_type !== "mcq") {
     // Answer-writing space hint
     const lines = Math.min(12, Math.max(2, q.marks * 2));
@@ -179,6 +254,18 @@ export async function exportAssessmentDocx(
     if (tail.length > 0) grouped.push({ section: null, items: tail });
   }
 
+  // Prefetch diagrams in parallel; if any fail they're simply omitted (docx
+  // must remain valid and openable).
+  const diagramMap = new Map<number, FetchedDiagram>();
+  await Promise.all(
+    questions
+      .filter((q) => !!q.diagram_url)
+      .map(async (q) => {
+        const d = await fetchDiagram(q.diagram_url as string, q.diagram_caption ?? null);
+        if (d) diagramMap.set(q.position, d);
+      }),
+  );
+
   // ── Cover page ──
   const cover: Paragraph[] = [
     p(assessment.subject.toUpperCase(), { bold: true, size: 28, align: AlignmentType.CENTER, spacingAfter: 60 }),
@@ -225,7 +312,7 @@ export async function exportAssessmentDocx(
     }
     items.forEach((q) => {
       runningQ += 1;
-      body.push(questionRow(runningQ, q));
+      body.push(questionRow(runningQ, q, diagramMap.get(q.position) ?? null));
       body.push(new Paragraph({ spacing: { after: 200 }, children: [new TextRun({ text: "" })] }));
     });
     if (gi < grouped.length - 1) {
