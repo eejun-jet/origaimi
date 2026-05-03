@@ -1837,9 +1837,8 @@ Deno.serve(async (req) => {
           // (e.g. 3× nationalarchives.gov.uk, 3× ushmm.org). Without this guard
           // the SBQ pool shipped with all sources from one or two domains —
           // teachers complained that source diversity was missing.
-          // SS: pick exactly one sub-issue bundle so the 5 sources cohere
-          // around a single concrete inquiry.
-          const ssSubIssue = isSSPaper
+          // SS: pick exactly one sub-issue bundle so the 5 sources cohere.
+          ssSubIssueForSection = isSSPaper
             ? pickSsSubIssueBundle(
                 sectionTopic.topic,
                 sectionTopic.learning_outcomes ?? [],
@@ -1847,11 +1846,11 @@ Deno.serve(async (req) => {
                 section.id ?? section.letter ?? sectionTopic.topic,
               )
             : null;
-          const curatedAll: GroundedSource[] = ssSubIssue
-            ? ssSubIssue.sources.slice()
+          const curatedAll: GroundedSource[] = ssSubIssueForSection
+            ? ssSubIssueForSection.sources.slice()
             : curatedHumanitiesSourcePool(sectionTopic.topic, sectionTopic.learning_outcomes ?? [], section.knowledge_outcomes ?? []);
-          if (ssSubIssue) {
-            console.log(`[generate] section ${section.letter}: SS sub-issue "${ssSubIssue.subIssue}" (Issue ${ssSubIssue.issue})`);
+          if (ssSubIssueForSection) {
+            console.log(`[generate] section ${section.letter}: SS sub-issue "${ssSubIssueForSection.subIssue}" (Issue ${ssSubIssueForSection.issue})`);
           }
           const curatedSeed: typeof curatedAll = [];
           const seenSeedHosts = new Set<string>();
