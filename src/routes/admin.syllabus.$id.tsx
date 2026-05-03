@@ -32,6 +32,10 @@ type Doc = {
   level: string | null;
   parse_status: string;
   skills_outcomes: SkillsOutcome[];
+  aims: string | null;
+  assessment_rationale: string | null;
+  pedagogical_notes: string | null;
+  command_word_glossary: Array<{ word: string; definition: string }>;
 };
 
 type Paper = {
