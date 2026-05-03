@@ -1809,12 +1809,35 @@ type Coverage = {
   }>;
 };
 
+// Build the discipline scope (e.g. {"Physics","Chemistry"} for Combined
+// Science when Biology isn't tested) from the section topic-pools and the
+// teacher-confirmed scope override. Returns null when filtering should be
+// skipped (single-discipline papers).
+export function computeScopeForAssessment(
+  sections: Section[],
+  questions: { topic?: string | null; knowledge_outcomes?: string[] | null; learning_outcomes?: string[] | null }[],
+  override: string[] | null | undefined,
+): { inScope: Set<string> | null; universe: string[] } {
+  const topics = sections.flatMap((s) =>
+    (s.topic_pool ?? []).map((t) => ({
+      title: t.topic,
+      section: t.section ?? null,
+      outcome_categories: t.outcome_categories ?? [],
+      learning_outcomes: t.learning_outcomes ?? [],
+    })),
+  );
+  const inScope = inferInScopeDisciplines({ questions, topics, override: override ?? null });
+  const lookup = buildDisciplineLookup(topics);
+  return { inScope, universe: Array.from(lookup.universe).filter((d) => d !== "General") };
+}
+
 function computeCoverage(
   questions: Question[],
   sections: Section[],
   aoDefs: AODef[],
   totalMarks: number,
   subject: string,
+  inScope: Set<string> | null,
 ): Coverage {
   // Build a flat blueprint to map question position → section
   const sectionByPos: Section[] = [];
