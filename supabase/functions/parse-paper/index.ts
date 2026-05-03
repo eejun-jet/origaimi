@@ -169,7 +169,32 @@ Deno.serve(async (req) => {
       });
     }
     const buf = new Uint8Array(await fileBlob.arrayBuffer());
-    const b64 = base64Encode(buf);
+    const lowerPath = filePath.toLowerCase();
+    const isDocx =
+      lowerPath.endsWith(".docx") ||
+      (fileBlob.type ?? "").includes("officedocument.wordprocessingml.document");
+
+    let userContent: unknown;
+    if (isDocx) {
+      const docxText = await extractDocxText(buf);
+      if (!docxText.trim()) {
+        await supabase.from("past_papers").update({
+          parse_status: "failed", parse_error: "Could not extract any text from the .docx file",
+        }).eq("id", paperId);
+        return new Response(JSON.stringify({ error: "empty docx" }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      userContent = [
+        { type: "text", text: `Index this past paper. Title: ${(paper as { title: string }).title}. Subject: ${(paper as { subject: string | null }).subject ?? "unknown"}. Level: ${(paper as { level: string | null }).level ?? "unknown"}. The paper was uploaded as a .docx — figures may not be visible, so list only figures explicitly captioned in the text. Identify every numbered question and sub-part (verbatim, with marks, command word, source_excerpt if any), and produce a style_summary.\n\n--- DOCX CONTENT ---\n${docxText}` },
+      ];
+    } else {
+      const b64 = base64Encode(buf);
+      userContent = [
+        { type: "text", text: `Index this past paper. Title: ${(paper as { title: string }).title}. Subject: ${(paper as { subject: string | null }).subject ?? "unknown"}. Level: ${(paper as { level: string | null }).level ?? "unknown"}. Identify every figure (with concise visual description), every numbered question and sub-part (verbatim, with marks, command word, source_excerpt if any, figure_refs), and produce a style_summary.` },
+        { type: "file", file: { filename: "paper.pdf", file_data: `data:application/pdf;base64,${b64}` } },
+      ];
+    }
 
     const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -178,13 +203,7 @@ Deno.serve(async (req) => {
         model: "google/gemini-2.5-pro",
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: `Index this past paper. Title: ${(paper as { title: string }).title}. Subject: ${(paper as { subject: string | null }).subject ?? "unknown"}. Level: ${(paper as { level: string | null }).level ?? "unknown"}. Identify every figure (with concise visual description), every numbered question and sub-part (verbatim, with marks, command word, source_excerpt if any, figure_refs), and produce a style_summary.` },
-              { type: "file", file: { filename: "paper.pdf", file_data: `data:application/pdf;base64,${b64}` } },
-            ],
-          },
+          { role: "user", content: userContent },
         ],
         tools: [TOOL],
         tool_choice: { type: "function", function: { name: "save_paper_index" } },
