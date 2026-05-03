@@ -312,7 +312,7 @@ export async function exportAssessmentDocx(
     }
     items.forEach((q) => {
       runningQ += 1;
-      body.push(questionRow(runningQ, q));
+      body.push(questionRow(runningQ, q, diagramMap.get(q.position) ?? null));
       body.push(new Paragraph({ spacing: { after: 200 }, children: [new TextRun({ text: "" })] }));
     });
     if (gi < grouped.length - 1) {
