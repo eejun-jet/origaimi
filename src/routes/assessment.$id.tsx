@@ -2748,6 +2748,7 @@ function CollapsibleCard({
 function CoveragePanel({
   assessmentId,
   coverage, totalMarks, totalActual, questions, comments, identity, subject, sections,
+  inScope, disciplineUniverse, scopedDisciplines, onScopeChange,
   onAddComment, onSetCommentStatus, onDeleteComment, onScrollToQuestion,
   onRetag, retagBusy,
 }: {
@@ -2758,6 +2759,10 @@ function CoveragePanel({
   questions: Question[];
   subject: string;
   sections: Section[];
+  inScope: Set<string> | null;
+  disciplineUniverse: string[];
+  scopedDisciplines: string[] | null;
+  onScopeChange: (next: string[] | null) => void | Promise<void>;
   onScrollToQuestion: (questionId: string) => void;
   onRetag?: () => void | Promise<void>;
   retagBusy?: boolean;
@@ -2767,7 +2772,7 @@ function CoveragePanel({
   const [target, setTarget] = useState<CoverageTarget | null>(null);
   const isScience = isScienceSubject(subject);
   const [loView, setLoView] = useState<"topic" | "map" | "list">("list");
-  const topicsMap = useMemo(() => buildTopicsMap(paper.los, sections), [paper.los, sections]);
+  const topicsMap = useMemo(() => buildTopicsMap(paper.los, sections, inScope), [paper.los, sections, inScope]);
 
   // Card-level open/closed state, persisted per assessment.
   const cardOpen = useCardCollapseState(assessmentId, {
