@@ -769,6 +769,53 @@ function buildDeterministicSbqQuestions(section: Section, sources: GroundedSourc
   });
 }
 
+function buildDeterministicSsSrqQuestions(section: Section): any[] {
+  const rawTopic = section.topic_pool[0]?.topic ?? section.learning_outcomes?.[0] ?? "the issue";
+  const sectionLOs = section.learning_outcomes?.length ? section.learning_outcomes : (section.topic_pool[0]?.learning_outcomes ?? []);
+  const issue = deriveTopicNoun(rawTopic, sectionLOs);
+  const topicTag = stripCodePrefix(rawTopic).replace(/\*+$/, "").trim() || issue;
+  const commonTags = {
+    question_type: "long",
+    topic: topicTag,
+    bloom_level: section.bloom ?? "Evaluate",
+    difficulty: "medium",
+    options: null,
+    ao_codes: section.ao_codes ?? [],
+    knowledge_outcomes: section.knowledge_outcomes ?? [],
+    learning_outcomes: section.learning_outcomes?.length ? section.learning_outcomes : sectionLOs,
+  };
+  return [
+    {
+      ...commonTags,
+      marks: 7,
+      stem: `(${section.letter.toLowerCase()}a) Explain two reasons why ${issue} can create challenges for society.`,
+      answer: `One reason is that ${issue} can create tensions when different groups have competing needs and priorities. For example, Singapore's approach to social cohesion recognises that policies must balance individual preferences with shared spaces and common norms. When people feel that their concerns are ignored, trust can weaken and public discussion becomes more polarised. This makes the issue challenging because governments and communities must persuade people that trade-offs are fair, not merely impose decisions.
+
+Another reason is that ${issue} often involves long-term consequences that are not immediately visible. Internationally, countries dealing with migration, diversity or globalisation show that short-term benefits can come with adjustment costs for workers, families or minority groups. If these costs are not managed through support, education and consultation, affected groups may resist change. Hence, the issue is challenging because solutions must address both immediate concerns and future resilience.`,
+      mark_scheme: `${SS_SRQ_PART_A_MARK_SCHEME}
+
+Indicative content:
+- Credit any two well-explained reasons tied to ${issue}, including tensions between individual and collective interests, differing perspectives, unequal impact on groups, or long-term trade-offs.
+- Award stronger answers for concrete Singaporean or international examples that are clearly aligned to the AO/KO/SO focus.`,
+    },
+    {
+      ...commonTags,
+      marks: 8,
+      stem: `(${section.letter.toLowerCase()}b) How far do you agree that government action is the most effective way to respond to ${issue}? Explain your answer.`,
+      answer: `I agree to a large extent that government action is important because governments have the authority and resources to coordinate a response. For example, laws, public policies and national programmes can set clear expectations, protect vulnerable groups and provide funding at a scale that individuals cannot achieve alone. This is especially important when ${issue} affects society widely and requires consistent rules.
+
+However, government action by itself is not always the most effective response. Community groups, schools, families, businesses and individuals also shape daily attitudes and behaviour. International examples of integration, civic participation and responses to globalisation show that formal policy works best when people understand and support the purpose behind it. Without public trust and participation, even well-designed policies may be resisted or applied superficially.
+
+Overall, I agree only to a large extent. Government action is necessary because it provides structure, resources and legitimacy, but it is most effective when paired with active citizen participation and perspective-taking. The strongest response to ${issue} therefore combines top-down coordination with bottom-up responsibility.`,
+      mark_scheme: `${SS_SRQ_PART_B_MARK_SCHEME}
+
+Indicative content:
+- Credit reasoned arguments supporting government action, such as law-making, resource allocation, regulation, consultation or national coordination.
+- Credit counter-arguments about citizen responsibility, community action, business roles, education, perspective-taking and context-specific limits. Strong answers make an overall judgement.`,
+    },
+  ];
+}
+
 /** Enforce a HARD CAP: the sum of `marks` across the questions in a section
  *  must equal `targetMarks`. Honours `lockedIndices` for SBQ skills locked at a
  *  fixed mark value (e.g. assertion at 8). All questions floored at 1 mark. */
