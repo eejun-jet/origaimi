@@ -712,3 +712,43 @@ function base64Encode(bytes: Uint8Array): string {
   }
   return btoa(s);
 }
+
+// Extract plain text from a .docx file (a ZIP containing word/document.xml).
+// We use the standard `JSZip` ESM build to unzip in Deno, then strip XML tags
+// while preserving paragraph breaks.
+async function extractDocxText(bytes: Uint8Array): Promise<string> {
+  const { default: JSZip } = await import("https://esm.sh/jszip@3.10.1");
+  const zip = await JSZip.loadAsync(bytes);
+  const parts: string[] = [];
+  // Main body
+  const docXml = await zip.file("word/document.xml")?.async("string");
+  if (docXml) parts.push(docXmlToText(docXml));
+  // Headers and footers (often contain title / paper number info)
+  for (const name of Object.keys(zip.files)) {
+    if (/^word\/(header|footer)\d*\.xml$/.test(name)) {
+      const x = await zip.file(name)?.async("string");
+      if (x) parts.push(docXmlToText(x));
+    }
+  }
+  return parts.join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function docXmlToText(xml: string): string {
+  // Insert paragraph and line breaks before stripping tags.
+  let s = xml
+    .replace(/<\/w:p\s*>/g, "\n")
+    .replace(/<w:br[^>]*\/>/g, "\n")
+    .replace(/<w:tab[^>]*\/>/g, "\t");
+  // Strip every XML tag
+  s = s.replace(/<[^>]+>/g, "");
+  // Decode common XML entities
+  s = s
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(parseInt(d, 10)));
+  return s;
+}
