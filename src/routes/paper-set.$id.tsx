@@ -354,6 +354,15 @@ function PaperSetView() {
           </Button>
         </header>
 
+        {disciplineUniverse.length >= 2 && (
+          <PaperSetScopeStrip
+            universe={disciplineUniverse}
+            inScope={inScope}
+            override={setRow.scoped_disciplines ?? null}
+            onChange={updateScope}
+          />
+        )}
+
         <div className="flex flex-wrap gap-2 border-b border-border">
           {tabs.map((t) => (
             <button
