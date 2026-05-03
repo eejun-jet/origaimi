@@ -311,11 +311,11 @@ export function BuilderUploadCard({
       </div>
 
       <div className="space-y-2">
-        <Label>PDF file</Label>
+        <Label>PDF or Word file</Label>
         <Input
           ref={fileRef}
           type="file"
-          accept="application/pdf"
+          accept="application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx"
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
         />
         <p className="text-xs text-muted-foreground">
