@@ -2002,11 +2002,25 @@ function LOGroupedSelector({
   onToggle: (lo: string) => void;
   onToggleMany: (los: string[], select: boolean) => void;
 }) {
-  // Dedupe LOs across topics — the same LO can appear under multiple topics;
-  // we keep its first-seen topic grouping so the user picks once.
-  const groups = useMemo(() => {
+  // Dedupe LOs across topics — the same LO can appear under multiple topics
+  // (and across multiple sections, e.g. both Section A and Section B). We
+  // keep its first-seen topic grouping so the user picks once, but also
+  // record every section it covers so we can mark cross-section LOs with "*".
+  const { groups, loSections } = useMemo(() => {
     const seen = new Set<string>();
+    const sectionsByLo = new Map<string, Set<string>>();
     const out: { topicId: string; title: string; los: string[]; section: string | null }[] = [];
+    for (const t of topics) {
+      for (const raw of t.learningOutcomes ?? []) {
+        const lo = raw.trim();
+        if (!lo) continue;
+        if (t.section) {
+          const set = sectionsByLo.get(lo) ?? new Set<string>();
+          set.add(t.section);
+          sectionsByLo.set(lo, set);
+        }
+      }
+    }
     for (const t of topics) {
       const los: string[] = [];
       for (const raw of t.learningOutcomes ?? []) {
@@ -2017,50 +2031,16 @@ function LOGroupedSelector({
       }
       if (los.length > 0) out.push({ topicId: t.id, title: t.title, los, section: t.section ?? null });
     }
-    return out;
+    return { groups: out, loSections: sectionsByLo };
   }, [topics]);
-
-  // Section buckets (e.g. Physics / Chemistry / Biology on Combined Science 5086/5087/5088,
-  // or a single "Paper 1" bucket on a one-section MCQ paper). We always surface bulk
-  // "Select all" controls so teachers can pick every LO in a section with one click.
-  const sectionBuckets = useMemo(() => {
-    const m = new Map<string, string[]>(); // section label -> LO list (preserves first-seen order)
-    for (const g of groups) {
-      if (!g.section) continue;
-      const key = g.section;
-      const arr = m.get(key) ?? [];
-      arr.push(...g.los);
-      m.set(key, arr);
-    }
-    return Array.from(m.entries()).map(([label, los]) => ({ label, los }));
-  }, [groups]);
 
   const [open, setOpen] = useState<Record<string, boolean>>({});
 
   return (
     <div className="mt-3 max-h-96 space-y-2 overflow-auto rounded-md border border-border bg-background p-2">
-      {sectionBuckets.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 rounded-md border border-dashed border-border bg-muted/30 p-2">
-          <span className="self-center pr-1 text-xs font-medium text-muted-foreground">Quick pick:</span>
-          {sectionBuckets.map(({ label, los }) => {
-            const selectedCount = los.filter((lo) => selected.includes(lo)).length;
-            const allChecked = los.length > 0 && selectedCount === los.length;
-            return (
-              <Button
-                key={label}
-                type="button"
-                size="sm"
-                variant={allChecked ? "default" : "outline"}
-                className="h-7 px-2 text-xs"
-                onClick={() => onToggleMany(los, !allChecked)}
-              >
-                {allChecked ? `Deselect ${label}` : `${label} (select all)`}
-                <span className="ml-1.5 text-[10px] opacity-70">{selectedCount}/{los.length}</span>
-              </Button>
-            );
-          })}
-        </div>
-      )}
+      <p className="px-1 pb-1 text-[11px] text-muted-foreground">
+        <span className="font-semibold">*</span> indicates an LO that can be tested in more than one section (e.g. both Section A and Section B).
+      </p>
       {groups.map(({ topicId, title, los }) => {
         const selectedInGroup = los.filter((lo) => selected.includes(lo));
         const allChecked = los.length > 0 && selectedInGroup.length === los.length;
@@ -2090,13 +2070,17 @@ function LOGroupedSelector({
               <div className="border-t border-border p-1.5 space-y-1">
                 {los.map((lo) => {
                   const checked = selected.includes(lo);
+                  const isCrossSection = (loSections.get(lo)?.size ?? 0) > 1;
                   return (
                     <label
                       key={lo}
                       className={`flex cursor-pointer items-start gap-2 rounded p-1.5 text-xs ${checked ? "bg-primary-soft/40" : "hover:bg-muted/40"}`}
                     >
                       <Checkbox checked={checked} onCheckedChange={() => onToggle(lo)} />
-                      <span className="flex-1">{lo}</span>
+                      <span className="flex-1">
+                        {isCrossSection && <span className="mr-1 font-semibold text-primary" title="Testable in multiple sections">*</span>}
+                        {lo}
+                      </span>
                     </label>
                   );
                 })}
