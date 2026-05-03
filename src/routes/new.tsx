@@ -2038,28 +2038,9 @@ function LOGroupedSelector({
 
   return (
     <div className="mt-3 max-h-96 space-y-2 overflow-auto rounded-md border border-border bg-background p-2">
-      {sectionBuckets.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 rounded-md border border-dashed border-border bg-muted/30 p-2">
-          <span className="self-center pr-1 text-xs font-medium text-muted-foreground">Quick pick:</span>
-          {sectionBuckets.map(({ label, los }) => {
-            const selectedCount = los.filter((lo) => selected.includes(lo)).length;
-            const allChecked = los.length > 0 && selectedCount === los.length;
-            return (
-              <Button
-                key={label}
-                type="button"
-                size="sm"
-                variant={allChecked ? "default" : "outline"}
-                className="h-7 px-2 text-xs"
-                onClick={() => onToggleMany(los, !allChecked)}
-              >
-                {allChecked ? `Deselect ${label}` : `${label} (select all)`}
-                <span className="ml-1.5 text-[10px] opacity-70">{selectedCount}/{los.length}</span>
-              </Button>
-            );
-          })}
-        </div>
-      )}
+      <p className="px-1 pb-1 text-[11px] text-muted-foreground">
+        <span className="font-semibold">*</span> indicates an LO that can be tested in more than one section (e.g. both Section A and Section B).
+      </p>
       {groups.map(({ topicId, title, los }) => {
         const selectedInGroup = los.filter((lo) => selected.includes(lo));
         const allChecked = los.length > 0 && selectedInGroup.length === los.length;
