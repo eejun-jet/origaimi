@@ -52,6 +52,16 @@ type Blueprint = BlueprintRow[];
 type Band = "primary" | "secondary";
 type Stream = "standard" | "foundation" | "g3" | "g2";
 
+// Social Studies (2260/2261/2262) Knowledge Outcomes — these are the three
+// "Issues" that scope the syllabus. Picking these locks both SBQ and SRQ
+// sections to a coherent theme so the case-study sources and essay questions
+// stay aligned to the same Issue.
+const DEFAULT_SOCIAL_STUDIES_KOS: string[] = [
+  "Issue 1: Exploring Citizenship and Governance",
+  "Issue 2: Living in a Diverse Society",
+  "Issue 3: Living in a Globalised World",
+];
+
 const DEFAULT_SOCIAL_STUDIES_SOS: SkillsOutcome[] = [
   { code: "SO1", statement: "examine societal issues critically by gathering, interpreting, analysing and evaluating information from different sources to make well-reasoned and substantiated arguments, recommendations and conclusions on societal issues" },
   { code: "SO2", statement: "demonstrate sound reasoning and responsible decision-making that considers Singapore's unique contexts, constraints and vulnerabilities; and the consequences of one's actions on those around them" },
