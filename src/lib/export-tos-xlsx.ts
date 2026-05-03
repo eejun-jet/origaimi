@@ -113,6 +113,8 @@ export type KoLoGrouping = {
     target: number;
     actual: number;
     delta: number;
+    /** "X / Y" — covered LOs out of total LOs in this KO (across all disciplines). */
+    loCoverage: string;
     cells: Record<string, string>;
   }[];
 };
@@ -125,20 +127,36 @@ export function buildKoLoGrouping(
   const coveredByLo = new Map<string, boolean>();
   for (const lo of coverage.paper.los) coveredByLo.set(lo.text, lo.covered);
 
-  // Build (KO → discipline → ordered LOs) from the topic index.
+  // Decide a KO label for a given topic:
+  //   1) any explicit `outcome_categories` entry, else
+  //   2) the strand (Combined Science, IP, etc. typically rely on strands).
+  const koLabelsFor = (t: TosTopicIndexEntry): string[] => {
+    const explicit = (t.outcome_categories ?? []).filter((x) => (x ?? "").trim());
+    if (explicit.length > 0) return explicit;
+    const strand = (t.strand ?? "").trim();
+    if (strand) return [strand];
+    return [];
+  };
+
+  // Build (KO → discipline → ordered LOs) from the topic index, preserving
+  // first-seen order for both KOs and LOs.
+  const koOrder: string[] = [];
   const koMap = new Map<string, Map<string, string[]>>();
-  const seen = new Map<string, Set<string>>(); // ko → loSet (dedupe)
+  const seen = new Map<string, Set<string>>(); // ko → loSet (dedupe per disc::lo)
   const presentDisciplines = new Set<string>();
 
   for (const t of topicIndex) {
     const disc = normaliseDiscipline(t.section ?? null);
     presentDisciplines.add(disc);
-    const kos = (t.outcome_categories ?? []).filter(Boolean);
+    const kos = koLabelsFor(t);
     const los = (t.learning_outcomes ?? []).filter(Boolean);
     if (kos.length === 0 || los.length === 0) continue;
     for (const ko of kos) {
-      if (!koMap.has(ko)) koMap.set(ko, new Map());
-      if (!seen.has(ko)) seen.set(ko, new Set());
+      if (!koMap.has(ko)) {
+        koMap.set(ko, new Map());
+        seen.set(ko, new Set());
+        koOrder.push(ko);
+      }
       const dMap = koMap.get(ko)!;
       const loSet = seen.get(ko)!;
       if (!dMap.has(disc)) dMap.set(disc, []);
@@ -154,47 +172,54 @@ export function buildKoLoGrouping(
 
   // Decide column layout.
   const ordered = DISCIPLINE_ORDER.filter((d) => presentDisciplines.has(d));
-  // Drop "Other" if some named disciplines exist alongside it AND Other is empty across all KOs.
-  const hasNamed = ordered.some((d) => d !== "Other");
   let disciplines = ordered;
   if (disciplines.length === 0) disciplines = ["Other"];
-  // Collapse to a single "Learning Outcomes" column when only one discipline.
   const singleColumn = disciplines.length < 2;
-  const columnKeys = singleColumn ? ["__all__"] : disciplines;
+  const displayCols = singleColumn ? ["Learning Outcomes"] : disciplines;
 
-  // Build rows in coverage.paper.kos order (already syllabus-ordered).
-  const rows: KoLoGrouping["rows"] = coverage.paper.kos.map((ko) => {
-    const dMap = koMap.get(ko.name) ?? new Map<string, string[]>();
+  // Coverage targets/actuals from coverage.paper.kos when present; otherwise
+  // fall back to (covered LO count) so the row still tells the teacher how
+  // many LOs were touched in each KO.
+  const koCovIndex = new Map(coverage.paper.kos.map((k) => [k.name, k] as const));
+
+  const rows: KoLoGrouping["rows"] = koOrder.map((koName) => {
+    const dMap = koMap.get(koName) ?? new Map<string, string[]>();
     const cells: Record<string, string> = {};
+    let coveredCount = 0;
+    let totalCount = 0;
     if (singleColumn) {
       const allLos: string[] = [];
       for (const arr of dMap.values()) allLos.push(...arr);
-      cells["__all__"] = formatLoList(allLos, coveredByLo);
+      for (const lo of allLos) {
+        totalCount += 1;
+        if (coveredByLo.get(lo)) coveredCount += 1;
+      }
+      cells["Learning Outcomes"] = formatLoList(allLos, coveredByLo);
     } else {
       for (const d of disciplines) {
         const list = dMap.get(d) ?? [];
+        for (const lo of list) {
+          totalCount += 1;
+          if (coveredByLo.get(lo)) coveredCount += 1;
+        }
         cells[d] = formatLoList(list, coveredByLo);
       }
     }
+    const cov = koCovIndex.get(koName);
     return {
-      name: ko.name,
-      target: ko.target,
-      actual: ko.actual,
-      delta: ko.actual - ko.target,
+      name: koName,
+      target: cov?.target ?? 0,
+      actual: cov?.actual ?? coveredCount,
+      delta: (cov?.actual ?? coveredCount) - (cov?.target ?? 0),
+      loCoverage: `${coveredCount} / ${totalCount}`,
       cells,
     };
   });
 
   return {
-    disciplines: singleColumn ? ["Learning Outcomes"] : disciplines,
-    rows: rows.map((r) => {
-      if (!singleColumn) return r;
-      // Re-key the cell under the display column name.
-      return { ...r, cells: { "Learning Outcomes": r.cells["__all__"] ?? "" } };
-    }),
+    disciplines: displayCols,
+    rows,
   };
-  // (hasNamed kept for potential future trimming of empty Other column)
-  void hasNamed;
 }
 
 function formatLoList(los: string[], covered: Map<string, boolean>): string {
