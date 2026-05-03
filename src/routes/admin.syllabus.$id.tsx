@@ -204,6 +204,7 @@ function SyllabusReview() {
           subject: doc.subject,
           level: doc.level,
           section: t.section,
+          ko_content: t.ko_content ?? {},
         }));
         const { error: insErr } = await supabase.from("syllabus_topics").insert(rows);
         if (insErr) throw insErr;
