@@ -15,6 +15,7 @@ import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as BankRouteImport } from './routes/bank'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as PaperSetNewRouteImport } from './routes/paper-set.new'
 import { Route as AssessmentIdRouteImport } from './routes/assessment.$id'
 import { Route as AdminSyllabusIndexRouteImport } from './routes/admin.syllabus.index'
 import { Route as AdminSyllabusIdRouteImport } from './routes/admin.syllabus.$id'
@@ -49,6 +50,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PaperSetNewRoute = PaperSetNewRouteImport.update({
+  id: '/paper-set/new',
+  path: '/paper-set/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AssessmentIdRoute = AssessmentIdRouteImport.update({
   id: '/assessment/$id',
   path: '/assessment/$id',
@@ -73,6 +79,7 @@ export interface FileRoutesByFullPath {
   '/new': typeof NewRoute
   '/papers': typeof PapersRoute
   '/assessment/$id': typeof AssessmentIdRoute
+  '/paper-set/new': typeof PaperSetNewRoute
   '/admin/syllabus/$id': typeof AdminSyllabusIdRoute
   '/admin/syllabus/': typeof AdminSyllabusIndexRoute
 }
@@ -84,6 +91,7 @@ export interface FileRoutesByTo {
   '/new': typeof NewRoute
   '/papers': typeof PapersRoute
   '/assessment/$id': typeof AssessmentIdRoute
+  '/paper-set/new': typeof PaperSetNewRoute
   '/admin/syllabus/$id': typeof AdminSyllabusIdRoute
   '/admin/syllabus': typeof AdminSyllabusIndexRoute
 }
@@ -96,6 +104,7 @@ export interface FileRoutesById {
   '/new': typeof NewRoute
   '/papers': typeof PapersRoute
   '/assessment/$id': typeof AssessmentIdRoute
+  '/paper-set/new': typeof PaperSetNewRoute
   '/admin/syllabus/$id': typeof AdminSyllabusIdRoute
   '/admin/syllabus/': typeof AdminSyllabusIndexRoute
 }
@@ -109,6 +118,7 @@ export interface FileRouteTypes {
     | '/new'
     | '/papers'
     | '/assessment/$id'
+    | '/paper-set/new'
     | '/admin/syllabus/$id'
     | '/admin/syllabus/'
   fileRoutesByTo: FileRoutesByTo
@@ -120,6 +130,7 @@ export interface FileRouteTypes {
     | '/new'
     | '/papers'
     | '/assessment/$id'
+    | '/paper-set/new'
     | '/admin/syllabus/$id'
     | '/admin/syllabus'
   id:
@@ -131,6 +142,7 @@ export interface FileRouteTypes {
     | '/new'
     | '/papers'
     | '/assessment/$id'
+    | '/paper-set/new'
     | '/admin/syllabus/$id'
     | '/admin/syllabus/'
   fileRoutesById: FileRoutesById
@@ -143,6 +155,7 @@ export interface RootRouteChildren {
   NewRoute: typeof NewRoute
   PapersRoute: typeof PapersRoute
   AssessmentIdRoute: typeof AssessmentIdRoute
+  PaperSetNewRoute: typeof PaperSetNewRoute
   AdminSyllabusIdRoute: typeof AdminSyllabusIdRoute
   AdminSyllabusIndexRoute: typeof AdminSyllabusIndexRoute
 }
@@ -191,6 +204,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/paper-set/new': {
+      id: '/paper-set/new'
+      path: '/paper-set/new'
+      fullPath: '/paper-set/new'
+      preLoaderRoute: typeof PaperSetNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/assessment/$id': {
       id: '/assessment/$id'
       path: '/assessment/$id'
@@ -223,6 +243,7 @@ const rootRouteChildren: RootRouteChildren = {
   NewRoute: NewRoute,
   PapersRoute: PapersRoute,
   AssessmentIdRoute: AssessmentIdRoute,
+  PaperSetNewRoute: PaperSetNewRoute,
   AdminSyllabusIdRoute: AdminSyllabusIdRoute,
   AdminSyllabusIndexRoute: AdminSyllabusIndexRoute,
 }
