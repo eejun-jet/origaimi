@@ -48,6 +48,14 @@ export type ExportAssessment = {
 
 const ARIAL = "Arial";
 
+// Strip C0 control bytes (except \t \n \r) and lone surrogate halves; Word
+// rejects OOXML containing them and reports the file as corrupt.
+function clean(s: string | null | undefined): string {
+  if (s == null) return "";
+  // eslint-disable-next-line no-control-regex
+  return String(s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, "");
+}
+
 function p(text: string, opts: { bold?: boolean; size?: number; align?: typeof AlignmentType[keyof typeof AlignmentType]; spacingAfter?: number } = {}) {
   return new Paragraph({
     alignment: opts.align,
