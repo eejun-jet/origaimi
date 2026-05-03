@@ -1,48 +1,79 @@
-## Macro Coverage: review a set of papers as one
+## Goal
 
-Add a new page that lets a teacher group several already-parsed past papers (e.g. the four Combined Science papers) under one **Paper Set**, then runs the existing AO / KO / LO coverage analytics across the union of those papers' questions. Kept separate from the single-paper Assessment Coach so the UI stays uncluttered.
+For multi-discipline subjects (Combined Science = Physics + Chemistry + Biology, Combined Humanities, etc.), stop flagging the untested discipline as "Untested". If a paper / paper-set only covers two sciences, the third should drop out of the AO / KO / LO coverage analysis and the Assessment Coach entirely — it isn't in scope.
 
-### User flow
+## Approach
 
-1. From the dashboard or papers page, click **"Review a paper set"**.
-2. Page 1 (set up) — like the assessment builder's first step:
-   - Pick **Subject + Level** (drives the syllabus document the set is graded against).
-   - Pick the **Syllabus document** (auto-selected when only one matches).
-   - Name the set (e.g. "2025 Combined Science O-Level — full set").
-   - Tick the past papers to include from a filtered list of already-parsed `past_papers` rows for that subject+level. Show parse status; only `ready` papers are selectable.
-   - Save → creates a `paper_sets` row + `paper_set_papers` join rows.
-3. Page 2 (coverage) — `/paper-set/$id`:
-   - Header: set title, subject, level, syllabus, paper count, total questions, total marks (summed from `questions_json`).
-   - **Cognitive demand** strip: AO mark-share aggregated across all papers vs declared syllabus weighting (delta bars, same component pattern as the assessment AO chart).
-   - **KO / LO coverage** panel: same three views as the assessment page (By KO is default), but sourced from the union of question tags across the set. Each KO row shows which papers exercise it (badges "P1 ✓ P2 — P3 ✓ P4 ✓") so the gap is visible.
-   - **Unrealised outcomes**: KOs / LOs in the syllabus that no question in the set touches.
-   - **Per-paper contribution table**: rows = papers in the set; columns = % of marks per AO, # questions, # KOs covered. One glance shows which paper carries which load.
-   - **Optional AI macro summary** (single button "Run macro review") — calls a new `paper-set-review` edge function that takes the aggregated stats + syllabus AO definitions and returns 2–4 calm one-liners about overall demand balance and any structural gaps. Mirrors `coach-review`'s voice rules (no praise, no verdicts). Persisted to `paper_set_reviews` so a re-run can be compared.
+Auto-detect "in-scope disciplines" from the actual question tags, then filter every coverage rollup, topic map and coach payload to that scope. Surface the detected scope in the UI with a small toggle so the teacher can override (e.g. include a discipline that has zero questions yet because they're still building).
 
-### Data model
+### 1. Detect in-scope disciplines (`src/lib/coverage-infer.ts` — new helper)
 
-New tables (migration):
-- `paper_sets (id uuid pk, user_id uuid, title text, subject text, level text, syllabus_doc_id uuid → syllabus_documents.id, notes text, created_at, updated_at)`
-- `paper_set_papers (set_id uuid → paper_sets.id on delete cascade, paper_id uuid → past_papers.id on delete cascade, position int, primary key(set_id, paper_id))`
-- `paper_set_reviews (id uuid pk, set_id uuid → paper_sets, ran_at timestamptz, model text, snapshot jsonb)`
+```ts
+// Reuse the same normaliseDiscipline() logic already in assessment.$id.tsx.
+export function inferInScopeDisciplines(args: {
+  questions: { topic?: string|null; knowledge_outcomes?: string[]; learning_outcomes?: string[] }[];
+  syllabusTopics: { section: string|null; title: string; ... }[];
+  // Optional teacher override stored on assessment / paper_set
+  override?: string[] | null;
+}): Set<string>  // e.g. {"Physics","Chemistry"}
+```
 
-RLS: same "Trial open" policies as the existing tables in this project (the codebase is currently trial-mode; matches `assessments`, `past_papers`).
+Rule of inclusion (only applied when ≥2 disciplines exist in the syllabus pool):
+- A discipline is "in scope" if at least one question is tagged with a KO/LO/topic that belongs to it; OR
+- the teacher has explicitly ticked it in the override.
 
-### Code touchpoints
+If only one discipline is found in the syllabus (e.g. pure Biology paper), skip filtering — nothing changes for single-subject papers.
 
-- `src/routes/paper-set.new.tsx` — set-up page (subject/level/syllabus picker + paper-multi-select, similar styling to `papers.tsx` and `new.tsx` step 1).
-- `src/routes/paper-set.$id.tsx` — coverage page. Heavy lifting reuses the AO / KO / LO mapping logic already in `src/routes/assessment.$id.tsx`. Extract the shared coverage-aggregation helpers into `src/lib/coverage.ts` so both pages call the same code (move `koLoGroups`, `normaliseLo`, AO mark-share calc, etc.).
-- `src/routes/papers.tsx` — add a "Group into set" / "Review as set" entry point (multi-select checkboxes on the papers list, then a "Create set" button).
-- `src/routes/dashboard.tsx` — surface existing paper sets (list with "Open coverage").
-- `supabase/functions/paper-set-review/index.ts` — new edge function that receives the aggregated stats payload and calls Lovable AI Gateway (`google/gemini-2.5-flash`, same as `coach-review`) to produce the macro summary. Reuses the voice rules and output shape from `coach-review` but with a smaller schema (`summary`, `priority_insights`, `unrealised_outcomes`, `ao_drift`).
-- No changes to the existing per-paper Assessment Coach.
+### 2. Filter coverage in `assessment.$id.tsx`
 
-### Why this is a separate page, not a tab in Assessment Coach
+In `buildCoverage(...)` (around L1862–1948), once `inScope` is known:
+- Drop AO codes that only belong to out-of-scope disciplines (AOs are usually shared, so this is rare; keep the AO if any in-scope topic uses it).
+- Drop KOs whose owning discipline is out of scope (`KO → discipline` derived from the syllabus topic that contains it).
+- Drop LOs the same way.
+- In `buildTopicsMap`, simply skip disciplines not in `inScope`.
 
-The current Coach is scoped to one `assessment` row (own questions, own blueprint, own mark scheme review). A paper set has no single blueprint, no mark-scheme rewrites, and no per-question suggestions — only aggregate coverage and demand balance. Folding that into the existing Coach UI confuses two different jobs, so it lives on its own route and only exposes the analytics that make sense at the macro level.
+Effect: the Coverage Explorer's "By LO / By KO / By topic" panes no longer show Biology rows when the paper is Physics + Chemistry only, and the donut totals adjust accordingly.
 
-### Files touched
+### 3. Apply same filter to the paper-set view (`src/routes/paper-set.$id.tsx`)
 
-- New: `src/routes/paper-set.new.tsx`, `src/routes/paper-set.$id.tsx`, `src/lib/coverage.ts` (extracted), `supabase/functions/paper-set-review/index.ts`.
-- Edited: `src/routes/papers.tsx` (multi-select + create-set entry), `src/routes/dashboard.tsx` (list paper sets), `src/routes/assessment.$id.tsx` (refactor to import from `src/lib/coverage.ts`).
-- Migration: three new tables + RLS policies.
+The aggregated KO / LO / "Unrealised" lists already iterate `syllabus_topics`. Filter that list by `inScope` derived from the union of all paper questions in the set before computing `unrealisedKOs` / `unrealisedLOs` and the per-paper grid.
+
+### 4. Coach payload — exclude out-of-scope disciplines
+
+`coach-review` and `paper-set-review` edge functions already receive a `unrealised_outcomes` block. Trim that list to `inScope` disciplines before sending so the AI cannot flag "Biology not covered" when Biology is out of scope. Also append a one-line note to the system prompt:
+
+> "The teacher has scoped this assessment to {Physics, Chemistry}. Treat any other discipline (e.g. Biology) as out of scope — never recommend adding coverage for it."
+
+### 5. UI: show scope + allow override
+
+On both `assessment.$id.tsx` (Coverage Explorer header) and `paper-set.$id.tsx` (above the tabs), render a compact strip:
+
+```
+Scope:  [✓ Physics]  [✓ Chemistry]  [ ] Biology   (auto-detected — click to override)
+```
+
+- Clicking a chip toggles it; the override is persisted in `assessments.blueprint.scoped_disciplines` (existing jsonb column, no migration) or `paper_sets.notes`-style field — proposing a new column `scoped_disciplines text[]` on both `assessments` and `paper_sets` via migration.
+- A subtle "Reset to auto-detected" link clears the override.
+
+### 6. Migration
+
+```sql
+alter table public.assessments add column if not exists scoped_disciplines text[];
+alter table public.paper_sets   add column if not exists scoped_disciplines text[];
+```
+
+No RLS changes — both tables already have trial-open policies.
+
+## Out of scope for this change
+
+- Renaming "Untested" labels — once the discipline is filtered out the label only fires on genuinely-missing topics within the in-scope sciences, which is the correct behaviour.
+- Changing how the parser tags questions in the first place; this is a presentation / aggregation filter only.
+
+## Files touched
+
+- `src/lib/coverage-infer.ts` — add `inferInScopeDisciplines` + KO/LO → discipline lookup
+- `src/routes/assessment.$id.tsx` — filter `buildCoverage` and `buildTopicsMap`, render scope chips
+- `src/routes/paper-set.$id.tsx` — same filter + scope chips on the macro view
+- `supabase/functions/coach-review/index.ts` — trim payload + system-prompt note
+- `supabase/functions/paper-set-review/index.ts` — same
+- `supabase/migrations/<new>.sql` — add `scoped_disciplines` to `assessments` + `paper_sets`
