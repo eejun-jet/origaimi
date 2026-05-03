@@ -2971,13 +2971,16 @@ function CoveragePanel({
       });
     }
 
-    return buckets.sort((a, b) => {
+    const filtered = inScope
+      ? buckets.filter((b) => inScope.has(b.discipline))
+      : buckets;
+    return filtered.sort((a, b) => {
       const ai = STATUS_META[a.status].sortKey;
       const bi = STATUS_META[b.status].sortKey;
       if (ai !== bi) return ai - bi;
       return a.name.localeCompare(b.name);
     });
-  }, [paper.kos, paper.los, sections, questions]);
+  }, [paper.kos, paper.los, sections, questions, inScope]);
 
   const visibleKOs = explorerFilter === "all"
     ? koLoGroups
