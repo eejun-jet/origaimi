@@ -1194,6 +1194,35 @@ HARD REQUIREMENTS:
   - Do NOT shorten the answer to a bullet outline. Write full prose paragraphs.
 ` : "";
 
+  const ssStructuredBlock = isSSStructured ? `
+
+SOCIAL STUDIES SECTION B — STRUCTURED RESPONSE QUESTIONS (SRQ) FORMAT (mandatory for every question in this section):
+
+This section MUST contain EXACTLY 2 questions. The first is worth 7 marks (part a), the second is worth 8 marks (part b). Do NOT write a single multi-part question — write TWO separate question objects.
+
+QUESTION 1 (7 marks — "Explain" type):
+  - Stem MUST start with "Explain two reasons why …", "Explain two challenges of …", "Explain two ways …" or similar SS command-word opener that asks for TWO explained points.
+  - The stem must NAME a clear SS issue / context (the example may be Singaporean OR global/international, as long as it aligns with the AO/KO/SO).
+  - marks field on this question MUST equal 7.
+  - mark_scheme field MUST contain VERBATIM:
+${SS_SRQ_PART_A_MARK_SCHEME}
+  followed by 1–2 indicative-content bullets per level tailored to the question.
+
+QUESTION 2 (8 marks — evaluative "How far / Do you think" type):
+  - Stem MUST start with "How far do you agree that …" or "Do you think … is the most effective way to …? Explain your answer." — asking for a reasoned judgement on the issue.
+  - marks field on this question MUST equal 8.
+  - mark_scheme field MUST contain VERBATIM:
+${SS_SRQ_PART_B_MARK_SCHEME}
+  followed by 1–2 indicative-content bullets per level tailored to the question.
+
+ANSWER fields (both questions): ${SS_SRQ_ANSWER_TEMPLATE}
+
+HARD REQUIREMENTS:
+  - DO NOT use the History two-factor template ("How far X, rather than Y, …"). SS Section B is NOT a comparative two-factor essay.
+  - Examples / case studies in stems and answers may be Singaporean OR global/international — judge on AO/KO/SO alignment, not locale.
+  - Write full prose answers, not bullet outlines.
+` : "";
+
   return `${grounding}You are drafting ${sectionLabel} of "${opts.title}" (${opts.level} ${opts.subject}, ${opts.assessmentType}, ${opts.durationMinutes} min, ${opts.totalMarks} total marks across ${opts.totalSections} sections).
 
 THIS SECTION:
