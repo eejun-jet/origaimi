@@ -1126,6 +1126,13 @@ function EditorPage() {
                     identity={identity}
                     subject={assessment.subject}
                     sections={sectionedBlueprint.sections}
+                    inScope={disciplineScope}
+                    disciplineUniverse={disciplineUniverse}
+                    scopedDisciplines={assessment.scoped_disciplines ?? null}
+                    onScopeChange={async (next) => {
+                      setAssessment({ ...assessment, scoped_disciplines: next });
+                      await supabase.from("assessments").update({ scoped_disciplines: next }).eq("id", id);
+                    }}
                     onAddComment={addComment}
                     onSetCommentStatus={setCommentStatus}
                     onDeleteComment={deleteComment}
