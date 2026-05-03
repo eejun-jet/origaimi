@@ -623,6 +623,7 @@ function EditorPage() {
     subject: assessment.subject,
     level: assessment.level,
     syllabus_code: assessment.syllabus_code ?? null,
+    paper_number: paperInfo?.paper_number ?? null,
     duration_minutes: assessment.duration_minutes,
     total_marks: assessment.total_marks,
     total_actual: totalActual,
@@ -652,6 +653,14 @@ function EditorPage() {
       knowledge_outcomes: q.knowledge_outcomes ?? [],
       learning_outcomes: q.learning_outcomes ?? [],
     }));
+  const tosTopicIndex = () =>
+    sectionedBlueprint.sections.flatMap((s) =>
+      (s.topic_pool ?? []).map((t) => ({
+        learning_outcomes: t.learning_outcomes ?? [],
+        outcome_categories: t.outcome_categories ?? [],
+        section: t.section ?? null,
+      })),
+    );
 
   const handleDownloadDocx = async () => {
     try {
