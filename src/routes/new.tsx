@@ -1346,15 +1346,13 @@ function SectionCard({
   // box isn't empty.
   const loCandidates = useMemo(() => {
     const set = new Set<string>();
+    if (availableSos.length > 0) {
+      for (const so of availableSos) set.add(`${so.code}: ${so.statement}`);
+    }
     for (const t of section.topic_pool) {
       for (const lo of t.learning_outcomes ?? []) {
         const v = lo.trim();
         if (v) set.add(v);
-      }
-    }
-    if (set.size === 0 && availableSos.length > 0) {
-      for (const so of availableSos) {
-        set.add(`${so.code}: ${so.statement}`);
       }
     }
     for (const lo of globalLos) set.add(lo);
@@ -1363,8 +1361,7 @@ function SectionCard({
   }, [section.topic_pool, globalLos, sectionLos, availableSos]);
 
   const usingSoFallback = useMemo(() => {
-    if (availableSos.length === 0) return false;
-    return section.topic_pool.every((t) => (t.learning_outcomes ?? []).length === 0);
+    return availableSos.length > 0;
   }, [section.topic_pool, availableSos]);
 
   const toggleAo = (code: string) => {
