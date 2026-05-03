@@ -354,6 +354,13 @@ export async function exportTosDocx(args: {
           spacer(),
           heading("Knowledge Outcomes (KO)", HeadingLevel.HEADING_2),
           buildGridTable(koHeaders, koRows.length > 0 ? koRows : [koHeaders.map(() => "")], koWidths),
+          ...(koLoTable
+            ? [
+                spacer(),
+                heading("KO → LO coverage  (✓ covered · uncovered)", HeadingLevel.HEADING_2),
+                koLoTable,
+              ]
+            : []),
           spacer(),
           heading("Question map", HeadingLevel.HEADING_2),
           buildGridTable(qHeaders, qRows.length > 0 ? qRows : [qHeaders.map(() => "")], qWidths),
