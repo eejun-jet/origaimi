@@ -1328,6 +1328,7 @@ type SectionCardProps = {
   subject: string;
   allAOs: AssessmentObjective[];
   availableSos?: SkillsOutcome[];
+  availableKos?: string[];
 
   globalAoCodes: string[];
   globalKos: string[];
