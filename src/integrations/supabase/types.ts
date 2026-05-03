@@ -908,6 +908,7 @@ export type Database = {
           created_at: string
           depth: number
           id: string
+          ko_content: Json
           learning_outcome_code: string | null
           learning_outcomes: string[] | null
           level: string | null
@@ -930,6 +931,7 @@ export type Database = {
           created_at?: string
           depth?: number
           id?: string
+          ko_content?: Json
           learning_outcome_code?: string | null
           learning_outcomes?: string[] | null
           level?: string | null
@@ -952,6 +954,7 @@ export type Database = {
           created_at?: string
           depth?: number
           id?: string
+          ko_content?: Json
           learning_outcome_code?: string | null
           learning_outcomes?: string[] | null
           level?: string | null
