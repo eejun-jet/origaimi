@@ -200,13 +200,29 @@ Deno.serve(async (req) => {
     }
 
     let aoDefs: { code: string; title: string | null; description: string | null; weighting_percent: number | null }[] = [];
+    let syllabusNarrative: { aims: string | null; assessment_rationale: string | null; pedagogical_notes: string | null; command_word_glossary: Array<{ word: string; definition: string }> } | null = null;
     if (assessment.syllabus_doc_id) {
-      const { data } = await supabase
-        .from("syllabus_assessment_objectives")
-        .select("code,title,description,weighting_percent")
-        .eq("source_doc_id", assessment.syllabus_doc_id)
-        .order("position");
+      const [{ data }, { data: nd }] = await Promise.all([
+        supabase
+          .from("syllabus_assessment_objectives")
+          .select("code,title,description,weighting_percent")
+          .eq("source_doc_id", assessment.syllabus_doc_id)
+          .order("position"),
+        supabase
+          .from("syllabus_documents")
+          .select("aims, assessment_rationale, pedagogical_notes, command_word_glossary")
+          .eq("id", assessment.syllabus_doc_id)
+          .maybeSingle(),
+      ]);
       aoDefs = (data ?? []) as typeof aoDefs;
+      if (nd) {
+        syllabusNarrative = {
+          aims: (nd as any).aims ?? null,
+          assessment_rationale: (nd as any).assessment_rationale ?? null,
+          pedagogical_notes: (nd as any).pedagogical_notes ?? null,
+          command_word_glossary: Array.isArray((nd as any).command_word_glossary) ? (nd as any).command_word_glossary : [],
+        };
+      }
     }
 
     const totalActual = (questions as any[]).reduce((s: number, q: any) => s + (q.marks ?? 0), 0);
