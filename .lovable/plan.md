@@ -1,40 +1,50 @@
-## Three fixes for Combined Science assessments
+## Goal
 
-### 1. Combined Science generated all three sciences when only Physics + Chem were picked
+Extract syllabus aims, rationale, pedagogical/assessment intent, and command-word guidance from the uploaded **Combined Humanities (SS + History) 2261** PDF and attach this narrative context to the existing `syllabus_documents` row, so the Assessment Intent Coach and Review Coach reason with richer subject context. Existing AOs, KOs, LOs, and SOs (which match your earlier xlsx upload) will not be touched.
 
-**Root cause**: When a section has its own `learning_outcomes` selected (e.g. only Physics + Chemistry LOs picked in the builder), the generator's discipline balancer still operates on the full `topic_pool`, which on Combined Science papers contains all three disciplines (Physics, Chemistry, Biology). The pool is never trimmed to the LOs the teacher actually selected.
+## Why a narrative-only re-parse
 
-**Fix** (`supabase/functions/generate-assessment/index.ts`, `buildBalancedPlan` and the section preprocessing):
-- Before building the balanced plan, when `section.learning_outcomes` is non-empty, filter `topic_pool` to keep only topics that contribute at least one of those selected LOs.
-- Then build discipline groups (Physics / Chemistry / Biology / Practical) from this filtered pool, so disciplines the teacher excluded simply have no track and are never generated.
-- Also persist `assessments.scoped_disciplines` from the new-assessment builder when LOs/topics are restricted to a subset of the syllabus disciplines, so coverage and the Coach respect that scope without requiring a manual override on the assessment page.
+The current `parse-syllabus` function rebuilds papers + topics + AOs from scratch. Re-running it would overwrite the AO/KO/LO/SO structure you carefully ingested. Instead, we add a separate, narrative-only extraction pass that writes only to new columns on `syllabus_documents`.
 
-### 2. Downloaded `.docx` exam paper fails to open
+## Changes
 
-**Root cause**: Question stems contain raw control characters (e.g. `0x17 ETB` shown in the topic field, and similar in stems coming from parsed syllabus text). Word's strict OOXML validation rejects files with bare C0 control characters in `<w:t>` runs and reports the file as corrupt.
+### 1. Schema (migration)
+Add narrative columns to `syllabus_documents` (all nullable, default null):
+- `aims text` — overall syllabus aims
+- `assessment_rationale text` — what the paper is trying to measure / philosophy of assessment
+- `pedagogical_notes text` — teaching/learning approach, inquiry-based notes, skills emphasis
+- `command_word_glossary jsonb` — array of `{ word, definition }` from the syllabus's command-word table if present
+- `narrative_source_doc_id uuid` — which uploaded PDF the narrative was extracted from (audit trail)
 
-**Fix** (`src/lib/export-docx.ts`):
-- Add a `sanitizeForDocx(s)` helper that strips/replaces all C0 control bytes (`\x00–\x08`, `\x0B`, `\x0C`, `\x0E–\x1F`) and lone surrogate halves, normalises `\r\n` → `\n`, and trims trailing whitespace.
-- Apply it to every string fed into a `TextRun` (stem, options, answer, mark scheme, topic, instructions, title, subject, level, section name).
-- Apply the same sanitizer in `src/lib/export-tos-docx.ts` and `src/lib/export-tos-xlsx.ts` so TOS exports cannot regress with the same issue.
+Subject/level/AO/KO/LO/SO columns remain untouched.
 
-### 3. TOS "KO → LO" table is empty for Combined Science
+### 2. New edge function `extract-syllabus-narrative`
+- Accepts `{ documentId, filePath }` (filePath optional — re-uses storage path if absent, or accepts a freshly uploaded PDF in the `syllabus-narratives` storage area).
+- Downloads the PDF, sends it to `google/gemini-2.5-pro` via Lovable AI Gateway with a tool-call schema that returns ONLY:
+  - `aims`, `assessment_rationale`, `pedagogical_notes`, `command_word_glossary[]`
+- Writes the result into the four new columns on the existing `syllabus_documents` row.
+- Does NOT touch `syllabus_papers`, `syllabus_topics`, `syllabus_assessment_objectives`, or `skills_outcomes`.
 
-**Root cause**: `buildKoLoGrouping` groups LOs by `outcome_categories` (KO names). For Combined Science the syllabus topics carry no `outcome_categories` (verified: 103 / 103 rows are `{}`), so the resulting table has zero rows even though every LO has a clear strand.
+### 3. One-off run for 2261
+Upload `Comb_Hist_TLS_2261_y26_sy-3.pdf` into the `syllabi` bucket and invoke `extract-syllabus-narrative` for `id = 51ed087a-c0bc-4c94-ac32-e676095b9796` (Combined Humanities History 2261). Same can be re-run later for 2260/2262 if you upload those.
 
-**Fix** (`src/lib/export-tos-xlsx.ts` + `src/lib/export-tos-docx.ts`):
-- Extend `TosTopicIndexEntry` with `strand` and `sub_strand`.
-- In `buildKoLoGrouping`, when `outcome_categories` is empty, fall back to `strand` (e.g. "Kinematics", "Acids, Bases and Salts") as the KO name. This is what teachers actually want to see for sciences.
-- Always render a per-discipline column. For Combined Science the table will have one column for each science actually in scope (Physics / Chemistry / Biology), each cell listing that strand's LOs prefixed with `✓` (covered by ≥1 question) or `·` (not covered), plus a "Covered LOs / Total LOs" count next to the Δ column so teachers see how many LOs within each KO were tested at a glance.
-- Update `tosTopicIndex()` in `src/routes/assessment.$id.tsx` to pass `strand` and `sub_strand` through from `topic_pool`.
-- Mirror the same row builder in `export-tos-docx.ts` so the .docx TOS shows the same condensed table.
+### 4. Wire narrative into coaches
+- `coach-intent/index.ts`: when `assessment.syllabus_doc_id` is set, fetch `aims`, `assessment_rationale`, `pedagogical_notes`, top 6 command-words and inject them into the system prompt as a "Syllabus context" block. The coach is instructed to use these for tone/intent grounding only — not to invent topic codes.
+- `coach-review/index.ts`: same injection into the review prompt so post-generation feedback references the syllabus's stated assessment intent.
 
-### Files touched
-- `supabase/functions/generate-assessment/index.ts`
-- `src/routes/new.tsx` (persist `scoped_disciplines` on insert)
-- `src/lib/export-docx.ts`
-- `src/lib/export-tos-xlsx.ts`
-- `src/lib/export-tos-docx.ts`
-- `src/routes/assessment.$id.tsx` (extend `tosTopicIndex` payload)
+### 5. Admin UI surfacing (read-only)
+In `src/routes/admin.syllabus.$id.tsx`, render a collapsed "Syllabus narrative" card showing the four new fields when present, with a "Re-extract narrative" button that triggers the new edge function. No edits required — it's auxiliary context.
 
-After approval I will implement and redeploy the edge function.
+## Files
+
+- new migration: add columns to `syllabus_documents`
+- new: `supabase/functions/extract-syllabus-narrative/index.ts`
+- edited: `supabase/functions/coach-intent/index.ts`
+- edited: `supabase/functions/coach-review/index.ts`
+- edited: `src/routes/admin.syllabus.$id.tsx`
+
+## Out of scope
+
+- Re-running `parse-syllabus` (would overwrite your AO/KO/LO/SO).
+- Schema changes to `syllabus_topics`, `syllabus_papers`, `syllabus_assessment_objectives`.
+- Combined Science / English / other subjects — only 2261 is targeted in this loop, but the function works for any document id.

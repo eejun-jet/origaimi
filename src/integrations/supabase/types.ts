@@ -746,16 +746,21 @@ export type Database = {
       }
       syllabus_documents: {
         Row: {
+          aims: string | null
+          assessment_rationale: string | null
+          command_word_glossary: Json
           created_at: string
           exam_board: string | null
           file_path: string
           id: string
           level: string | null
           mime_type: string | null
+          narrative_source_path: string | null
           notes: string | null
           paper_code: string | null
           parse_error: string | null
           parse_status: string
+          pedagogical_notes: string | null
           raw_text: string | null
           skills_outcomes: Json
           subject: string | null
@@ -766,16 +771,21 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          aims?: string | null
+          assessment_rationale?: string | null
+          command_word_glossary?: Json
           created_at?: string
           exam_board?: string | null
           file_path: string
           id?: string
           level?: string | null
           mime_type?: string | null
+          narrative_source_path?: string | null
           notes?: string | null
           paper_code?: string | null
           parse_error?: string | null
           parse_status?: string
+          pedagogical_notes?: string | null
           raw_text?: string | null
           skills_outcomes?: Json
           subject?: string | null
@@ -786,16 +796,21 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          aims?: string | null
+          assessment_rationale?: string | null
+          command_word_glossary?: Json
           created_at?: string
           exam_board?: string | null
           file_path?: string
           id?: string
           level?: string | null
           mime_type?: string | null
+          narrative_source_path?: string | null
           notes?: string | null
           paper_code?: string | null
           parse_error?: string | null
           parse_status?: string
+          pedagogical_notes?: string | null
           raw_text?: string | null
           skills_outcomes?: Json
           subject?: string | null
