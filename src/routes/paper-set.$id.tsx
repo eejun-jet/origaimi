@@ -6,6 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Layers, Sparkles, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
+import {
+  inferInScopeDisciplines,
+  buildDisciplineLookup,
+  normaliseDiscipline,
+} from "@/lib/discipline-scope";
 
 export const Route = createFileRoute("/paper-set/$id")({
   component: PaperSetView,
