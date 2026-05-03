@@ -48,11 +48,19 @@ export type ExportAssessment = {
 
 const ARIAL = "Arial";
 
+// Strip C0 control bytes (except \t \n \r) and lone surrogate halves; Word
+// rejects OOXML containing them and reports the file as corrupt.
+function clean(s: string | null | undefined): string {
+  if (s == null) return "";
+  // eslint-disable-next-line no-control-regex
+  return String(s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, "");
+}
+
 function p(text: string, opts: { bold?: boolean; size?: number; align?: typeof AlignmentType[keyof typeof AlignmentType]; spacingAfter?: number } = {}) {
   return new Paragraph({
     alignment: opts.align,
     spacing: { after: opts.spacingAfter ?? 120 },
-    children: [new TextRun({ text, bold: opts.bold, size: opts.size ?? 22, font: ARIAL })],
+    children: [new TextRun({ text: clean(text), bold: opts.bold, size: opts.size ?? 22, font: ARIAL })],
   });
 }
 
@@ -60,7 +68,7 @@ function heading(text: string, level: typeof HeadingLevel[keyof typeof HeadingLe
   return new Paragraph({
     heading: level,
     spacing: { before: 240, after: 160 },
-    children: [new TextRun({ text, bold: true, size, font: ARIAL })],
+    children: [new TextRun({ text: clean(text), bold: true, size, font: ARIAL })],
   });
 }
 
@@ -68,12 +76,12 @@ function bullet(text: string) {
   return new Paragraph({
     numbering: { reference: "bullets", level: 0 },
     spacing: { after: 80 },
-    children: [new TextRun({ text, size: 22, font: ARIAL })],
+    children: [new TextRun({ text: clean(text), size: 22, font: ARIAL })],
   });
 }
 
 function questionRow(qNumber: number, q: ExportQuestion): Table {
-  const stem = q.stem.trim();
+  const stem = clean(q.stem.trim());
   const optLines: Paragraph[] = [];
   if (q.question_type === "mcq" && q.options && q.options.length > 0) {
     q.options.forEach((opt, i) => {
@@ -82,7 +90,7 @@ function questionRow(qNumber: number, q: ExportQuestion): Table {
         new Paragraph({
           spacing: { after: 60 },
           indent: { left: 360 },
-          children: [new TextRun({ text: `${letter}. ${opt}`, size: 22, font: ARIAL })],
+          children: [new TextRun({ text: clean(`${letter}. ${opt}`), size: 22, font: ARIAL })],
         }),
       );
     });
@@ -205,7 +213,7 @@ export async function exportAssessmentDocx(
         new Paragraph({
           alignment: AlignmentType.CENTER,
           spacing: { before: 240, after: 120 },
-          children: [new TextRun({ text: `Section ${section.letter}${headerSuffix}`, bold: true, size: 32, font: ARIAL })],
+          children: [new TextRun({ text: clean(`Section ${section.letter}${headerSuffix}`), bold: true, size: 32, font: ARIAL })],
         }),
       );
       body.push(
@@ -250,8 +258,8 @@ export async function exportAssessmentDocx(
 
   const doc = new Document({
     creator: "origAImi",
-    title: assessment.title,
-    description: `${assessment.subject} — ${assessment.level}`,
+    title: clean(assessment.title),
+    description: clean(`${assessment.subject} — ${assessment.level}`),
     styles: {
       default: { document: { run: { font: ARIAL, size: 22 } } },
     },

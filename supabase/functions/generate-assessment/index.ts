@@ -1349,6 +1349,21 @@ Deno.serve(async (req) => {
       const n = s.num_questions;
       if (s.topic_pool.length === 0) return Array.from({ length: n }, () => null);
 
+      // Restrict the pool to topics that contribute at least one of the
+      // teacher-selected LOs (when LOs were narrowed in the builder). For
+      // Combined Science papers this is what excludes a discipline the
+      // teacher didn't pick (e.g. Biology when only Physics + Chemistry LOs
+      // were chosen) — without this, the discipline balancer below would
+      // happily round-robin into Biology because every Combined Sci topic
+      // sits in the syllabus-wide pool.
+      const selectedLos = new Set((s.learning_outcomes ?? []).map((x) => x.trim()).filter(Boolean));
+      const filteredPool: SectionTopic[] = selectedLos.size > 0
+        ? s.topic_pool.filter((t) =>
+            (t.learning_outcomes ?? []).some((lo) => selectedLos.has((lo ?? "").trim())),
+          )
+        : s.topic_pool;
+      const pool = filteredPool.length > 0 ? filteredPool : s.topic_pool;
+
       // Trigger discipline interleaving whenever the MCQ pool spans 2+
       // distinct discipline labels (e.g. Combined Science: Physics +
       // Chemistry). This used to gate on subject==="Combined Science", but
@@ -1356,16 +1371,16 @@ Deno.serve(async (req) => {
       // missed and the generator emitted Physics-only papers when the user
       // had selected both Physics and Chemistry topics.
       const distinctDisciplines = new Set(
-        s.topic_pool.map((t) => (t.section ?? "").trim()).filter(Boolean),
+        pool.map((t) => (t.section ?? "").trim()).filter(Boolean),
       );
       const wantBalanced = s.question_type === "mcq" && distinctDisciplines.size >= 2;
       if (!wantBalanced) {
-        return Array.from({ length: n }, (_, i) => s.topic_pool[i % s.topic_pool.length]);
+        return Array.from({ length: n }, (_, i) => pool[i % pool.length]);
       }
 
       // Group by discipline (section label). Practical / unlabelled fall into "Other".
       const groups = new Map<string, SectionTopic[]>();
-      for (const t of s.topic_pool) {
+      for (const t of pool) {
         const key = (t.section ?? "Other").trim() || "Other";
         if (!groups.has(key)) groups.set(key, []);
         groups.get(key)!.push(t);
@@ -1378,7 +1393,7 @@ Deno.serve(async (req) => {
       ];
       if (trackKeys.length < 2) {
         // Pool is single-discipline — fall back to plain round-robin.
-        return Array.from({ length: n }, (_, i) => s.topic_pool[i % s.topic_pool.length]);
+        return Array.from({ length: n }, (_, i) => pool[i % pool.length]);
       }
 
       // For each track, maintain (a) a rotating index over its topics and

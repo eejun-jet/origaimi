@@ -272,12 +272,13 @@ export async function exportTosDocx(args: {
 
   let koLoTable: Table | null = null;
   if (koLoGrouping && koLoGrouping.rows.length > 0) {
-    const fixedWeights = [3, 0.8, 0.8, 0.6];
+    const fixedWeights = [3, 1, 0.8, 0.8, 0.6];
     const loColWeights = koLoGrouping.disciplines.map(() => 4);
     const koLoWidths = distributeWidths(contentWidth, [...fixedWeights, ...loColWeights]);
-    const koLoHeaders = ["Knowledge Outcome", "Target", "Actual", "Δ", ...koLoGrouping.disciplines];
+    const koLoHeaders = ["Knowledge Outcome", "LOs covered", "Target", "Actual", "Δ", ...koLoGrouping.disciplines];
     const koLoRows = koLoGrouping.rows.map((r) => [
       r.name,
+      r.loCoverage,
       r.target,
       r.actual,
       r.delta,

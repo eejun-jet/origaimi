@@ -659,6 +659,8 @@ function EditorPage() {
         learning_outcomes: t.learning_outcomes ?? [],
         outcome_categories: t.outcome_categories ?? [],
         section: t.section ?? null,
+        strand: (t as { strand?: string | null }).strand ?? null,
+        sub_strand: (t as { sub_strand?: string | null }).sub_strand ?? null,
       })),
     );
 

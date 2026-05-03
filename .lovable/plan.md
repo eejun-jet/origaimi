@@ -1,54 +1,40 @@
-## Goal
+## Three fixes for Combined Science assessments
 
-Two changes to the downloaded Table of Specifications (.xlsx **and** .docx — both exports share the same data layer, so we update both):
+### 1. Combined Science generated all three sciences when only Physics + Chem were picked
 
-1. **Split "Syllabus code" and "Paper number"** into two separate rows. Today the Summary shows only `Syllabus code` (e.g. `5086 / 5087 / 5088`). The user wants a new `Paper` row immediately below it (e.g. `1`).
-2. **Add a condensed LO coverage table sorted by KO**, where each row is a Knowledge Outcome and its associated Learning Outcomes are listed in cell(s) on the right. For multi-discipline papers (Combined Science), split the LOs into one column per discipline (Physics / Chemistry / Biology / Practical) so a teacher can read each science's LO coverage side-by-side.
+**Root cause**: When a section has its own `learning_outcomes` selected (e.g. only Physics + Chemistry LOs picked in the builder), the generator's discipline balancer still operates on the full `topic_pool`, which on Combined Science papers contains all three disciplines (Physics, Chemistry, Biology). The pool is never trimmed to the LOs the teacher actually selected.
 
-## What changes
+**Fix** (`supabase/functions/generate-assessment/index.ts`, `buildBalancedPlan` and the section preprocessing):
+- Before building the balanced plan, when `section.learning_outcomes` is non-empty, filter `topic_pool` to keep only topics that contribute at least one of those selected LOs.
+- Then build discipline groups (Physics / Chemistry / Biology / Practical) from this filtered pool, so disciplines the teacher excluded simply have no track and are never generated.
+- Also persist `assessments.scoped_disciplines` from the new-assessment builder when LOs/topics are restricted to a subset of the syllabus disciplines, so coverage and the Coach respect that scope without requiring a manual override on the assessment page.
 
-### 1. Paper number in the Summary
+### 2. Downloaded `.docx` exam paper fails to open
 
-- `assessments.syllabus_paper_id` already points to a `syllabus_papers` row that carries `paper_number` and `paper_code`. The assessment route does not currently load it, so we add a small fetch in `src/routes/assessment.$id.tsx` (lookup by `syllabus_paper_id` when present) and store the paper number on local state.
-- Extend `TosAssessmentMeta` (in `src/lib/export-tos-xlsx.ts`) with an optional `paper_number: string | null` field.
-- `tosMeta()` populates it from the loaded paper row.
-- `buildSummarySheet` (xlsx) and `buildKeyValueTable` (docx) emit a new `Paper` row directly under `Syllabus code`. Render `—` when unknown.
+**Root cause**: Question stems contain raw control characters (e.g. `0x17 ETB` shown in the topic field, and similar in stems coming from parsed syllabus text). Word's strict OOXML validation rejects files with bare C0 control characters in `<w:t>` runs and reports the file as corrupt.
 
-### 2. KO-grouped LO coverage table
+**Fix** (`src/lib/export-docx.ts`):
+- Add a `sanitizeForDocx(s)` helper that strips/replaces all C0 control bytes (`\x00–\x08`, `\x0B`, `\x0C`, `\x0E–\x1F`) and lone surrogate halves, normalises `\r\n` → `\n`, and trims trailing whitespace.
+- Apply it to every string fed into a `TextRun` (stem, options, answer, mark scheme, topic, instructions, title, subject, level, section name).
+- Apply the same sanitizer in `src/lib/export-tos-docx.ts` and `src/lib/export-tos-xlsx.ts` so TOS exports cannot regress with the same issue.
 
-- Pass the section topic-pools through to the exporter so we can derive a per-LO map of `{ kos: string[]; discipline: string | null }`. Concretely, add an optional `topicIndex` argument to `exportTosXlsx` / `exportTosDocx` shaped:
+### 3. TOS "KO → LO" table is empty for Combined Science
 
-  ```ts
-  type TopicIndexEntry = {
-    learning_outcomes: string[];
-    outcome_categories: string[]; // KOs
-    section: string | null;       // "Physics" | "Chemistry" | …
-  };
-  ```
+**Root cause**: `buildKoLoGrouping` groups LOs by `outcome_categories` (KO names). For Combined Science the syllabus topics carry no `outcome_categories` (verified: 103 / 103 rows are `{}`), so the resulting table has zero rows even though every LO has a clear strand.
 
-  Built in `assessment.$id.tsx` from `sectionedBlueprint.sections[].topic_pool`.
-
-- New helper `buildKoLoCoverageRows(coverage, topicIndex)`:
-  - Rows: every KO in `coverage.paper.kos` (already KO-sorted by syllabus order).
-  - For each KO, gather all LOs whose topic carries that KO. Annotate each LO with `covered` (from `coverage.paper.los`).
-  - Group LOs by discipline. Format each LO as `✓ <text>` / `· <text>` so coverage is readable inline.
-
-- New sheet **"KO → LO coverage"** in xlsx and a new section in docx, immediately after the existing AO + KO matrix.
-  - Columns: `KO`, `Target`, `Actual`, `Δ`, then either:
-    - **Single discipline papers** → one column `Learning Outcomes`.
-    - **Multi-discipline papers** (≥2 distinct disciplines in the topic-pool, e.g. Combined Science) → one column per discipline in this order: Physics, Chemistry, Biology, Practical, Other.
-  - Each LO cell lists LOs as a multi-line string, prefixed with ✓ when covered and · when uncovered. Empty cells when no LO maps to that KO+discipline combination.
-
-- Discipline detection mirrors the existing logic in `discipline-scope.ts` (`normaliseDiscipline`). Empty / unknown disciplines collapse into "Other"; if only one bucket has entries we fall back to the single-column layout.
+**Fix** (`src/lib/export-tos-xlsx.ts` + `src/lib/export-tos-docx.ts`):
+- Extend `TosTopicIndexEntry` with `strand` and `sub_strand`.
+- In `buildKoLoGrouping`, when `outcome_categories` is empty, fall back to `strand` (e.g. "Kinematics", "Acids, Bases and Salts") as the KO name. This is what teachers actually want to see for sciences.
+- Always render a per-discipline column. For Combined Science the table will have one column for each science actually in scope (Physics / Chemistry / Biology), each cell listing that strand's LOs prefixed with `✓` (covered by ≥1 question) or `·` (not covered), plus a "Covered LOs / Total LOs" count next to the Δ column so teachers see how many LOs within each KO were tested at a glance.
+- Update `tosTopicIndex()` in `src/routes/assessment.$id.tsx` to pass `strand` and `sub_strand` through from `topic_pool`.
+- Mirror the same row builder in `export-tos-docx.ts` so the .docx TOS shows the same condensed table.
 
 ### Files touched
+- `supabase/functions/generate-assessment/index.ts`
+- `src/routes/new.tsx` (persist `scoped_disciplines` on insert)
+- `src/lib/export-docx.ts`
+- `src/lib/export-tos-xlsx.ts`
+- `src/lib/export-tos-docx.ts`
+- `src/routes/assessment.$id.tsx` (extend `tosTopicIndex` payload)
 
-- `src/lib/export-tos-xlsx.ts` — extend `TosAssessmentMeta`, add Paper row to summary, add new "KO → LO coverage" sheet, accept optional `topicIndex`.
-- `src/lib/export-tos-docx.ts` — same Paper row + new KO→LO section, accept the same `topicIndex` (re-exports the type from xlsx file).
-- `src/routes/assessment.$id.tsx` — fetch paper number from `syllabus_papers` when `assessment.syllabus_paper_id` is set; build `topicIndex` from `sectionedBlueprint`; thread both into `tosMeta()` and `exportTosXlsx` / `exportTosDocx` calls.
-
-### Out of scope
-
-- No schema changes — `paper_number` already exists on `syllabus_papers`.
-- No change to the on-screen Coverage panel; this is export-only.
-- The existing Question Map sheet and AO/KO matrix are unchanged.
+After approval I will implement and redeploy the edge function.
