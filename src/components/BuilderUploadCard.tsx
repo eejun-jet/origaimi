@@ -258,7 +258,7 @@ export function BuilderUploadCard({
         <div>
           <h2 className="font-paper text-xl font-semibold">Upload an existing paper</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Drop a PDF — complete or in-progress. We'll parse it, build the Table of Specifications, and open it in
+            Drop a PDF or Word document — complete or in-progress. We'll parse it, build the Table of Specifications, and open it in
             the editor so you can keep setting and run the Assessment Coach.
           </p>
         </div>
