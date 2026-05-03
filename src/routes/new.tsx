@@ -15,7 +15,9 @@ import {
 } from "@/lib/syllabus";
 import {
   loadSyllabusLibrary, loadPaperTopics, loadDocTopics, loadDocAssessmentObjectives,
+  loadDocSkillsOutcomes,
   type SyllabusLibraryDoc, type SyllabusLibraryPaper, type PaperTopic, type AssessmentObjective,
+  type SkillsOutcome,
 } from "@/lib/syllabus-data";
 import {
   type Section, type SectionTopic, type SectionedBlueprint, type DifficultyMix,
