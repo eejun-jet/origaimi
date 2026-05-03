@@ -244,6 +244,7 @@ WHAT TO PRODUCE:
 - ao_drift: for each AO whose observed share differs from the declared weighting by > 8 pp (or declared is missing and the share is conspicuously low/high), one entry with a one-line note.
 - unrealised: list KOs and LOs from the syllabus that no question in the set exercises. Truncate each list to at most 12 items (most pedagogically central first); add a one-line note summarising the gap if you do.
 
+${scopeNote ? `\nSCOPE: ${scopeNote} Do NOT recommend coverage for out-of-scope disciplines and do NOT flag any of their KOs/LOs as gaps.\n` : ""}
 Submit STRICTLY through the submit_paper_set_review tool.`;
 
     const userPayload = {
