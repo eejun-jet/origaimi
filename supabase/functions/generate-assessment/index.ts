@@ -1905,7 +1905,7 @@ Deno.serve(async (req) => {
         const MAX_IMAGE_SOURCES = 1;
         const maxMinSources = effectiveSkillDefs.reduce((m, s) => Math.max(m, s.minSources), 0);
         const poolSize = Math.min(MAX_TOTAL_SOURCES, Math.max(4, maxMinSources));
-        const sectionTopic = section.topic_pool[0] ?? null;
+        const sectionTopic = selectHumanitiesAnchorTopic(section);
         // ssSubIssueForSection declared above section scope
         const POOL_QUERY_HINTS = [
           "official government statement",
@@ -2170,7 +2170,10 @@ Deno.serve(async (req) => {
       let questions: any[] = [];
       if (isHumanitiesSBQ && sharedSourcePool.length > 0) {
         console.log(`[generate] section ${section.letter}: using deterministic SBQ builder to avoid long AI timeout`);
-        questions = buildDeterministicSbqQuestions(section, sharedSourcePool, perQSkillsForFetch, ssSubIssueForSection);
+        const deterministicSection = sectionTopic
+          ? { ...section, topic_pool: [sectionTopic, ...section.topic_pool.filter((t) => t !== sectionTopic)] }
+          : section;
+        questions = buildDeterministicSbqQuestions(deterministicSection, sharedSourcePool, perQSkillsForFetch, ssSubIssueForSection);
       } else if (isSSPaper && section.question_type === "long") {
         console.log(`[generate] section ${section.letter}: using deterministic SS SRQ builder to avoid AI timeout`);
         questions = buildDeterministicSsSrqQuestions(section);
