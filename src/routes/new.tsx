@@ -52,6 +52,21 @@ type Blueprint = BlueprintRow[];
 type Band = "primary" | "secondary";
 type Stream = "standard" | "foundation" | "g3" | "g2";
 
+const DEFAULT_SOCIAL_STUDIES_SOS: SkillsOutcome[] = [
+  { code: "SO1", statement: "examine societal issues critically by gathering, interpreting, analysing and evaluating information from different sources to make well-reasoned and substantiated arguments, recommendations and conclusions on societal issues" },
+  { code: "SO2", statement: "demonstrate sound reasoning and responsible decision-making that considers Singapore's unique contexts, constraints and vulnerabilities; and the consequences of one's actions on those around them" },
+  { code: "SO3", statement: "demonstrate perspective-taking when encountering differing views" },
+  { code: "SO4", statement: "demonstrate reflective thinking when reviewing their understanding of societal issues and examining personal assumptions and beliefs about others" },
+];
+
+function isSocialStudiesPaper(doc?: SyllabusLibraryDoc | null, paper?: SyllabusLibraryPaper | null): boolean {
+  const haystack = [doc?.subject, doc?.title, doc?.syllabusCode, paper?.componentName, paper?.paperCode, paper?.topicTheme]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return haystack.includes("social studies") || /\b226[0-2]\/01\b/.test(haystack);
+}
+
 function classifyLevel(level?: string | null): { band: Band; stream: Stream } | null {
   if (!level) return null;
   const l = level.toLowerCase();
