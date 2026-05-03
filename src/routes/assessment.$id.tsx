@@ -592,7 +592,12 @@ function EditorPage() {
 
   const totalActual = questions.reduce((s, q) => s + q.marks, 0);
   const allSelected = questions.length > 0 && selectedIds.size === questions.length;
-  const coverage = computeCoverage(questions, sectionedBlueprint.sections, effectiveAoDefs, assessment.total_marks, assessment.subject);
+  const { inScope: disciplineScope, universe: disciplineUniverse } = computeScopeForAssessment(
+    sectionedBlueprint.sections,
+    questions,
+    assessment.scoped_disciplines ?? null,
+  );
+  const coverage = computeCoverage(questions, sectionedBlueprint.sections, effectiveAoDefs, assessment.total_marks, assessment.subject, disciplineScope);
   const questionLabels: Record<string, string> = {};
   questions.forEach((q, i) => {
     const sec = sectionAtPosition(sectionedBlueprint, i);
