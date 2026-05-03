@@ -1939,11 +1939,13 @@ Deno.serve(async (req) => {
           // was the worst CPU offender. If curated still can't reach the
           // target we ship with what we have (>=2 is enough for an SBQ).
           if (sharedSourcePool.length < FETCH_TARGET) {
-            const curated = curatedHumanitiesSourcePool(
-              sectionTopic.topic,
-              sectionTopic.learning_outcomes ?? [],
-              section.knowledge_outcomes ?? [],
-            );
+            const curated: GroundedSource[] = ssSubIssueForSection
+              ? ssSubIssueForSection.sources.slice()
+              : curatedHumanitiesSourcePool(
+                  sectionTopic.topic,
+                  sectionTopic.learning_outcomes ?? [],
+                  section.knowledge_outcomes ?? [],
+                );
             // Backfill PASS 1: prefer NEW hosts not already represented in
             // the pool, to keep source diversity.
             for (const src of curated) {
