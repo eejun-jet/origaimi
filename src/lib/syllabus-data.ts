@@ -78,6 +78,7 @@ export async function loadSyllabusLibrary(): Promise<SyllabusLibraryDoc[]> {
     level: d.level,
     syllabusYear: d.syllabus_year,
     parseStatus: d.parse_status,
+    skillsOutcomes: normaliseSkillsOutcomes((d as { skills_outcomes?: unknown }).skills_outcomes),
     papers: (papers ?? [])
       .filter((p) => p.source_doc_id === d.id)
       .map((p) => ({
