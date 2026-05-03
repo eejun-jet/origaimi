@@ -1978,24 +1978,30 @@ Deno.serve(async (req) => {
           }
 
           // Pictorial primary source: at most ONE, on a tight time budget.
-          // If nothing is found quickly we just ship without an image rather
-          // than blocking the section.
-          try {
-            const imgs = await fetchGroundedImageSources(
-              sectionTopic.topic,
-              sectionTopic.learning_outcomes ?? [],
-              MAX_IMAGE_SOURCES,
-              usedHosts,
-            );
-            for (const img of imgs.slice(0, MAX_IMAGE_SOURCES)) {
-              sharedImageSources.push(img);
-              console.log(`[generate] section ${section.letter}: pictorial source ${img.image_url} from ${img.publisher}`);
+          // SKIP this for SS sub-issue bundles — the curated 5 text sources
+          // are already coherent around the sub-issue, and a generic
+          // topic-keyword image search routinely returned pictures that
+          // had nothing to do with the bundle's specific inquiry.
+          if (ssSubIssueForSection) {
+            console.log(`[generate] section ${section.letter}: skipping pictorial fetch — SS sub-issue uses curated text-only bundle`);
+          } else {
+            try {
+              const imgs = await fetchGroundedImageSources(
+                sectionTopic.topic,
+                sectionTopic.learning_outcomes ?? [],
+                MAX_IMAGE_SOURCES,
+                usedHosts,
+              );
+              for (const img of imgs.slice(0, MAX_IMAGE_SOURCES)) {
+                sharedImageSources.push(img);
+                console.log(`[generate] section ${section.letter}: pictorial source ${img.image_url} from ${img.publisher}`);
+              }
+              if (imgs.length === 0) {
+                console.log(`[generate] section ${section.letter}: no pictorial source found (continuing without)`);
+              }
+            } catch (e) {
+              console.warn(`[generate] section ${section.letter}: image source fetch failed`, (e as Error).message);
             }
-            if (imgs.length === 0) {
-              console.log(`[generate] section ${section.letter}: no pictorial source found (continuing without)`);
-            }
-          } catch (e) {
-            console.warn(`[generate] section ${section.letter}: image source fetch failed`, (e as Error).message);
           }
         }
         // Hard cap: text sources never exceed (MAX_TOTAL_SOURCES - imagesFound)
