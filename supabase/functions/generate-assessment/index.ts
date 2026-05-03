@@ -2072,7 +2072,7 @@ Deno.serve(async (req) => {
       let questions: any[] = [];
       if (isHumanitiesSBQ && sharedSourcePool.length > 0) {
         console.log(`[generate] section ${section.letter}: using deterministic SBQ builder to avoid long AI timeout`);
-        questions = buildDeterministicSbqQuestions(section, sharedSourcePool, perQSkillsForFetch);
+        questions = buildDeterministicSbqQuestions(section, sharedSourcePool, perQSkillsForFetch, ssSubIssueForSection);
       } else if (isSSPaper && section.question_type === "long") {
         console.log(`[generate] section ${section.letter}: using deterministic SS SRQ builder to avoid AI timeout`);
         questions = buildDeterministicSsSrqQuestions(section);
