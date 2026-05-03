@@ -1907,13 +1907,38 @@ function computeCoverage(
     return { code, title: def?.title ?? null, target, actual, weighting };
   });
 
+  // Discipline scoping: drop KOs/LOs that belong only to out-of-scope disciplines
+  // (e.g. Biology when only Physics + Chemistry are tested in this paper).
+  const scopeLookup = inScope
+    ? buildDisciplineLookup(
+        sections.flatMap((s) =>
+          (s.topic_pool ?? []).map((t) => ({
+            title: t.topic,
+            section: t.section ?? null,
+            outcome_categories: t.outcome_categories ?? [],
+            learning_outcomes: t.learning_outcomes ?? [],
+          })),
+        ),
+      )
+    : null;
+  const koInScope = (name: string): boolean => {
+    if (!inScope || !scopeLookup) return true;
+    const d = scopeLookup.byKO.get(name);
+    return !d || inScope.has(d);
+  };
+  const loInScope = (text: string): boolean => {
+    if (!inScope || !scopeLookup) return true;
+    const d = scopeLookup.byLO.get(text);
+    return !d || inScope.has(d);
+  };
+
   // ── Paper-wide KO targets from sections.knowledge_outcomes (sum of section marks
   //    listing the KO) + actuals from question.knowledge_outcomes
   const koSet = new Set<string>(KNOWLEDGE_OUTCOMES as readonly string[]);
   sections.forEach((s) => (s.knowledge_outcomes ?? []).forEach((k) => koSet.add(k)));
   questions.forEach((q) => koOf(q).forEach((k) => koSet.add(k)));
 
-  const paperKOs = Array.from(koSet).map((name) => {
+  const paperKOs = Array.from(koSet).filter(koInScope).map((name) => {
     const target = sections.reduce((sum, s) => sum + ((s.knowledge_outcomes ?? []).includes(name) ? s.marks : 0), 0);
     const actual = questions.reduce((sum, q) => sum + (koOf(q).includes(name) ? q.marks : 0), 0);
     return { name, target, actual };
