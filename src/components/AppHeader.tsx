@@ -11,6 +11,13 @@ export function AppHeader() {
         </Link>
         <nav className="flex items-center gap-4">
           <Link
+            to="/our-story"
+            className="text-sm text-muted-foreground hover:text-foreground"
+            activeProps={{ className: "text-foreground font-medium" }}
+          >
+            Our Story
+          </Link>
+          <Link
             to="/dashboard"
             className="text-sm text-muted-foreground hover:text-foreground"
             activeProps={{ className: "text-foreground font-medium" }}
