@@ -1441,7 +1441,7 @@ function QuestionCard({
   onToggleSelect: () => void;
   onUpdate: (patch: Partial<Question>) => void;
   onDelete: () => void;
-  onMove: (dir: -1 | 1) => void;
+  onMove: (target: -1 | 1 | "top" | "bottom") => void;
   onRegenerate: (instruction: string, difficulty?: "easy" | "medium" | "hard") => void;
   onBank: () => void;
   onDiagramAction: (mode: "generate" | "edit" | "regenerate", instruction?: string) => Promise<boolean>;
