@@ -2427,11 +2427,11 @@ function TopicsOverviewView({
         </span>
       </div>
 
-      {(() => { const __avg = computeAvgPct(map.disciplines.flatMap((d) => d.topics)); return null; })()}
-      {map.disciplines.map((disc) => {
+      {(() => {
         const avgPct = computeAvgPct(map.disciplines.flatMap((d) => d.topics));
-        const tiles = disc.topics
-          .map((t) => ({ topic: t, status: classifyTopic(t.los, avgPct) }))
+        return map.disciplines.map((disc) => {
+          const tiles = disc.topics
+            .map((t) => ({ topic: t, status: classifyTopic(t.los, avgPct) }))
           .sort((a, b) => {
             const k = STATUS_META[a.status].sortKey - STATUS_META[b.status].sortKey;
             if (k !== 0) return k;
