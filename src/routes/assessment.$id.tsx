@@ -3234,10 +3234,10 @@ function CoveragePanel({
                 onClick={() => onRetag()}
                 disabled={retagBusy}
                 className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-[10px] font-medium text-foreground transition hover:bg-muted disabled:opacity-50"
-                title="Re-tag every question with AI based on its stem and the section's allowed AOs / KOs / LOs"
+                title="Recalculate every question's AO / KO / LO tags with AI based on its stem and the section's allowed pool"
               >
                 {retagBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-                Re-tag with AI
+                Recalculate with AI
               </button>
             ) : undefined}
           >
