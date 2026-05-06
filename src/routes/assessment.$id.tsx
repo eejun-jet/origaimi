@@ -1501,13 +1501,15 @@ function QuestionCard({
           <Badge variant="outline">{q.question_type.replace("_", " ")}</Badge>
           {q.topic && (
             <span
-              className="inline-flex items-center rounded-sm bg-muted/60 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground"
+              className="inline-flex items-center gap-1 text-[11px] font-normal text-muted-foreground/80"
               title="Topic (read-only)"
             >
-              {/* Strip a trailing "[code]" if it duplicates the leading code, e.g. "1.1 Experimental Design [1.1]" → "1.1 Experimental Design" */}
-              {q.topic.replace(/\s*\[([^\]]+)\]\s*$/, (_m, code) =>
-                q.topic!.trim().startsWith(`${code} `) ? "" : ` [${code}]`,
-              )}
+              <Tag className="h-3 w-3 opacity-60" aria-hidden="true" />
+              <span>
+                {q.topic.replace(/\s*\[([^\]]+)\]\s*$/, (_m, code) =>
+                  q.topic!.trim().startsWith(`${code} `) ? "" : ` [${code}]`,
+                )}
+              </span>
             </span>
           )}
           {q.bloom_level && <Badge variant="secondary">{q.bloom_level}</Badge>}
