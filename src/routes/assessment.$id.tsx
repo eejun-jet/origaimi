@@ -19,7 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Loader2, RefreshCw, Trash2, BookmarkPlus, Sparkles, ChevronUp, ChevronDown, X, Download, Image as ImageIcon, Wand2, MessageCircle, UserPlus, AlertTriangle, Info, CheckCircle2, Pencil, Maximize2, MoreHorizontal, ListChecks, ArrowUp, ArrowDown, ArrowUpToLine, ArrowDownToLine, MoveVertical } from "lucide-react";
+import { ArrowLeft, Loader2, RefreshCw, Trash2, BookmarkPlus, Sparkles, ChevronUp, ChevronDown, X, Download, Image as ImageIcon, Wand2, MessageCircle, UserPlus, AlertTriangle, Info, CheckCircle2, Pencil, Maximize2, MoreHorizontal, ListChecks, ArrowUp, ArrowDown, ArrowUpToLine, ArrowDownToLine, MoveVertical, Tag } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { BLOOMS } from "@/lib/syllabus";
 import { toSectioned, sectionAtPosition, getSbqSkill, KNOWLEDGE_OUTCOMES, isHumanitiesSubject, isScienceSubject, type Section } from "@/lib/sections";
