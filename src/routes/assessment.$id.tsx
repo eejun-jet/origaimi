@@ -2310,29 +2310,49 @@ function SegmentBar({ covered, total }: { covered: number; total: number }) {
   );
 }
 
-type OverviewStatus = "untested" | "under" | "thin" | "balanced" | "over";
+type OverviewStatus = "untested" | "thin" | "balanced" | "tested" | "over";
 
-function classifyTopic(los: { covered: boolean; actual: number }[]): OverviewStatus {
+/**
+ * Coverage classification by % of LOs in the topic that have ≥1 question.
+ *   pct = coveredLOs / totalLOs
+ *   - Untested:    pct === 0
+ *   - Thin:        0 < pct < 40%
+ *   - Balanced:    40% ≤ pct ≤ 80%
+ *   - Tested:      pct > 80%
+ *   - Over-tested: pct > 80% AND paper-wide avgPct < 70% AND (pct − avgPct) ≥ 30pp
+ *                  (this topic is meaningfully ahead of the rest of the paper)
+ * `avgPct` is the mean coverage % across all topics in the paper that have ≥1 LO.
+ */
+function classifyTopic(
+  los: { covered: boolean; actual: number }[],
+  avgPct: number,
+): OverviewStatus {
   const total = los.length;
   if (total === 0) return "untested";
   const covered = los.filter((l) => l.covered).length;
-  const maxActual = los.reduce((m, l) => Math.max(m, l.actual), 0);
-  const avgActual = los.reduce((s, l) => s + l.actual, 0) / total;
   if (covered === 0) return "untested";
-  if (covered === total) {
-    if (maxActual >= 3 || avgActual > 2) return "over";
-    return "balanced";
-  }
-  if (total >= 3 && covered / total < 0.34) return "under";
-  return "thin";
+  const pct = covered / total;
+  if (pct < 0.4) return "thin";
+  if (pct <= 0.8) return "balanced";
+  if (avgPct < 0.7 && pct - avgPct >= 0.3) return "over";
+  return "tested";
+}
+
+/** Mean coverage % across all topics that have at least 1 LO. */
+function computeAvgPct(topics: { los: { covered: boolean }[] }[]): number {
+  const pcts = topics
+    .filter((t) => t.los.length > 0)
+    .map((t) => t.los.filter((l) => l.covered).length / t.los.length);
+  if (pcts.length === 0) return 0;
+  return pcts.reduce((s, p) => s + p, 0) / pcts.length;
 }
 
 const STATUS_META: Record<OverviewStatus, { label: string; chip: string; ring: string; sortKey: number }> = {
-  untested: { label: "Untested", chip: "bg-destructive/15 text-destructive border-destructive/30", ring: "border-destructive/40", sortKey: 0 },
-  under:    { label: "Under-tested", chip: "bg-destructive/10 text-destructive border-destructive/25", ring: "border-destructive/30", sortKey: 1 },
-  thin:     { label: "Thin", chip: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30", ring: "border-amber-500/30", sortKey: 2 },
-  over:     { label: "Over-tested", chip: "bg-warm/30 text-warm-foreground border-warm/50", ring: "border-warm/50", sortKey: 3 },
-  balanced: { label: "Balanced", chip: "bg-success/15 text-success border-success/30", ring: "border-success/30", sortKey: 4 },
+  untested: { label: "Untested",    chip: "bg-destructive/15 text-destructive border-destructive/30",                   ring: "border-destructive/40", sortKey: 0 },
+  thin:     { label: "Thin",        chip: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",     ring: "border-amber-500/30",   sortKey: 1 },
+  balanced: { label: "Balanced",    chip: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30",         ring: "border-blue-500/30",    sortKey: 2 },
+  tested:   { label: "Tested",      chip: "bg-success/15 text-success border-success/30",                               ring: "border-success/30",     sortKey: 3 },
+  over:     { label: "Over-tested", chip: "bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-500/30", ring: "border-purple-500/30",  sortKey: 4 },
 };
 
 function CoverageDonut({ covered, total }: { covered: number; total: number }) {
@@ -2391,7 +2411,7 @@ function TopicsOverviewView({
       {/* Legend */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5 text-[10px] text-muted-foreground">
         <span className="font-medium text-foreground">Status:</span>
-        {(["under", "thin", "over", "balanced", "untested"] as OverviewStatus[]).map((s) => (
+        {(["untested", "thin", "balanced", "tested", "over"] as OverviewStatus[]).map((s) => (
           <span key={s} className="inline-flex items-center gap-1">
             <span className={`inline-block h-2 w-2 rounded-sm border ${STATUS_META[s].chip}`} />
             {STATUS_META[s].label}
@@ -2407,9 +2427,11 @@ function TopicsOverviewView({
         </span>
       </div>
 
-      {map.disciplines.map((disc) => {
-        const tiles = disc.topics
-          .map((t) => ({ topic: t, status: classifyTopic(t.los) }))
+      {(() => {
+        const avgPct = computeAvgPct(map.disciplines.flatMap((d) => d.topics));
+        return map.disciplines.map((disc) => {
+          const tiles = disc.topics
+            .map((t) => ({ topic: t, status: classifyTopic(t.los, avgPct) }))
           .sort((a, b) => {
             const k = STATUS_META[a.status].sortKey - STATUS_META[b.status].sortKey;
             if (k !== 0) return k;
@@ -2474,7 +2496,8 @@ function TopicsOverviewView({
             </div>
           </div>
         );
-      })}
+        });
+      })()}
     </div>
   );
 }
@@ -2514,7 +2537,8 @@ function TopicsByKOView({
     });
   };
 
-  const filterPills: ("all" | OverviewStatus)[] = ["all", "untested", "under", "thin", "balanced", "over"];
+  const filterPills: ("all" | OverviewStatus)[] = ["all", "untested", "thin", "balanced", "tested", "over"];
+  const avgPct = computeAvgPct(map.disciplines.flatMap((d) => d.topics));
 
   return (
     <div className="mt-3 space-y-3">
@@ -2548,7 +2572,7 @@ function TopicsByKOView({
 
       {map.disciplines.map((disc) => {
         const tiles = disc.topics
-          .map((t) => ({ topic: t, status: classifyTopic(t.los) }))
+          .map((t) => ({ topic: t, status: classifyTopic(t.los, avgPct) }))
           .filter(({ status }) => filter === "all" || status === filter)
           .sort((a, b) => {
             const k = STATUS_META[a.status].sortKey - STATUS_META[b.status].sortKey;
@@ -3101,7 +3125,6 @@ function CoveragePanel({
       contents.sort((a, b) => a.name.localeCompare(b.name));
       const covered = flat.filter((l) => l.covered).length;
       const m = koMarksMap.get(koName);
-      const status: OverviewStatus = classifyTopic(flat);
       buckets.push({
         name: koName,
         discipline: koDiscipline.get(koName) ?? "General",
@@ -3111,9 +3134,15 @@ function CoveragePanel({
         totalLOs: flat.length,
         actualMarks: m?.actual ?? flat.reduce((s, l) => s + l.actual, 0),
         targetMarks: m?.target ?? 0,
-        status,
+        status: "untested" as OverviewStatus, // filled in below once avgPct is known
         hasCodes: flat.some((l) => !!l.code),
       });
+    }
+
+    // Second pass: paper-wide avgPct (whole paper, all disciplines), then classify.
+    const avgPct = computeAvgPct(buckets.map((b) => ({ los: b.los })));
+    for (const b of buckets) {
+      b.status = classifyTopic(b.los, avgPct);
     }
 
     const filtered = inScope
@@ -3566,9 +3595,9 @@ function CoveragePanel({
               {([
                 { key: "all", label: "All" },
                 { key: "untested", label: "Untested" },
-                { key: "under", label: "Under-tested" },
                 { key: "thin", label: "Thin" },
                 { key: "balanced", label: "Balanced" },
+                { key: "tested", label: "Tested" },
                 { key: "over", label: "Over-tested" },
               ] as const).map((f) => {
                 const count = f.key === "all"
