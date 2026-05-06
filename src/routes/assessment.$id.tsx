@@ -3595,9 +3595,9 @@ function CoveragePanel({
               {([
                 { key: "all", label: "All" },
                 { key: "untested", label: "Untested" },
-                { key: "under", label: "Under-tested" },
                 { key: "thin", label: "Thin" },
                 { key: "balanced", label: "Balanced" },
+                { key: "tested", label: "Tested" },
                 { key: "over", label: "Over-tested" },
               ] as const).map((f) => {
                 const count = f.key === "all"
