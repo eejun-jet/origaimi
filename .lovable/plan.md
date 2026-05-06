@@ -1,85 +1,91 @@
-## Goal
+# Coach Chat — conversational mode for the Assessment Coach
 
-Two SS-only fixes:
+Right now the Coach panel does a one-shot review: click "Ask Coach" → it returns 1–3 observations + suggestions. There's no way to ask a follow-up like *"What's a good way to push this from recall to application?"* or *"Give me a Singapore context idea for the SBQ."*
 
-1. The KO list in the Assessment Builder must show only the three SS Issues — no generic "Knowledge" or "Skills" buckets.
-2. The SBQ source pool must cohere around a *specific sub-issue* (e.g. "Housing in Singapore — haves vs have-nots and national identity"), not generic Issue-level grab-bags. The 5–6 sources must all interrogate that one sub-issue so the assertion question (Q5) actually has something to evaluate.
+We'll add a **Chat** tab inside the existing `BuilderCoachPanel` so the same panel does both: the structured review (current behaviour) **and** a free-form conversation grounded in the live builder snapshot.
 
----
+## Where it lives
 
-## 1. KO list: Issues only (no Knowledge / Skills entries)
+- Same panel as today (`src/components/BuilderCoachPanel.tsx`), already shown on Steps 2–4 of the builder and on the assessment view post-generation.
+- A small two-tab toggle at the top: **Review** (current) | **Chat** (new).
+- On the post-generation page (`src/routes/assessment.$id.tsx`), we'll mount the same panel in "post-gen" mode so teachers can also chat about the draft they just got.
 
-**Problem.** When SS topics carry `outcomeCategories` like "Knowledge", "Skills", "Values", those leak into `availableKos` and appear as KO checkboxes alongside the three Issues.
+## What the chat does
 
-**Fix in `src/routes/new.tsx`:**
+- Conversational, grounded in the **same builder snapshot** the Review tab already sends (subject, level, AOs, KOs/LOs, sections, special instructions, syllabus aims/rationale where available).
+- Teacher can:
+  - Ask open questions ("Is AO1 too heavy here?", "What's a good unfamiliar context for this topic?")
+  - Brainstorm ideas ("Give me 3 SBQ source-pair ideas for Cold War").
+  - **Apply** any teacher-friendly one-liner the bot offers straight to **Special Instructions** with one click (same affordance as today's suggestions).
+- Streams tokens for a snappy feel.
+- Stays in the Coach voice: sparse, plain teacher language, British spelling, no Bloom's jargon, never lectures, never invents syllabus codes.
+- Conversation lives in component state for the session — not persisted (matches the lightweight, optional spirit of the Coach). A small "Clear chat" link resets it.
 
-- In the page-level `availableKos` memo, when `socialStudiesPaper` is true, return `DEFAULT_SOCIAL_STUDIES_KOS` directly and ignore `outcomeCategories` from topics.
-- In `SectionCard`'s `koCandidates` memo, when `availableKos` is the SS issue list, restrict candidates to that list only (drop topic-pool `outcome_categories` like Knowledge/Skills/Values for SS).
-- Result: SS users see exactly three KO checkboxes — Issue 1 / 2 / 3 — and nothing else.
+## New backend: `coach-chat` edge function
 
----
+A new function `supabase/functions/coach-chat/index.ts` that:
 
-## 2. SS SBQ sources: cohere around a specific sub-issue
+- Accepts `{ snapshot, messages, stage: "pre" | "post", assessmentId? }`.
+- Loads syllabus context (aims, assessment rationale, pedagogical notes, command-word glossary) the same way `coach-intent` already does, when `syllabus_doc_id` is present.
+- When `stage === "post"` and `assessmentId` is provided, also pulls the generated paper summary (sections, question stems, AO/LO tags) so the bot can reason about the actual draft, not just the plan.
+- Calls Lovable AI Gateway (`google/gemini-3-flash-preview`) with `stream: true` and returns the SSE stream straight to the client (per Lovable AI streaming pattern).
+- System prompt extends the existing Coach brief with chat-specific rules:
+  - Keep replies short (≤4 short paragraphs or ≤6 bullets).
+  - When the teacher asks for an idea, give 2–3 options, not a lecture.
+  - When proposing something the teacher could drop into Special Instructions, wrap it in a fenced block tagged `instruction` so the UI can render an "Apply to instructions" button next to it.
+  - Never claim to have generated the paper / never re-do the Review's job.
+  - Refuse off-topic requests politely (one line) and steer back to assessment design.
+- Handles 429/402 cleanly and surfaces them to the client as toasts (same pattern as `coach-intent`).
 
-**Problem.** Current curated bundles are organised at the *Issue* level (citizenship, diversity, globalisation). The 5 sources within an Issue jump across unrelated cases (Singapore Pledge → Worldwide Governance Indicators → Swiss face-covering → UDHR). They don't form a single *inquiry*, so the Q5 assertion ("how far do the sources agree…") has nothing coherent to assert. The user's example: under Issue 1, an SBQ should explore something concrete like *Housing in Singapore* and use sources that all illuminate the haves/have-nots tension and what that means for Singaporean identity/citizenship.
+## Frontend changes
 
-**Fix in `supabase/functions/generate-assessment/index.ts`:**
+### `src/components/BuilderCoachPanel.tsx`
+- Add a tab switcher (Review | Chat) using existing `Tabs` UI.
+- New `CoachChat` subcomponent:
+  - Local `messages: {role, content}[]` state.
+  - Composer (textarea + send button + Enter-to-send, Shift+Enter newline).
+  - Streams via `fetch` to `/functions/v1/coach-chat` and appends tokens to the last assistant message (token-by-token SSE parse, per Lovable AI streaming guidance).
+  - Renders assistant messages with `react-markdown` (already installed) so lists/bold come through.
+  - When the assistant emits a fenced `instruction` block, render an inline "Apply to instructions" button that calls the existing `onAppendInstructions` prop — so the chat reuses the same plumbing as the Review tab.
+  - Empty state: 3 suggestion chips ("Is the AO mix balanced?", "Give me a transfer context for this topic", "How can I push this beyond recall?") that prefill the composer.
+  - "Clear chat" link in the panel header when chat has any history.
+- Keep the existing Review behaviour identical when the Review tab is active.
 
-### 2a. Restructure curated bundles around *sub-issues*, not Issues
+### `src/routes/new.tsx`
+- No structural changes — `BuilderCoachPanel` already receives the snapshot and `onAppendInstructions`. Chat inherits both for free.
 
-Replace the three big SS bundles with multiple sub-issue bundles per Issue. Each sub-issue bundle has 5 sources that **all speak to the same concrete tension/case** so they can be compared, contrasted, and evaluated against a single assertion. Each bundle now carries:
+### `src/routes/assessment.$id.tsx` (post-generation)
+- Mount `<BuilderCoachPanel>` in a sidebar/drawer with `stage="post"` and the generated paper id, so teachers can chat about the draft (e.g. "Question 4 feels easy — suggest a harder variant" → bot replies, teacher can copy ideas back into the regenerate flow). No auto-apply here; chat output is advisory.
 
-- `issue: 1 | 2 | 3` (which SS Issue it belongs to, used for KO matching)
-- `subIssue: string` (concrete inquiry framing, e.g. "Housing inequality and Singaporean identity")
-- `assertion: string` (the controlling claim the 5 sources collectively interrogate — feeds Q5)
-- `inquiryQuestion: string` (the Key Inquiry framing for Q1's intro)
-- `sources: GroundedSource[]` — 5 sources, all about that specific sub-issue, including at least one *pictorial/data* source (chart, photo, infographic) per the SEAB SBQ format.
+## Out of scope (intentionally)
 
-Sub-issues to seed (2–3 per Issue, expandable later):
+- No persistence of chat history across sessions — keeps the feature lightweight and matches Coach's "optional, low-stakes" voice. We can add it later if teachers ask.
+- No tool-calling that mutates the builder state directly. The only write affordance is the existing "Apply to instructions" button.
+- No "ask Coach to generate the paper" — generation stays on the Generate button. Chat is for thinking, not for shortcutting the pipeline.
 
-- **Issue 1 — Citizenship & Governance**
-  - *Housing inequality & national identity* — HDB EIP policy text, an NLB article on the "haves and have-nots" debate, an ST/CNA piece on million-dollar HDB resale flats, an academic/IPS commentary on class fault lines, plus a chart of Gini / housing affordability over time.
-  - *Civic participation & dissent* — Pledge text, Article 14 of the Constitution, a contrasting case (e.g. Hong Kong protests / Swiss referendum), a domestic example of public consultation (Forward Singapore / Our Singapore Conversation), and a cartoon or infographic on civic engagement.
-- **Issue 2 — Diverse Society**
-  - *Managing racial harmony* — EIP text, MRHA / Maintenance of Religious Harmony commentary, a tudung/workplace religious-symbol case, a foreign comparator (Quebec Bill 21), and an image source (racial-harmony-day photo or poster).
-  - *Migrant workers & social cohesion* — TWC2 / MOM statement, a news report on dormitory conditions during COVID, a remittance/economic-contribution data source, an opinion piece on belonging, and a photo/chart.
-- **Issue 3 — Globalised World**
-  - *Trade openness & worker displacement* — MTI speech on FTAs, WTO trade-share data chart, a story on a Singapore worker retrained via SkillsFuture, an international counter-case (Brexit / US tariffs), and an ILO/migrant-worker excerpt.
-  - *Cultural globalisation & identity* — a Singlish/heritage commentary, a K-pop / Hollywood reach data source, a domestic counter (Speak Mandarin / SG culture pass), an academic piece on hybridisation, and an image/infographic.
+## Technical notes
 
-Each bundle uses 5 **different hosts** so distinct-host seeding hits the 5–6 cap from curated alone.
+```
+POST /functions/v1/coach-chat
+{
+  stage: "pre" | "post",
+  snapshot: { ...same shape as snapshotForAI() },
+  assessment_id?: string,        // post-gen only
+  messages: [{ role: "user"|"assistant", content: string }, ...]
+}
+→ text/event-stream (OpenAI-compatible SSE chunks)
+```
 
-### 2b. Bundle selection: pick *one* sub-issue per generation
-
-Update `curatedHumanitiesSourcePool` (and the SS code path that calls it) so that for SS sections it:
-
-1. Filters bundles whose `issue` matches the section's selected KO (Issue 1/2/3).
-2. From those, picks **exactly one** sub-issue bundle (deterministic seeded pick using section id + topic, so re-runs are stable but different sections vary).
-3. Returns those 5 sources only — no cross-mixing across sub-issues, no Issue-level grab-bag.
-
-If no Issue KO is selected, fall back to a sub-issue bundle whose trigger best matches the section topic / LOs (existing topic-group regex logic, but now over sub-issue triggers).
-
-### 2c. Wire sub-issue framing into the SBQ stems
-
-Currently `deriveTopicNoun` produces noun phrases from raw syllabus topic text (e.g. "exploring citizenship and governance"), which is exactly the generic phrasing the user is unhappy with. For SS:
-
-- When an SS sub-issue bundle is selected, override `topicNoun` and `inquiry` with the bundle's `subIssue` and `inquiryQuestion`.
-- Pass the bundle's `assertion` into the assertion-skill question (Q5), so the prompt reads e.g. *"'Housing inequality is undermining Singaporean identity.' How far do Sources A–E support this assertion? Use all the sources and your own knowledge."* instead of a generic "shaped by the actions of the major actors involved" stem.
-- Q1–Q4 stems continue to use the SBQ skill templates but with the concrete sub-issue noun phrase, so e.g. inference reads "What can you infer from Source A about *housing inequality in Singapore*?" rather than "about *exploring citizenship and governance*".
-
-### 2d. Pictorial source slot
-
-Each sub-issue bundle marks one source as `pictorial: true` (chart / photo / poster / infographic). The SBQ generator already supports an optional pictorial slot; ensure it picks the pictorial source when the bundle provides one so every SS SBQ paper has at least one image-based source as SEAB requires.
-
----
+- Function uses `google/gemini-3-flash-preview` for low latency. Falls back to a friendly toast on 429/402.
+- The system prompt is composed from the existing `coach-intent` brief + a small chat-mode addendum, so tone stays consistent across Review and Chat.
+- Markdown rendering: `react-markdown` (used elsewhere in the project) with a custom renderer for fenced ```instruction blocks that swaps in an "Apply" button.
+- `supabase/config.toml`: add a `[functions.coach-chat]` block only if non-default settings are needed (likely just `verify_jwt = true` to require an authed teacher); otherwise rely on defaults.
 
 ## Files touched
 
-- `src/routes/new.tsx` — restrict `availableKos` and `koCandidates` to the three SS Issues for SS papers.
-- `supabase/functions/generate-assessment/index.ts` — replace Issue-level SS bundles with sub-issue bundles (5 sources each, 1 pictorial), add deterministic sub-issue picker, route sub-issue framing into SBQ stems and the Q5 assertion.
+- **new** `supabase/functions/coach-chat/index.ts`
+- **edit** `src/components/BuilderCoachPanel.tsx` — add Tabs + CoachChat subcomponent
+- **edit** `src/routes/assessment.$id.tsx` — mount panel post-generation in `stage="post"` mode
+- **edit (maybe)** `supabase/config.toml` — register the new function if it needs non-default settings
 
-## Out of scope
-
-- No changes to History bundles, Section B SRQ logic, MCQ, or other subjects.
-- No new schema; `pictorial` flag lives only inside the edge function bundle struct.
-- Coach prompts unchanged (they read the resulting questions, which now carry the concrete sub-issue framing automatically).
+After approval I'll implement, deploy `coach-chat`, and verify streaming + the "Apply to instructions" hand-off in both pre- and post-generation contexts.
