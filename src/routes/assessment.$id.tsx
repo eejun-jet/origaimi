@@ -478,7 +478,6 @@ function EditorPage() {
 
   const retagAllQuestions = async () => {
     if (retagBusy) return;
-    if (!confirm(`Re-tag all ${questions.length} question${questions.length === 1 ? "" : "s"} with AI? This will overwrite existing AO / KO / LO tags based on each question's stem and the section's allowed pool.`)) return;
     setRetagBusy(true);
     const t = toast.loading("Re-tagging questions with AI…");
     try {
