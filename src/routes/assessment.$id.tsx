@@ -3125,7 +3125,6 @@ function CoveragePanel({
       contents.sort((a, b) => a.name.localeCompare(b.name));
       const covered = flat.filter((l) => l.covered).length;
       const m = koMarksMap.get(koName);
-      const status: OverviewStatus = classifyTopic(flat);
       buckets.push({
         name: koName,
         discipline: koDiscipline.get(koName) ?? "General",
@@ -3135,9 +3134,15 @@ function CoveragePanel({
         totalLOs: flat.length,
         actualMarks: m?.actual ?? flat.reduce((s, l) => s + l.actual, 0),
         targetMarks: m?.target ?? 0,
-        status,
+        status: "untested" as OverviewStatus, // filled in below once avgPct is known
         hasCodes: flat.some((l) => !!l.code),
       });
+    }
+
+    // Second pass: paper-wide avgPct (whole paper, all disciplines), then classify.
+    const avgPct = computeAvgPct(buckets.map((b) => ({ los: b.los })));
+    for (const b of buckets) {
+      b.status = classifyTopic(b.los, avgPct);
     }
 
     const filtered = inScope
