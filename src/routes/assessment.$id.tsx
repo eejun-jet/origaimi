@@ -281,20 +281,35 @@ function EditorPage() {
     toast.success(ids.length === 1 ? "Question removed" : `${ids.length} questions removed`);
   };
 
-  const moveQ = async (qId: string, dir: -1 | 1) => {
+  const moveQ = async (qId: string, target: -1 | 1 | "top" | "bottom") => {
     const idx = questions.findIndex((q) => q.id === qId);
-    const swap = idx + dir;
-    if (swap < 0 || swap >= questions.length) return;
-    const a = questions[idx];
-    const b = questions[swap];
-    const newQs = [...questions];
-    newQs[idx] = { ...b, position: a.position };
-    newQs[swap] = { ...a, position: b.position };
-    setQuestions(newQs);
-    await Promise.all([
-      supabase.from("assessment_questions").update({ position: b.position }).eq("id", a.id),
-      supabase.from("assessment_questions").update({ position: a.position }).eq("id", b.id),
-    ]);
+    if (idx < 0) return;
+
+    let newIdx: number;
+    if (target === "top") newIdx = 0;
+    else if (target === "bottom") newIdx = questions.length - 1;
+    else newIdx = idx + target;
+
+    if (newIdx === idx || newIdx < 0 || newIdx >= questions.length) return;
+
+    // Reorder, then re-assign positions using the existing sorted position
+    // values so we keep whatever spacing the list already had.
+    const reordered = [...questions];
+    const [moved] = reordered.splice(idx, 1);
+    reordered.splice(newIdx, 0, moved);
+
+    const positions = questions.map((q) => q.position).sort((a, b) => a - b);
+    const updated = reordered.map((q, i) => ({ ...q, position: positions[i] }));
+    setQuestions(updated);
+
+    const changed = updated.filter(
+      (q) => q.position !== questions.find((orig) => orig.id === q.id)?.position,
+    );
+    await Promise.all(
+      changed.map((q) =>
+        supabase.from("assessment_questions").update({ position: q.position }).eq("id", q.id),
+      ),
+    );
   };
 
   const regenerate = async (
