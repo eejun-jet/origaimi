@@ -2496,7 +2496,8 @@ function TopicsOverviewView({
             </div>
           </div>
         );
-      })}
+        });
+      })()}
     </div>
   );
 }
