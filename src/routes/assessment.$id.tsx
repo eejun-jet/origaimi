@@ -2537,7 +2537,8 @@ function TopicsByKOView({
     });
   };
 
-  const filterPills: ("all" | OverviewStatus)[] = ["all", "untested", "under", "thin", "balanced", "over"];
+  const filterPills: ("all" | OverviewStatus)[] = ["all", "untested", "thin", "balanced", "tested", "over"];
+  const avgPct = computeAvgPct(map.disciplines.flatMap((d) => d.topics));
 
   return (
     <div className="mt-3 space-y-3">
