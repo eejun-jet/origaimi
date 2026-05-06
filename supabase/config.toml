@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.coach-intent]
 verify_jwt = false
+
+[functions.coach-chat]
+verify_jwt = false
