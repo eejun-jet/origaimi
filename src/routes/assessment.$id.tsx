@@ -479,7 +479,7 @@ function EditorPage() {
   const retagAllQuestions = async () => {
     if (retagBusy) return;
     setRetagBusy(true);
-    const t = toast.loading("Re-tagging questions with AI…");
+    const t = toast.loading("Recalculating tags with AI…");
     try {
       const { data, error } = await supabase.functions.invoke("retag-questions", {
         body: { assessmentId: id },
@@ -490,7 +490,7 @@ function EditorPage() {
       await loadAll();
       const failed = payload?.errors?.length ?? 0;
       toast.success(
-        `Re-tagged ${payload?.updated ?? 0} / ${payload?.total ?? 0} questions${failed > 0 ? ` (${failed} skipped)` : ""}`,
+        `Recalculated ${payload?.updated ?? 0} / ${payload?.total ?? 0} questions${failed > 0 ? ` (${failed} skipped)` : ""}`,
         { id: t },
       );
     } catch (e) {
