@@ -478,9 +478,8 @@ function EditorPage() {
 
   const retagAllQuestions = async () => {
     if (retagBusy) return;
-    if (!confirm(`Re-tag all ${questions.length} question${questions.length === 1 ? "" : "s"} with AI? This will overwrite existing AO / KO / LO tags based on each question's stem and the section's allowed pool.`)) return;
     setRetagBusy(true);
-    const t = toast.loading("Re-tagging questions with AI…");
+    const t = toast.loading("Recalculating tags with AI…");
     try {
       const { data, error } = await supabase.functions.invoke("retag-questions", {
         body: { assessmentId: id },
@@ -491,7 +490,7 @@ function EditorPage() {
       await loadAll();
       const failed = payload?.errors?.length ?? 0;
       toast.success(
-        `Re-tagged ${payload?.updated ?? 0} / ${payload?.total ?? 0} questions${failed > 0 ? ` (${failed} skipped)` : ""}`,
+        `Recalculated ${payload?.updated ?? 0} / ${payload?.total ?? 0} questions${failed > 0 ? ` (${failed} skipped)` : ""}`,
         { id: t },
       );
     } catch (e) {
@@ -3235,10 +3234,10 @@ function CoveragePanel({
                 onClick={() => onRetag()}
                 disabled={retagBusy}
                 className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-[10px] font-medium text-foreground transition hover:bg-muted disabled:opacity-50"
-                title="Re-tag every question with AI based on its stem and the section's allowed AOs / KOs / LOs"
+                title="Recalculate every question's AO / KO / LO tags with AI based on its stem and the section's allowed pool"
               >
                 {retagBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-                Re-tag with AI
+                Recalculate with AI
               </button>
             ) : undefined}
           >
