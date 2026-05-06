@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as PapersRouteImport } from './routes/papers'
+import { Route as OurStoryRouteImport } from './routes/our-story'
 import { Route as NewRouteImport } from './routes/new'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as BankRouteImport } from './routes/bank'
@@ -24,6 +25,11 @@ import { Route as AdminSyllabusIdRouteImport } from './routes/admin.syllabus.$id
 const PapersRoute = PapersRouteImport.update({
   id: '/papers',
   path: '/papers',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OurStoryRoute = OurStoryRouteImport.update({
+  id: '/our-story',
+  path: '/our-story',
   getParentRoute: () => rootRouteImport,
 } as any)
 const NewRoute = NewRouteImport.update({
@@ -83,6 +89,7 @@ export interface FileRoutesByFullPath {
   '/bank': typeof BankRoute
   '/dashboard': typeof DashboardRoute
   '/new': typeof NewRoute
+  '/our-story': typeof OurStoryRoute
   '/papers': typeof PapersRoute
   '/assessment/$id': typeof AssessmentIdRoute
   '/paper-set/$id': typeof PaperSetIdRoute
@@ -96,6 +103,7 @@ export interface FileRoutesByTo {
   '/bank': typeof BankRoute
   '/dashboard': typeof DashboardRoute
   '/new': typeof NewRoute
+  '/our-story': typeof OurStoryRoute
   '/papers': typeof PapersRoute
   '/assessment/$id': typeof AssessmentIdRoute
   '/paper-set/$id': typeof PaperSetIdRoute
@@ -110,6 +118,7 @@ export interface FileRoutesById {
   '/bank': typeof BankRoute
   '/dashboard': typeof DashboardRoute
   '/new': typeof NewRoute
+  '/our-story': typeof OurStoryRoute
   '/papers': typeof PapersRoute
   '/assessment/$id': typeof AssessmentIdRoute
   '/paper-set/$id': typeof PaperSetIdRoute
@@ -125,6 +134,7 @@ export interface FileRouteTypes {
     | '/bank'
     | '/dashboard'
     | '/new'
+    | '/our-story'
     | '/papers'
     | '/assessment/$id'
     | '/paper-set/$id'
@@ -138,6 +148,7 @@ export interface FileRouteTypes {
     | '/bank'
     | '/dashboard'
     | '/new'
+    | '/our-story'
     | '/papers'
     | '/assessment/$id'
     | '/paper-set/$id'
@@ -151,6 +162,7 @@ export interface FileRouteTypes {
     | '/bank'
     | '/dashboard'
     | '/new'
+    | '/our-story'
     | '/papers'
     | '/assessment/$id'
     | '/paper-set/$id'
@@ -165,6 +177,7 @@ export interface RootRouteChildren {
   BankRoute: typeof BankRoute
   DashboardRoute: typeof DashboardRoute
   NewRoute: typeof NewRoute
+  OurStoryRoute: typeof OurStoryRoute
   PapersRoute: typeof PapersRoute
   AssessmentIdRoute: typeof AssessmentIdRoute
   PaperSetIdRoute: typeof PaperSetIdRoute
@@ -180,6 +193,13 @@ declare module '@tanstack/react-router' {
       path: '/papers'
       fullPath: '/papers'
       preLoaderRoute: typeof PapersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/our-story': {
+      id: '/our-story'
+      path: '/our-story'
+      fullPath: '/our-story'
+      preLoaderRoute: typeof OurStoryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/new': {
@@ -261,6 +281,7 @@ const rootRouteChildren: RootRouteChildren = {
   BankRoute: BankRoute,
   DashboardRoute: DashboardRoute,
   NewRoute: NewRoute,
+  OurStoryRoute: OurStoryRoute,
   PapersRoute: PapersRoute,
   AssessmentIdRoute: AssessmentIdRoute,
   PaperSetIdRoute: PaperSetIdRoute,
