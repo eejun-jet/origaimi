@@ -1543,12 +1543,37 @@ function QuestionCard({
               </Button>
             </>
           )}
-          <Button size="icon" variant="ghost" disabled={isFirst} onClick={() => onMove(-1)}>
-            <ChevronUp className="h-4 w-4" />
-          </Button>
-          <Button size="icon" variant="ghost" disabled={isLast} onClick={() => onMove(1)}>
-            <ChevronDown className="h-4 w-4" />
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={isFirst && isLast}
+                className="gap-1"
+                title="Reorder this question"
+                aria-label="Reorder question"
+              >
+                <MoveVertical className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Move</span>
+                <ChevronDown className="h-3 w-3 opacity-60" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem disabled={isFirst} onClick={() => onMove("top")}>
+                <ArrowUpToLine className="mr-2 h-4 w-4" /> Move to top
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={isFirst} onClick={() => onMove(-1)}>
+                <ArrowUp className="mr-2 h-4 w-4" /> Move up
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem disabled={isLast} onClick={() => onMove(1)}>
+                <ArrowDown className="mr-2 h-4 w-4" /> Move down
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={isLast} onClick={() => onMove("bottom")}>
+                <ArrowDownToLine className="mr-2 h-4 w-4" /> Move to bottom
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
