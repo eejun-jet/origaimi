@@ -2572,7 +2572,7 @@ function TopicsByKOView({
 
       {map.disciplines.map((disc) => {
         const tiles = disc.topics
-          .map((t) => ({ topic: t, status: classifyTopic(t.los) }))
+          .map((t) => ({ topic: t, status: classifyTopic(t.los, avgPct) }))
           .filter(({ status }) => filter === "all" || status === filter)
           .sort((a, b) => {
             const k = STATUS_META[a.status].sortKey - STATUS_META[b.status].sortKey;
