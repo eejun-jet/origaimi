@@ -2411,7 +2411,7 @@ function TopicsOverviewView({
       {/* Legend */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5 text-[10px] text-muted-foreground">
         <span className="font-medium text-foreground">Status:</span>
-        {(["under", "thin", "over", "balanced", "untested"] as OverviewStatus[]).map((s) => (
+        {(["untested", "thin", "balanced", "tested", "over"] as OverviewStatus[]).map((s) => (
           <span key={s} className="inline-flex items-center gap-1">
             <span className={`inline-block h-2 w-2 rounded-sm border ${STATUS_META[s].chip}`} />
             {STATUS_META[s].label}
