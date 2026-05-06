@@ -19,7 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Loader2, RefreshCw, Trash2, BookmarkPlus, Sparkles, ChevronUp, ChevronDown, X, Download, Image as ImageIcon, Wand2, MessageCircle, UserPlus, AlertTriangle, Info, CheckCircle2, Pencil, Maximize2, MoreHorizontal, ListChecks } from "lucide-react";
+import { ArrowLeft, Loader2, RefreshCw, Trash2, BookmarkPlus, Sparkles, ChevronUp, ChevronDown, X, Download, Image as ImageIcon, Wand2, MessageCircle, UserPlus, AlertTriangle, Info, CheckCircle2, Pencil, Maximize2, MoreHorizontal, ListChecks, ArrowUp, ArrowDown, ArrowUpToLine, ArrowDownToLine, MoveVertical } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { BLOOMS } from "@/lib/syllabus";
 import { toSectioned, sectionAtPosition, getSbqSkill, KNOWLEDGE_OUTCOMES, isHumanitiesSubject, isScienceSubject, type Section } from "@/lib/sections";
@@ -39,6 +39,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { CommentThread } from "@/components/CommentThread";
@@ -280,20 +281,35 @@ function EditorPage() {
     toast.success(ids.length === 1 ? "Question removed" : `${ids.length} questions removed`);
   };
 
-  const moveQ = async (qId: string, dir: -1 | 1) => {
+  const moveQ = async (qId: string, target: -1 | 1 | "top" | "bottom") => {
     const idx = questions.findIndex((q) => q.id === qId);
-    const swap = idx + dir;
-    if (swap < 0 || swap >= questions.length) return;
-    const a = questions[idx];
-    const b = questions[swap];
-    const newQs = [...questions];
-    newQs[idx] = { ...b, position: a.position };
-    newQs[swap] = { ...a, position: b.position };
-    setQuestions(newQs);
-    await Promise.all([
-      supabase.from("assessment_questions").update({ position: b.position }).eq("id", a.id),
-      supabase.from("assessment_questions").update({ position: a.position }).eq("id", b.id),
-    ]);
+    if (idx < 0) return;
+
+    let newIdx: number;
+    if (target === "top") newIdx = 0;
+    else if (target === "bottom") newIdx = questions.length - 1;
+    else newIdx = idx + target;
+
+    if (newIdx === idx || newIdx < 0 || newIdx >= questions.length) return;
+
+    // Reorder, then re-assign positions using the existing sorted position
+    // values so we keep whatever spacing the list already had.
+    const reordered = [...questions];
+    const [moved] = reordered.splice(idx, 1);
+    reordered.splice(newIdx, 0, moved);
+
+    const positions = questions.map((q) => q.position).sort((a, b) => a - b);
+    const updated = reordered.map((q, i) => ({ ...q, position: positions[i] }));
+    setQuestions(updated);
+
+    const changed = updated.filter(
+      (q) => q.position !== questions.find((orig) => orig.id === q.id)?.position,
+    );
+    await Promise.all(
+      changed.map((q) =>
+        supabase.from("assessment_questions").update({ position: q.position }).eq("id", q.id),
+      ),
+    );
   };
 
   const regenerate = async (
@@ -1425,7 +1441,7 @@ function QuestionCard({
   onToggleSelect: () => void;
   onUpdate: (patch: Partial<Question>) => void;
   onDelete: () => void;
-  onMove: (dir: -1 | 1) => void;
+  onMove: (target: -1 | 1 | "top" | "bottom") => void;
   onRegenerate: (instruction: string, difficulty?: "easy" | "medium" | "hard") => void;
   onBank: () => void;
   onDiagramAction: (mode: "generate" | "edit" | "regenerate", instruction?: string) => Promise<boolean>;
@@ -1527,12 +1543,37 @@ function QuestionCard({
               </Button>
             </>
           )}
-          <Button size="icon" variant="ghost" disabled={isFirst} onClick={() => onMove(-1)}>
-            <ChevronUp className="h-4 w-4" />
-          </Button>
-          <Button size="icon" variant="ghost" disabled={isLast} onClick={() => onMove(1)}>
-            <ChevronDown className="h-4 w-4" />
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={isFirst && isLast}
+                className="gap-1"
+                title="Reorder this question"
+                aria-label="Reorder question"
+              >
+                <MoveVertical className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Move</span>
+                <ChevronDown className="h-3 w-3 opacity-60" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem disabled={isFirst} onClick={() => onMove("top")}>
+                <ArrowUpToLine className="mr-2 h-4 w-4" /> Move to top
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={isFirst} onClick={() => onMove(-1)}>
+                <ArrowUp className="mr-2 h-4 w-4" /> Move up
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem disabled={isLast} onClick={() => onMove(1)}>
+                <ArrowDown className="mr-2 h-4 w-4" /> Move down
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={isLast} onClick={() => onMove("bottom")}>
+                <ArrowDownToLine className="mr-2 h-4 w-4" /> Move to bottom
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
