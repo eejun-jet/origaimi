@@ -1483,7 +1483,17 @@ function QuestionCard({
           />
           <span className="font-paper text-lg font-semibold text-foreground">Q{index}</span>
           <Badge variant="outline">{q.question_type.replace("_", " ")}</Badge>
-          {q.topic && <Badge variant="outline">{q.topic}</Badge>}
+          {q.topic && (
+            <span
+              className="inline-flex items-center rounded-sm bg-muted/60 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground"
+              title="Topic (read-only)"
+            >
+              {/* Strip a trailing "[code]" if it duplicates the leading code, e.g. "1.1 Experimental Design [1.1]" → "1.1 Experimental Design" */}
+              {q.topic.replace(/\s*\[([^\]]+)\]\s*$/, (_m, code) =>
+                q.topic!.trim().startsWith(`${code} `) ? "" : ` [${code}]`,
+              )}
+            </span>
+          )}
           {q.bloom_level && <Badge variant="secondary">{q.bloom_level}</Badge>}
           {q.difficulty && (
             <Badge variant="outline" className="capitalize">{q.difficulty}</Badge>
