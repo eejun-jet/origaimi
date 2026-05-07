@@ -290,6 +290,16 @@ function PaperSetView() {
     [flatQuestions],
   );
 
+  const untaggedByPaper = useMemo(() => {
+    return papers
+      .map((p) => {
+        const qs = flatQuestions.filter((x) => x.paperId === p.id);
+        const untagged = qs.filter((x) => !((x.q.ao_codes ?? []).length > 0 || (x.q.learning_outcomes ?? []).length > 0 || (x.q.knowledge_outcomes ?? []).length > 0)).length;
+        return { paper: p, total: qs.length, untagged };
+      })
+      .filter((r) => r.untagged > 0);
+  }, [papers, flatQuestions]);
+
   const reloadPapers = async () => {
     const { data: links } = await supabase
       .from("paper_set_papers").select("paper_id,position").eq("set_id", id).order("position");
@@ -300,6 +310,23 @@ function PaperSetView() {
     const order = new Map(ids.map((pid, i) => [pid, i] as const));
     const sorted = ((pps as PaperRow[]) ?? []).sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
     setPapers(sorted);
+  };
+
+  const reclassifyOne = async (paperId: string, paperTitle: string) => {
+    setReclassifying(true);
+    try {
+      toast.message(`Reclassifying ${paperTitle}…`);
+      const { data, error } = await supabase.functions.invoke("reclassify-paper", { body: { paper_id: paperId } });
+      if (error) {
+        toast.error(`Failed: ${paperTitle}`, { description: error.message });
+        return;
+      }
+      const r = data as { classified?: number; total?: number };
+      toast.success(`Tagged ${r?.classified ?? 0}/${r?.total ?? 0} questions in ${paperTitle}`);
+      await reloadPapers();
+    } finally {
+      setReclassifying(false);
+    }
   };
 
   const reclassifyAll = async () => {
@@ -419,13 +446,33 @@ function PaperSetView() {
         </header>
 
         {untaggedCount > 0 && totalQuestions > 0 ? (
-          <div className="rounded-md border border-amber-300/50 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-sm">
+          <div className="rounded-md border border-amber-300/50 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-sm space-y-2">
             <div className="font-medium text-amber-900 dark:text-amber-100">
-              {untaggedCount} of {totalQuestions} questions have no syllabus tags yet.
+              {untaggedCount} of {totalQuestions} questions ({Math.round((untaggedCount / totalQuestions) * 100)}%) have no syllabus tags yet.
             </div>
-            <p className="text-amber-800/80 dark:text-amber-200/80 mt-0.5">
-              The macro review needs AO/KO/LO tags to find drift and gaps. Click <span className="font-medium">Reclassify all papers</span> to tag them now.
+            <p className="text-amber-800/80 dark:text-amber-200/80">
+              This is a tagging gap, not a syllabus gap. The macro review needs AO/KO/LO tags on each question to map demand. Reclassify the affected papers below.
             </p>
+            {untaggedByPaper.length > 0 ? (
+              <ul className="space-y-1.5 pt-1">
+                {untaggedByPaper.map((r) => (
+                  <li key={r.paper.id} className="flex items-center justify-between gap-3 flex-wrap">
+                    <span className="text-amber-900 dark:text-amber-100">
+                      <span className="font-medium">{r.paper.title}</span>{" "}
+                      <span className="text-amber-800/70 dark:text-amber-200/70">— {r.untagged}/{r.total} untagged</span>
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => reclassifyOne(r.paper.id, r.paper.title)}
+                      disabled={reclassifying || running}
+                    >
+                      Reclassify this paper
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </div>
         ) : null}
 
@@ -495,7 +542,9 @@ function CoverageList({
     <div className="space-y-6">
       <div className="rounded-lg border border-border bg-card overflow-hidden">
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 px-4 py-2 border-b border-border text-xs text-muted-foreground">
-          <span>{covered.length} of {rows.length} covered</span>
+          <span title="Syllabus coverage = how many syllabus outcomes are touched by at least one question in this set. A real exam typically tests only 20–30% of the full syllabus, so low coverage here is normal.">
+            {covered.length} of {rows.length} syllabus outcomes assessed by this set ({rows.length > 0 ? Math.round((covered.length / rows.length) * 100) : 0}%)
+          </span>
           <span>Per-paper coverage</span>
         </div>
         <ul className="divide-y divide-border">
