@@ -131,15 +131,26 @@ Deno.serve(async (req) => {
       topics = (tps as typeof topics) ?? [];
     }
 
-    // Aggregate.
+    // Aggregate. Skip mark-scheme papers — they duplicate question rows
+    // without adding assessment demand.
+    const isMarkScheme = (title: string | null | undefined) => {
+      const t = (title ?? "").toLowerCase();
+      return /\[ms\]|mark\s*scheme|marking\s*scheme/.test(t);
+    };
+    const allPapers = (papers ?? []) as { id: string; title: string | null; questions_json: unknown }[];
+    const qpPapers = allPapers.filter((p) => !isMarkScheme(p.title));
+    const papersUsed = qpPapers.length;
+    const papersSkipped = allPapers.length - qpPapers.length;
+
     const aoMarks = new Map<string, number>();
     const kosSeen = new Set<string>();
     const losSeen = new Set<string>();
     let totalMarks = 0;
     let totalQuestions = 0;
+    let unclassifiedQuestions = 0;
     const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").replace(/[.;:,!?\s]+$/g, "").trim();
 
-    for (const p of (papers ?? []) as { questions_json: unknown }[]) {
+    for (const p of qpPapers) {
       const arr = Array.isArray(p.questions_json) ? (p.questions_json as ParsedQuestion[]) : [];
       for (const q of arr) {
         totalQuestions++;
@@ -150,6 +161,8 @@ Deno.serve(async (req) => {
         if (codes.length > 0) {
           const per = m / codes.length;
           for (const c of codes) aoMarks.set(c, (aoMarks.get(c) ?? 0) + per);
+        } else {
+          unclassifiedQuestions++;
         }
         for (const k of q.knowledge_outcomes ?? []) if (k) kosSeen.add(k.trim());
         for (const l of q.learning_outcomes ?? []) if (l) losSeen.add(norm(l));
