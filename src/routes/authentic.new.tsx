@@ -131,17 +131,17 @@ function NewAuthenticPlan() {
             </div>
             <div>
               <Label>Subject</Label>
-              <PlainSelect value={subject} onChange={setSubject} options={[{ value: "", label: "Any subject" }, ...SUBJECTS.map((s) => ({ value: s, label: s }))]} />
+              <PlainSelect value={subject} onValueChange={setSubject} options={[{ value: "", label: "Any subject" }, ...SUBJECTS.map((s) => ({ value: s, label: s }))]} />
             </div>
             <div>
               <Label>Level</Label>
-              <PlainSelect value={level} onChange={setLevel} options={[{ value: "", label: "Any level" }, ...LEVELS.map((l) => ({ value: l, label: l }))]} />
+              <PlainSelect value={level} onValueChange={setLevel} options={[{ value: "", label: "Any level" }, ...LEVELS.map((l) => ({ value: l, label: l }))]} />
             </div>
             <div>
               <Label>Syllabus (optional but recommended)</Label>
               <PlainSelect
                 value={syllabusDocId}
-                onChange={setSyllabusDocId}
+                onValueChange={setSyllabusDocId}
                 options={[{ value: "", label: "No syllabus context" }, ...filteredDocs.map((d) => ({ value: d.id, label: `${d.syllabus_code ?? ""} ${d.title}`.trim() }))]}
               />
             </div>
