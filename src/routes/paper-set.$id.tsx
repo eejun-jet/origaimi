@@ -290,6 +290,16 @@ function PaperSetView() {
     [flatQuestions],
   );
 
+  const untaggedByPaper = useMemo(() => {
+    return papers
+      .map((p) => {
+        const qs = flatQuestions.filter((x) => x.paperId === p.id);
+        const untagged = qs.filter((x) => !((x.q.ao_codes ?? []).length > 0 || (x.q.learning_outcomes ?? []).length > 0 || (x.q.knowledge_outcomes ?? []).length > 0)).length;
+        return { paper: p, total: qs.length, untagged };
+      })
+      .filter((r) => r.untagged > 0);
+  }, [papers, flatQuestions]);
+
   const reloadPapers = async () => {
     const { data: links } = await supabase
       .from("paper_set_papers").select("paper_id,position").eq("set_id", id).order("position");
