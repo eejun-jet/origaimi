@@ -199,7 +199,7 @@ Deno.serve(async (req) => {
         inScope.add("General");
       } else {
         const detected = new Set<string>();
-        for (const p of (papers ?? []) as { questions_json: unknown }[]) {
+        for (const p of qpPapers) {
           const arr = Array.isArray(p.questions_json) ? (p.questions_json as ParsedQuestion[]) : [];
           for (const q of arr) {
             for (const k of q.knowledge_outcomes ?? []) {
