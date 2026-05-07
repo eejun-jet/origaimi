@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SUBJECTS, LEVELS } from "@/lib/syllabus";
-import { Loader2, Layers, Upload, RefreshCw } from "lucide-react";
+import { Loader2, Layers, Upload, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/paper-set/new")({
@@ -218,6 +218,25 @@ function PaperSetNew() {
     }
   };
 
+  const deletePaper = async (paper: PaperRow) => {
+    if (!confirm(`Delete "${paper.title}"? This removes the paper, its diagrams, and any bank items derived from it.`)) return;
+    try {
+      const { data: row } = await supabase.from("past_papers").select("file_path").eq("id", paper.id).single();
+      const filePath = (row as { file_path: string } | null)?.file_path;
+      await supabase.from("past_paper_diagrams").delete().eq("paper_id", paper.id);
+      await supabase.from("question_bank_items").delete().eq("past_paper_id", paper.id);
+      await supabase.from("paper_set_papers").delete().eq("paper_id", paper.id);
+      const { error } = await supabase.from("past_papers").delete().eq("id", paper.id);
+      if (error) { toast.error(`Delete failed: ${error.message}`); return; }
+      if (filePath) await supabase.storage.from("papers").remove([filePath]).catch(() => {});
+      setSelected((s) => { const n = new Set(s); n.delete(paper.id); return n; });
+      toast.success("Paper deleted.");
+      await loadPapers();
+    } catch (e) {
+      toast.error(`Delete failed: ${String(e)}`);
+    }
+  };
+
 
   const readySelected = papers.filter((p) => selected.has(p.id) && p.parse_status === "ready").length;
   const canSave = title.trim().length > 0 && subject && level && readySelected >= 2 && !saving;
@@ -422,6 +441,14 @@ function PaperSetNew() {
                         <RefreshCw className="h-3.5 w-3.5" /> Retry
                       </Button>
                     ) : null}
+                    <Button
+                      type="button" size="sm" variant="ghost"
+                      onClick={() => deletePaper(p)}
+                      className="gap-1 text-destructive hover:text-destructive"
+                      title="Delete this paper"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
                   </li>
                 );
               })}
