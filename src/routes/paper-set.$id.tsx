@@ -62,6 +62,11 @@ type Tab = "ao" | "ko" | "lo" | "papers" | "summary";
 type ReviewSnapshot = {
   ran_at: string;
   model: string | null;
+  papers_used?: number;
+  papers_skipped?: number;
+  total_questions?: number;
+  total_marks?: number;
+  unclassified_questions?: number;
   findings?: {
     summary?: string;
     priority_insights?: string[];
