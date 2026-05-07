@@ -19,6 +19,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as PaperSetNewRouteImport } from './routes/paper-set.new'
 import { Route as PaperSetIdRouteImport } from './routes/paper-set.$id'
 import { Route as AuthenticNewRouteImport } from './routes/authentic.new'
+import { Route as AuthenticIdRouteImport } from './routes/authentic.$id'
 import { Route as AssessmentIdRouteImport } from './routes/assessment.$id'
 import { Route as AdminSyllabusIndexRouteImport } from './routes/admin.syllabus.index'
 import { Route as AdminSyllabusIdRouteImport } from './routes/admin.syllabus.$id'
@@ -74,6 +75,11 @@ const AuthenticNewRoute = AuthenticNewRouteImport.update({
   path: '/authentic/new',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticIdRoute = AuthenticIdRouteImport.update({
+  id: '/authentic/$id',
+  path: '/authentic/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AssessmentIdRoute = AssessmentIdRouteImport.update({
   id: '/assessment/$id',
   path: '/assessment/$id',
@@ -105,6 +111,7 @@ export interface FileRoutesByFullPath {
   '/our-story': typeof OurStoryRoute
   '/papers': typeof PapersRoute
   '/assessment/$id': typeof AssessmentIdRoute
+  '/authentic/$id': typeof AuthenticIdRoute
   '/authentic/new': typeof AuthenticNewRoute
   '/paper-set/$id': typeof PaperSetIdRoute
   '/paper-set/new': typeof PaperSetNewRoute
@@ -121,6 +128,7 @@ export interface FileRoutesByTo {
   '/our-story': typeof OurStoryRoute
   '/papers': typeof PapersRoute
   '/assessment/$id': typeof AssessmentIdRoute
+  '/authentic/$id': typeof AuthenticIdRoute
   '/authentic/new': typeof AuthenticNewRoute
   '/paper-set/$id': typeof PaperSetIdRoute
   '/paper-set/new': typeof PaperSetNewRoute
@@ -138,6 +146,7 @@ export interface FileRoutesById {
   '/our-story': typeof OurStoryRoute
   '/papers': typeof PapersRoute
   '/assessment/$id': typeof AssessmentIdRoute
+  '/authentic/$id': typeof AuthenticIdRoute
   '/authentic/new': typeof AuthenticNewRoute
   '/paper-set/$id': typeof PaperSetIdRoute
   '/paper-set/new': typeof PaperSetNewRoute
@@ -156,6 +165,7 @@ export interface FileRouteTypes {
     | '/our-story'
     | '/papers'
     | '/assessment/$id'
+    | '/authentic/$id'
     | '/authentic/new'
     | '/paper-set/$id'
     | '/paper-set/new'
@@ -172,6 +182,7 @@ export interface FileRouteTypes {
     | '/our-story'
     | '/papers'
     | '/assessment/$id'
+    | '/authentic/$id'
     | '/authentic/new'
     | '/paper-set/$id'
     | '/paper-set/new'
@@ -188,6 +199,7 @@ export interface FileRouteTypes {
     | '/our-story'
     | '/papers'
     | '/assessment/$id'
+    | '/authentic/$id'
     | '/authentic/new'
     | '/paper-set/$id'
     | '/paper-set/new'
@@ -205,6 +217,7 @@ export interface RootRouteChildren {
   OurStoryRoute: typeof OurStoryRoute
   PapersRoute: typeof PapersRoute
   AssessmentIdRoute: typeof AssessmentIdRoute
+  AuthenticIdRoute: typeof AuthenticIdRoute
   AuthenticNewRoute: typeof AuthenticNewRoute
   PaperSetIdRoute: typeof PaperSetIdRoute
   PaperSetNewRoute: typeof PaperSetNewRoute
@@ -285,6 +298,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticNewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/authentic/$id': {
+      id: '/authentic/$id'
+      path: '/authentic/$id'
+      fullPath: '/authentic/$id'
+      preLoaderRoute: typeof AuthenticIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/assessment/$id': {
       id: '/assessment/$id'
       path: '/assessment/$id'
@@ -325,6 +345,7 @@ const rootRouteChildren: RootRouteChildren = {
   OurStoryRoute: OurStoryRoute,
   PapersRoute: PapersRoute,
   AssessmentIdRoute: AssessmentIdRoute,
+  AuthenticIdRoute: AuthenticIdRoute,
   AuthenticNewRoute: AuthenticNewRoute,
   PaperSetIdRoute: PaperSetIdRoute,
   PaperSetNewRoute: PaperSetNewRoute,
@@ -335,3 +356,12 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}
