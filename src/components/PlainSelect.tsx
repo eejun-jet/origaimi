@@ -66,7 +66,14 @@ export function PlainSelect({
         ref={triggerRef}
         type="button"
         disabled={disabled}
-        onClick={() => setOpen((o) => !o)}
+        onPointerDown={(e) => { e.preventDefault(); if (!disabled) setOpen((o) => !o); }}
+        onClick={(e) => { e.preventDefault(); }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " " || e.key === "ArrowDown") {
+            e.preventDefault();
+            if (!disabled) setOpen(true);
+          }
+        }}
         data-no-bb=""
         className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
       >
@@ -90,7 +97,8 @@ export function PlainSelect({
                   key={o.value}
                   type="button"
                   data-no-bb=""
-                  onClick={() => { onValueChange(o.value); setOpen(false); }}
+                  onPointerDown={(e) => { e.preventDefault(); onValueChange(o.value); setOpen(false); }}
+                  onClick={(e) => e.preventDefault()}
                   className="flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
                 >
                   <span>{o.label}</span>
