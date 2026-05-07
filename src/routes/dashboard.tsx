@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, FileText, Search, Trash2, Layers } from "lucide-react";
+import { Plus, FileText, Search, Trash2, Layers, Lightbulb } from "lucide-react";
 import { toast } from "sonner";
 import { SUBJECTS, LEVELS } from "@/lib/syllabus";
 
@@ -97,7 +97,12 @@ function Dashboard() {
               Drafts, in review, and finalised papers — all in one place.
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Link to="/authentic/new">
+              <Button variant="outline" className="gap-2">
+                <Lightbulb className="h-4 w-4" /> Authentic plan
+              </Button>
+            </Link>
             <Link to="/paper-set/new">
               <Button variant="outline" className="gap-2">
                 <Layers className="h-4 w-4" /> Review paper set

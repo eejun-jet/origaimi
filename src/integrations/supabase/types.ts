@@ -288,6 +288,140 @@ export type Database = {
           },
         ]
       }
+      authentic_ideas: {
+        Row: {
+          ao_codes: string[]
+          brief: string | null
+          created_at: string
+          duration_minutes: number | null
+          group_size: string | null
+          id: string
+          knowledge_outcomes: string[]
+          learning_outcomes: string[]
+          materials: string[]
+          milestones: Json
+          mode: string
+          plan_id: string
+          position: number
+          rubric: Json
+          status: string
+          student_brief: string | null
+          teacher_notes: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          ao_codes?: string[]
+          brief?: string | null
+          created_at?: string
+          duration_minutes?: number | null
+          group_size?: string | null
+          id?: string
+          knowledge_outcomes?: string[]
+          learning_outcomes?: string[]
+          materials?: string[]
+          milestones?: Json
+          mode: string
+          plan_id: string
+          position?: number
+          rubric?: Json
+          status?: string
+          student_brief?: string | null
+          teacher_notes?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          ao_codes?: string[]
+          brief?: string | null
+          created_at?: string
+          duration_minutes?: number | null
+          group_size?: string | null
+          id?: string
+          knowledge_outcomes?: string[]
+          learning_outcomes?: string[]
+          materials?: string[]
+          milestones?: Json
+          mode?: string
+          plan_id?: string
+          position?: number
+          rubric?: Json
+          status?: string
+          student_brief?: string | null
+          teacher_notes?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "authentic_ideas_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "authentic_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      authentic_plans: {
+        Row: {
+          class_size: number | null
+          constraints: string | null
+          created_at: string
+          duration_weeks: number | null
+          goals: string | null
+          id: string
+          level: string | null
+          mix_preferences: string[]
+          sow_file_path: string | null
+          sow_text: string | null
+          status: string
+          subject: string | null
+          syllabus_doc_id: string | null
+          title: string
+          unit_focus: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          class_size?: number | null
+          constraints?: string | null
+          created_at?: string
+          duration_weeks?: number | null
+          goals?: string | null
+          id?: string
+          level?: string | null
+          mix_preferences?: string[]
+          sow_file_path?: string | null
+          sow_text?: string | null
+          status?: string
+          subject?: string | null
+          syllabus_doc_id?: string | null
+          title: string
+          unit_focus?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          class_size?: number | null
+          constraints?: string | null
+          created_at?: string
+          duration_weeks?: number | null
+          goals?: string | null
+          id?: string
+          level?: string | null
+          mix_preferences?: string[]
+          sow_file_path?: string | null
+          sow_text?: string | null
+          status?: string
+          subject?: string | null
+          syllabus_doc_id?: string | null
+          title?: string
+          unit_focus?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       paper_set_papers: {
         Row: {
           created_at: string
