@@ -190,7 +190,7 @@ function PaperSetView() {
       topics: topicLikes,
       override: setRow?.scoped_disciplines ?? null,
     });
-    return { inScope: scope, disciplineUniverse: universe, discLookup: lookup };
+    return { inScope: scope, disciplineUniverse: universe };
   }, [topics, flatQuestions, setRow?.scoped_disciplines]);
 
   const updateScope = async (next: string[] | null) => {
