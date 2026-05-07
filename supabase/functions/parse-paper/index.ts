@@ -353,7 +353,7 @@ async function runParse(paperId: string): Promise<void> {
       .select("id")
       .eq("subject", subjectName)
       .eq("level", levelName)
-      .eq("parse_status", "ready")
+      .in("parse_status", ["ready", "parsed"])
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();

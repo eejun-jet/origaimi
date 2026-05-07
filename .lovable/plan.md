@@ -1,48 +1,45 @@
-## Why papers get stuck
+## Why the review came back empty
 
-`parse-paper` does too much in one Edge invocation. After Gemini extracts the question index, it loops sequentially through every detected figure and calls `gemini-3-pro-image-preview` (15–40s per figure) to re-render it. A typical question paper has 8–15 figures → 3–8+ minutes of work, which exceeds the Edge wall-clock cap. The worker is killed mid-loop, so the row stays `processing` forever with no `parse_error`. File size is irrelevant — figure count is what kills it. (Confirmed: stuck rows are all `[QP]` papers; `[MS]` mark schemes with few figures all completed.)
+The macro review for your set ran, but every paper had **0 questions tagged with learning_outcomes / knowledge_outcomes / ao_codes** — so the AI had nothing to reason over. The aggregation in `paper-set-review` happily summed zeros, and "unrealised LOs/KOs" became *the entire syllabus* (which is then truncated to a generic blob).
+
+### Root cause
+
+In `supabase/functions/parse-paper/index.ts` (line 351–359) the classifier looks up the syllabus with:
+
+```ts
+.eq("subject", subjectName)
+.eq("level", levelName)
+.eq("parse_status", "ready")     // ← wrong value
+```
+
+But `parse-syllabus/index.ts` writes `parse_status = "parsed"` (line 266), and the DB confirms it: the only Sciences/Sec 4 syllabus has status `parsed`, not `ready`. The lookup returns null, the classifier is skipped, and every parsed question is saved with empty `ao_codes / learning_outcomes / knowledge_outcomes`. I verified this for all 6 QPs in your set — `los_q = 0`, `ao_q = 0` across 62 questions.
+
+A second, smaller issue: the set includes both QP and MS papers. The MS rows duplicate the question count and confuse the AO mark-share. Reviews should run over QPs only (mark-schemes don't carry assessment demand).
 
 ## Fix
 
-### 1. Mark paper `ready` as soon as the index is extracted
-File: `supabase/functions/parse-paper/index.ts`
+1. **`supabase/functions/parse-paper/index.ts`** — change the syllabus filter from `.eq("parse_status", "ready")` to `.in("parse_status", ["ready", "parsed"])` so it tolerates both values.
 
-- Remove the inline `renderAndUploadFigure` loop from `runParse`.
-- Insert `past_paper_diagrams` rows up front with `image_path` pointing to the source PDF (`papers/${filePath}`) so coverage and diagram references still work.
-- Write `questions_json`, `style_summary`, classifications, bank rows, fingerprint, then flip `parse_status='ready'` immediately.
-- Cap `figures` at 30 to bound work.
-- Wrap `classifyQuestions` in a 30s timeout via `Promise.race`; on timeout, proceed with empty classifications instead of failing the whole parse.
-- After marking ready, kick off the new `render-paper-figures` function via `EdgeRuntime.waitUntil(supabase.functions.invoke("render-paper-figures", { body: { paperId } }))`.
+2. **Backfill the existing set** — run a one-shot script (edge invocation loop) that re-invokes `parse-paper` for the 12 papers in set `582e48ab…` so they get classified against syllabus `8df0320d…`. After this, each question row will carry `ao_codes`, `learning_outcomes`, `knowledge_outcomes`.
 
-### 2. New edge function `render-paper-figures`
-File: `supabase/functions/render-paper-figures/index.ts` (new)
+3. **`supabase/functions/paper-set-review/index.ts`** — when aggregating, skip papers whose title starts with `[MS]` (or whose `paper_number` indicates mark scheme) so AO mark-share and totals reflect actual assessment demand, not duplicated MS rows. Add a `papers_used` count to the response so the UI can show "reviewed 6 QPs of 12 papers".
 
-- Accepts `{ paperId }`. Returns 202 immediately, does work via `EdgeRuntime.waitUntil`.
-- Loads `past_paper_diagrams` rows for the paper where `image_path LIKE 'papers/%'` (i.e. unrendered).
-- Concurrency pool of 3, per-figure timeout 25s (`Promise.race` with abort). On success, update the row's `image_path` to the new `diagrams/...` key. On timeout/error, leave `image_path` untouched — can be retried later.
-- Idempotent and re-runnable.
+4. **`src/routes/paper-set.$id.tsx`** — surface a small caption under the review summary: "Reviewed N question papers · X questions · Y marks" using the new field, and show a yellow note if any QP in the set still has 0 classifications (so the user knows to retry parse rather than blame the review).
 
-### 3. Watchdog cron for stuck rows
-File: `src/routes/api/public/cron/sweep-stuck-papers.ts` (new)
-
-- POST handler. Updates any `past_papers` row where `parse_status='processing'` AND `updated_at < now() - interval '5 minutes'` to `parse_status='failed'`, `parse_error='Worker died during parsing — likely timeout. Click Retry.'`
-- Uses `supabaseAdmin`.
-- Schedule via `pg_cron` + `pg_net` to call this endpoint every 2 minutes (using anon key in `apikey` header).
-
-### 4. UI: "diagrams rendering" affordance
-Files: `src/routes/paper-set.new.tsx`, `src/routes/papers.tsx`
-
-- For papers with `parse_status='ready'` but any diagram rows still pointing at `papers/%`, show a small "diagrams pending" badge and a "Re-render diagrams" button that invokes `render-paper-figures`.
-- Doesn't block the user from creating the set.
-
-### 5. Cleanup currently-stuck rows
-Run a one-shot UPDATE flipping the 3 rows currently `processing` for >15 min to `failed` so the existing Retry button becomes reachable.
+5. **Optional belt-and-braces**: write a tiny migration to normalise `syllabus_documents.parse_status` so future code can rely on a single value (`'ready'`). I'll keep the parse-paper filter accepting both regardless.
 
 ## Files touched
 
-- `supabase/functions/parse-paper/index.ts` — strip inline figure render, mark ready earlier, cap figures, classifier timeout, kick off render-paper-figures
-- `supabase/functions/render-paper-figures/index.ts` — new, pooled time-bounded renders
-- `src/routes/api/public/cron/sweep-stuck-papers.ts` — new watchdog endpoint
-- migration: enable `pg_cron`/`pg_net` (if needed) and schedule sweep
-- one-shot UPDATE for currently stuck rows
-- `src/routes/paper-set.new.tsx`, `src/routes/papers.tsx` — "diagrams pending" badge + re-render button
+- `supabase/functions/parse-paper/index.ts` — fix the `.eq` filter
+- `supabase/functions/paper-set-review/index.ts` — exclude `[MS]` papers, return `papers_used`
+- `src/routes/paper-set.$id.tsx` — show coverage caption + classification warning
+- one-off backfill via `supabase.functions.invoke("parse-paper", { body: { paperId } })` for the 12 papers in the current set
+- (optional) migration normalising `parse_status` on `syllabus_documents`
+
+## Expected outcome
+
+After this, "Run review" on your set will:
+- find the syllabus, classify every QP question with AO/KO/LO,
+- aggregate AO mark-share across the 6 QPs (P1, P2, P3, P5 × Phy + Chem),
+- list real unrealised KOs/LOs (filtered to Physics + Chemistry only because of `scoped_disciplines`),
+- and produce 1–4 calm priority insights instead of an empty summary.

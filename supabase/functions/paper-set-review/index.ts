@@ -131,15 +131,26 @@ Deno.serve(async (req) => {
       topics = (tps as typeof topics) ?? [];
     }
 
-    // Aggregate.
+    // Aggregate. Skip mark-scheme papers — they duplicate question rows
+    // without adding assessment demand.
+    const isMarkScheme = (title: string | null | undefined) => {
+      const t = (title ?? "").toLowerCase();
+      return /\[ms\]|mark\s*scheme|marking\s*scheme/.test(t);
+    };
+    const allPapers = (papers ?? []) as { id: string; title: string | null; questions_json: unknown }[];
+    const qpPapers = allPapers.filter((p) => !isMarkScheme(p.title));
+    const papersUsed = qpPapers.length;
+    const papersSkipped = allPapers.length - qpPapers.length;
+
     const aoMarks = new Map<string, number>();
     const kosSeen = new Set<string>();
     const losSeen = new Set<string>();
     let totalMarks = 0;
     let totalQuestions = 0;
+    let unclassifiedQuestions = 0;
     const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").replace(/[.;:,!?\s]+$/g, "").trim();
 
-    for (const p of (papers ?? []) as { questions_json: unknown }[]) {
+    for (const p of qpPapers) {
       const arr = Array.isArray(p.questions_json) ? (p.questions_json as ParsedQuestion[]) : [];
       for (const q of arr) {
         totalQuestions++;
@@ -150,6 +161,8 @@ Deno.serve(async (req) => {
         if (codes.length > 0) {
           const per = m / codes.length;
           for (const c of codes) aoMarks.set(c, (aoMarks.get(c) ?? 0) + per);
+        } else {
+          unclassifiedQuestions++;
         }
         for (const k of q.knowledge_outcomes ?? []) if (k) kosSeen.add(k.trim());
         for (const l of q.learning_outcomes ?? []) if (l) losSeen.add(norm(l));
@@ -186,7 +199,7 @@ Deno.serve(async (req) => {
         inScope.add("General");
       } else {
         const detected = new Set<string>();
-        for (const p of (papers ?? []) as { questions_json: unknown }[]) {
+        for (const p of qpPapers) {
           const arr = Array.isArray(p.questions_json) ? (p.questions_json as ParsedQuestion[]) : [];
           for (const q of arr) {
             for (const k of q.knowledge_outcomes ?? []) {
@@ -248,7 +261,7 @@ ${scopeNote ? `\nSCOPE: ${scopeNote} Do NOT recommend coverage for out-of-scope 
 Submit STRICTLY through the submit_paper_set_review tool.`;
 
     const userPayload = {
-      set: { title: setRow.title, subject: setRow.subject, level: setRow.level, paper_count: paperIds.length, total_questions: totalQuestions, total_marks: totalMarks },
+      set: { title: setRow.title, subject: setRow.subject, level: setRow.level, paper_count: papersUsed, mark_schemes_skipped: papersSkipped, total_questions: totalQuestions, total_marks: totalMarks },
       ao_definitions: aoDefs,
       ao_observed: aoStats,
       unrealised_candidates: {
@@ -308,6 +321,9 @@ Submit STRICTLY through the submit_paper_set_review tool.`;
       model,
       total_marks: totalMarks,
       total_questions: totalQuestions,
+      papers_used: papersUsed,
+      papers_skipped: papersSkipped,
+      unclassified_questions: unclassifiedQuestions,
       findings,
     };
     const { data: stored } = await supabase
@@ -317,7 +333,17 @@ Submit STRICTLY through the submit_paper_set_review tool.`;
       .single();
 
     return new Response(
-      JSON.stringify({ run_id: (stored as { id: string } | null)?.id ?? null, ran_at: ranAt, model, findings }),
+      JSON.stringify({
+        run_id: (stored as { id: string } | null)?.id ?? null,
+        ran_at: ranAt,
+        model,
+        findings,
+        papers_used: papersUsed,
+        papers_skipped: papersSkipped,
+        total_questions: totalQuestions,
+        total_marks: totalMarks,
+        unclassified_questions: unclassifiedQuestions,
+      }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e) {
