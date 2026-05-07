@@ -321,6 +321,9 @@ Submit STRICTLY through the submit_paper_set_review tool.`;
       model,
       total_marks: totalMarks,
       total_questions: totalQuestions,
+      papers_used: papersUsed,
+      papers_skipped: papersSkipped,
+      unclassified_questions: unclassifiedQuestions,
       findings,
     };
     const { data: stored } = await supabase
@@ -330,7 +333,17 @@ Submit STRICTLY through the submit_paper_set_review tool.`;
       .single();
 
     return new Response(
-      JSON.stringify({ run_id: (stored as { id: string } | null)?.id ?? null, ran_at: ranAt, model, findings }),
+      JSON.stringify({
+        run_id: (stored as { id: string } | null)?.id ?? null,
+        ran_at: ranAt,
+        model,
+        findings,
+        papers_used: papersUsed,
+        papers_skipped: papersSkipped,
+        total_questions: totalQuestions,
+        total_marks: totalMarks,
+        unclassified_questions: unclassifiedQuestions,
+      }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e) {
