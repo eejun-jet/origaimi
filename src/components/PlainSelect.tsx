@@ -97,7 +97,8 @@ export function PlainSelect({
                   key={o.value}
                   type="button"
                   data-no-bb=""
-                  onClick={() => { onValueChange(o.value); setOpen(false); }}
+                  onPointerDown={(e) => { e.preventDefault(); onValueChange(o.value); setOpen(false); }}
+                  onClick={(e) => e.preventDefault()}
                   className="flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
                 >
                   <span>{o.label}</span>
