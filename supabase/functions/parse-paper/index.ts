@@ -452,6 +452,21 @@ async function runParse(paperId: string): Promise<void> {
       style_summary: styleSummary,
       difficulty_fingerprint: difficultyFingerprint,
     }).eq("id", paperId);
+
+    // Kick off background figure rendering — fire and forget; if it fails the
+    // paper is still usable (diagrams just point at the source PDF).
+    if (cappedFigures.length > 0) {
+      try {
+        const renderWork = supabase.functions.invoke("render-paper-figures", {
+          body: { paperId },
+        });
+        if (typeof EdgeRuntime !== "undefined" && EdgeRuntime?.waitUntil) {
+          EdgeRuntime.waitUntil(renderWork);
+        }
+      } catch (e) {
+        console.warn("[parse-paper] failed to kick render-paper-figures", e);
+      }
+    }
   } catch (e) {
     console.error("[parse-paper] runParse caught", e);
     await supabase.from("past_papers").update({
