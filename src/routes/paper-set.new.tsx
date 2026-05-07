@@ -26,7 +26,10 @@ type PaperRow = {
   paper_number: string | null;
   year: number | null;
   parse_status: string;
+  parse_error: string | null;
+  created_at: string;
 };
+
 
 type SyllabusDoc = {
   id: string;
@@ -65,7 +68,7 @@ function PaperSetNew() {
   const loadPapers = async () => {
     let q = supabase
       .from("past_papers")
-      .select("id,title,subject,level,paper_number,year,parse_status")
+      .select("id,title,subject,level,paper_number,year,parse_status,parse_error,created_at")
       .order("created_at", { ascending: false });
     if (subject) q = q.eq("subject", subject);
     if (level) q = q.eq("level", level);
@@ -123,6 +126,9 @@ function PaperSetNew() {
     setUploading(true);
     const newIds: string[] = [];
     try {
+      // 1. Upload all files to storage + insert past_papers rows fast.
+      type Pending = { id: string; name: string };
+      const pending: Pending[] = [];
       for (const file of valid) {
         const ext = file.name.split(".").pop() || "pdf";
         const baseTitle = file.name.replace(/\.(pdf|docx)$/i, "");
@@ -158,12 +164,13 @@ function PaperSetNew() {
         }
         const id = (inserted as { id: string }).id;
         newIds.push(id);
-        supabase.functions
-          .invoke("parse-paper", { body: { paperId: id } })
-          .catch((err) => console.warn("parse-paper invocation error", err));
+        pending.push({ id, name: file.name });
       }
+
       if (newIds.length > 0) {
-        toast.success(`Uploaded ${newIds.length} paper${newIds.length > 1 ? "s" : ""} — parsing in background. They'll be selectable once ready.`);
+        toast.success(
+          `Uploaded ${newIds.length} paper${newIds.length > 1 ? "s" : ""} — parsing in background. The list updates as each one finishes.`,
+        );
         setSelected((s) => {
           const n = new Set(s);
           newIds.forEach((id) => n.add(id));
@@ -171,11 +178,46 @@ function PaperSetNew() {
         });
         await loadPapers();
       }
+
+      // 2. Fan-out parse-paper with bounded concurrency. We await each call so
+      //    the connection stays open until the function returns 202; combined
+      //    with EdgeRuntime.waitUntil on the server, the worker keeps running
+      //    even after we move on, so disconnects no longer kill parses.
+      const POOL = 3;
+      let cursor = 0;
+      const workers = Array.from({ length: Math.min(POOL, pending.length) }, async () => {
+        while (cursor < pending.length) {
+          const idx = cursor++;
+          const item = pending[idx];
+          try {
+            await supabase.functions.invoke("parse-paper", { body: { paperId: item.id } });
+          } catch (err) {
+            console.warn(`parse-paper kickoff failed for ${item.name}`, err);
+          }
+        }
+      });
+      await Promise.all(workers);
+      await loadPapers();
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";
     }
   };
+
+  const retryParse = async (paperId: string) => {
+    await supabase
+      .from("past_papers")
+      .update({ parse_status: "pending", parse_error: null })
+      .eq("id", paperId);
+    await loadPapers();
+    try {
+      await supabase.functions.invoke("parse-paper", { body: { paperId } });
+      toast.success("Re-parsing — this row will refresh in a moment.");
+    } catch (err) {
+      toast.error(`Could not start re-parse: ${String(err)}`);
+    }
+  };
+
 
   const readySelected = papers.filter((p) => selected.has(p.id) && p.parse_status === "ready").length;
   const canSave = title.trim().length > 0 && subject && level && readySelected >= 2 && !saving;
@@ -343,6 +385,9 @@ function PaperSetNew() {
               {papers.map((p) => {
                 const ready = p.parse_status === "ready";
                 const failed = p.parse_status === "failed";
+                const ageMs = Date.now() - new Date(p.created_at).getTime();
+                const stuck = !ready && !failed && ageMs > 5 * 60 * 1000;
+                const canRetry = failed || stuck;
                 return (
                   <li key={p.id} className="flex items-center gap-3 py-2">
                     <Checkbox
@@ -355,11 +400,18 @@ function PaperSetNew() {
                       <div className="text-sm font-medium">{p.title}</div>
                       <div className="text-xs text-muted-foreground">
                         {[p.year, p.paper_number ? `Paper ${p.paper_number}` : null].filter(Boolean).join(" · ") || "—"}
+                        {failed && p.parse_error ? <span className="ml-2 text-destructive">· {p.parse_error.slice(0, 140)}</span> : null}
+                        {stuck ? <span className="ml-2 text-amber-600">· stuck for {Math.round(ageMs / 60000)} min</span> : null}
                       </div>
                     </label>
                     <Badge variant={ready ? "secondary" : failed ? "destructive" : "outline"}>
                       {ready ? "ready" : failed ? "failed" : "parsing…"}
                     </Badge>
+                    {canRetry ? (
+                      <Button type="button" size="sm" variant="ghost" onClick={() => retryParse(p.id)} className="gap-1">
+                        <RefreshCw className="h-3.5 w-3.5" /> Retry
+                      </Button>
+                    ) : null}
                   </li>
                 );
               })}

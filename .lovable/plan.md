@@ -1,50 +1,41 @@
-# Switch KO/LO coverage status to %-based with relative Over-tested
+## Why "Review paper set" looked broken
 
-## New rule (single source of truth)
+When you upload ~10 papers at once on `/paper-set/new`, the client loops through every file, uploads to storage, inserts a `past_papers` row, and **fires `parse-paper` per file without awaiting** (`paper-set.new.tsx:161-164`). Each parse call sends the full PDF base64 to Gemini 2.5 Pro via the Lovable AI gateway.
 
-For each topic, `pct = coveredLOs / totalLOs`. Paper-wide `avgPct` = mean of `pct` across all topics with ≥1 LO (whole paper, all disciplines).
+Three failure modes happen, often together:
 
-| Status | Rule | Color |
-|---|---|---|
-| Untested | `pct === 0` | red (destructive) |
-| Thin | `0 < pct < 0.40` | amber |
-| Balanced | `0.40 ≤ pct ≤ 0.80` | blue |
-| Tested | `pct > 0.80` and not Over-tested | green (success) |
-| Over-tested | `pct > 0.80` AND `avgPct < 0.70` AND `pct − avgPct ≥ 0.30` | purple |
+1. **Connection dropped mid-parse.** The browser kills in-flight invocations on re-render / poll / navigation. `parse-paper` doesn't use `EdgeRuntime.waitUntil`, so the worker shuts down → paper stuck in `processing`. Edge logs confirm: `"Http: connection closed before message completed"`.
+2. **Gemini returns no `tool_calls` under concurrent load.** `parse-paper/index.ts:224` immediately marks the paper `failed` with `"AI did not return structured index"` — no retry, no fallback model.
+3. **No concurrency throttle, no retry, no UI recovery.** All 10 invocations fire simultaneously; failed papers have no obvious "Retry" button.
 
-The "Under-tested" status is removed (it collapses into Thin under the new % rule).
+Of your last 10 uploads: 5 ready, 3 still `processing`, 2 `failed` with that exact error.
 
-## File: `src/routes/assessment.$id.tsx`
+## Fix
 
-### 1. Replace `OverviewStatus`, `classifyTopic`, and `STATUS_META` (lines ~2313–2336)
-- New union: `"untested" | "thin" | "balanced" | "tested" | "over"`.
-- `classifyTopic(los, avgPct)` — accepts the paper-wide average and follows the rules above.
-- New helper `computeAvgPct(topics)` — mean of per-topic coverage % across topics with ≥1 LO.
-- `STATUS_META` updated:
-  - Sort order: untested (0), thin (1), balanced (2), tested (3), over (4) — issues first.
-  - Colors: red / amber / blue / green / purple via Tailwind utility classes (`bg-blue-500/15 text-blue-700 …`, `bg-purple-500/15 text-purple-700 …`).
+### 1. Make `parse-paper` survive client disconnect (`supabase/functions/parse-paper/index.ts`)
+- Return `202 Accepted` immediately after marking the paper `processing`, then run the heavy work via `EdgeRuntime.waitUntil(...)`. The browser closing the connection no longer kills the worker.
 
-### 2. Update three call sites that classify topics
-All three need access to a paper-wide `avgPct`:
+### 2. Retry transient AI failures inside `parse-paper`
+- When `tool_calls` is missing or `aiResp.status` is 429/5xx, retry up to 2 times with exponential backoff (1s, 3s).
+- On the final retry, fall back from `google/gemini-2.5-pro` to `google/gemini-2.5-flash` (still tool-calling capable, more lenient under load).
+- Only mark the paper `failed` after all retries exhaust; include attempt count + last upstream status in `parse_error` so we can diagnose later.
 
-- **Line ~2412** (`KOLOOverviewCompact` / legend block, simple list): compute `avgPct` once from `map.disciplines.flatMap(d => d.topics)` before the disciplines map, then pass to `classifyTopic(t.los, avgPct)`.
-- **Line ~2551** (Coverage section with filter pills): same — compute `avgPct` from `map.disciplines.flatMap(d => d.topics)` in the component scope.
-- **Line ~3104** (inside the `koLoGroups` `useMemo` for the full Coverage Explorer): two-pass — first build `buckets` without `status`, compute `avgPct` from those buckets' `los`, then assign `status: classifyTopic(b.los, avgPct)` in a second pass before sort.
+### 3. Throttle the upload fan-out (`src/routes/paper-set.new.tsx`)
+- Replace the unconditional loop with a small concurrency pool (max 3 parses in flight). Upload all files to storage + insert rows fast; gate only the `parse-paper` invocations.
+- `await` the invocation (don't fire-and-forget) so the client knows when each parse settled. Combined with `waitUntil` on the server, this stops the connection-drop issue without making the user wait the full duration — the function returns `202` quickly.
 
-### 3. Update legend (line ~2394)
-Reorder to match new sortKey: `["untested", "thin", "balanced", "tested", "over"]`. Removes "under".
+### 4. Add a "Retry parsing" affordance
+- On `/paper-set/new` and `/papers`, show a small Retry button next to any paper whose `parse_status` is `failed` or has been `processing` for >5 minutes. Clicking it re-invokes `parse-paper` for that single paper.
 
-### 4. Update filter pill arrays
-- **Line ~2517** in the Coverage section: `["all", "untested", "thin", "balanced", "tested", "over"]`.
-- **Lines ~3566–3573** in the Coverage Explorer: replace `under-tested` entry with `tested`, drop "Under-tested", add "Tested" between Balanced and Over-tested.
+### 5. Surface clearer status
+- In the upload toast, report `Uploaded X · parsing in background. Y already ready.` and update as each finishes.
+- In the paper list row, show the actual `parse_error` on hover for `failed` items so you don't have to ask me what went wrong.
 
-### 5. Spot-check other usages
-- `KoBucket` type uses `status: OverviewStatus` — type narrows automatically.
-- The `"thin"` inline badge at line ~2693 stays as-is (still a valid status).
-- No backend / DB changes; classification is pure UI.
+## Out of scope (call out, don't do unless you ask)
+- Switching the parse pipeline to extract text deterministically with a PDF library before sending to the AI (would cut payload size massively and make Gemini far more reliable, but is a bigger refactor).
+- Splitting very large PDFs page-by-page.
 
-## Why this is clearer for the user
-
-- One simple % ladder for the four primary states — no more hidden rules about "3+ questions on one LO" or "topic must have ≥3 LOs".
-- Over-tested is now a *relative* signal, exactly as discussed: it only fires when this topic is meaningfully ahead of the paper average and the paper isn't broadly well-covered already.
-- Distinct color per state (red / amber / blue / green / purple) so users can scan the donut grid at a glance.
+## Files touched
+- `supabase/functions/parse-paper/index.ts` — `waitUntil`, retry+fallback model.
+- `src/routes/paper-set.new.tsx` — concurrency pool, awaited invokes, Retry button, better toast.
+- `src/routes/papers.tsx` — Retry button + error tooltip on failed/stuck rows.
