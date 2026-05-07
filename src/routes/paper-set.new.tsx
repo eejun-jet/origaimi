@@ -385,6 +385,9 @@ function PaperSetNew() {
               {papers.map((p) => {
                 const ready = p.parse_status === "ready";
                 const failed = p.parse_status === "failed";
+                const ageMs = Date.now() - new Date(p.created_at).getTime();
+                const stuck = !ready && !failed && ageMs > 5 * 60 * 1000;
+                const canRetry = failed || stuck;
                 return (
                   <li key={p.id} className="flex items-center gap-3 py-2">
                     <Checkbox
@@ -397,11 +400,18 @@ function PaperSetNew() {
                       <div className="text-sm font-medium">{p.title}</div>
                       <div className="text-xs text-muted-foreground">
                         {[p.year, p.paper_number ? `Paper ${p.paper_number}` : null].filter(Boolean).join(" · ") || "—"}
+                        {failed && p.parse_error ? <span className="ml-2 text-destructive">· {p.parse_error.slice(0, 140)}</span> : null}
+                        {stuck ? <span className="ml-2 text-amber-600">· stuck for {Math.round(ageMs / 60000)} min</span> : null}
                       </div>
                     </label>
                     <Badge variant={ready ? "secondary" : failed ? "destructive" : "outline"}>
                       {ready ? "ready" : failed ? "failed" : "parsing…"}
                     </Badge>
+                    {canRetry ? (
+                      <Button type="button" size="sm" variant="ghost" onClick={() => retryParse(p.id)} className="gap-1">
+                        <RefreshCw className="h-3.5 w-3.5" /> Retry
+                      </Button>
+                    ) : null}
                   </li>
                 );
               })}
