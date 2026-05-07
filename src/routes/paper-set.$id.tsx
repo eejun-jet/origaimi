@@ -55,9 +55,12 @@ type SyllabusTopic = {
   learning_outcomes: string[];
   ao_codes: string[];
   section: string | null;
+  strand: string | null;
+  sub_strand: string | null;
+  learning_outcome_code: string | null;
 };
 
-type Tab = "ao" | "ko" | "lo" | "papers" | "summary";
+type Tab = "ao" | "coverage" | "papers" | "summary";
 
 type ReviewSnapshot = {
   ran_at: string;
