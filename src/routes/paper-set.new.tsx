@@ -328,12 +328,25 @@ function PaperSetNew() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <Label>Subject</Label>
-              <Select value={subject} onValueChange={setSubject}>
-                <SelectTrigger><SelectValue placeholder="Pick subject" /></SelectTrigger>
-                <SelectContent>
-                  {SUBJECTS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              {mounted ? (
+                <Select value={subject} onValueChange={setSubject}>
+                  <SelectTrigger><SelectValue placeholder="Pick subject" /></SelectTrigger>
+                  <SelectContent>
+                    {SUBJECTS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              ) : <SelectPlaceholder label="Pick subject" />}
+            </div>
+            <div>
+              <Label>Level</Label>
+              {mounted ? (
+                <Select value={level} onValueChange={setLevel}>
+                  <SelectTrigger><SelectValue placeholder="Pick level" /></SelectTrigger>
+                  <SelectContent>
+                    {LEVELS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              ) : <SelectPlaceholder label="Pick level" />}
             </div>
             <div>
               <Label>Level</Label>
