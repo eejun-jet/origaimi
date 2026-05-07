@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, FileText, Search, Trash2, Layers } from "lucide-react";
+import { Plus, FileText, Search, Trash2, Layers, Lightbulb } from "lucide-react";
 import { toast } from "sonner";
 import { SUBJECTS, LEVELS } from "@/lib/syllabus";
 
