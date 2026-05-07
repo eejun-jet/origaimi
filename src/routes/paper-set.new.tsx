@@ -288,7 +288,18 @@ function PaperSetNew() {
     navigate({ to: "/paper-set/$id", params: { id: setId } });
   };
 
-  if (!mounted) return null;
+  // SSR-safe placeholder trigger so the page shell still renders before
+  // hydration. The real Radix Select mounts client-side to avoid the
+  // browser-extension hydration mismatch that breaks the dropdowns.
+  const SelectPlaceholder = ({ label }: { label: string }) => (
+    <button
+      type="button"
+      disabled
+      className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground"
+    >
+      {label}
+    </button>
+  );
   return (
     <div className="min-h-screen bg-background">
       <AppHeader />
