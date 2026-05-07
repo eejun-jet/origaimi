@@ -407,6 +407,16 @@ function PaperSetNew() {
                     <Badge variant={ready ? "secondary" : failed ? "destructive" : "outline"}>
                       {ready ? "ready" : failed ? "failed" : "parsing…"}
                     </Badge>
+                    {ready ? (
+                      <Button
+                        type="button" size="sm" variant="ghost"
+                        onClick={() => supabase.functions.invoke("render-paper-figures", { body: { paperId: p.id } })}
+                        className="gap-1"
+                        title="Re-render any diagrams still pointing at the source PDF"
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" /> Diagrams
+                      </Button>
+                    ) : null}
                     {canRetry ? (
                       <Button type="button" size="sm" variant="ghost" onClick={() => retryParse(p.id)} className="gap-1">
                         <RefreshCw className="h-3.5 w-3.5" /> Retry
