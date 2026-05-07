@@ -335,9 +335,18 @@ function PaperSetView() {
       const { data, error } = await supabase.functions.invoke("paper-set-review", {
         body: { set_id: id },
       });
+      // Functions client returns 4xx as a non-throwing error; inspect both.
+      const body = data as (ReviewSnapshot & { error?: string; needs_reclassify?: boolean }) | null;
+      if (body?.needs_reclassify || body?.error) {
+        toast.error(body?.error ?? "Review failed", {
+          action: body?.needs_reclassify
+            ? { label: "Reclassify now", onClick: () => { void reclassifyAll(); } }
+            : undefined,
+        });
+        return;
+      }
       if (error) throw error;
-      const snap = data as ReviewSnapshot;
-      setLatestReview(snap);
+      setLatestReview(body as ReviewSnapshot);
       setTab("summary");
       toast.success("Macro review complete");
     } catch (e) {
