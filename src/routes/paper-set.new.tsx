@@ -288,7 +288,18 @@ function PaperSetNew() {
     navigate({ to: "/paper-set/$id", params: { id: setId } });
   };
 
-  if (!mounted) return null;
+  // SSR-safe placeholder trigger so the page shell still renders before
+  // hydration. The real Radix Select mounts client-side to avoid the
+  // browser-extension hydration mismatch that breaks the dropdowns.
+  const SelectPlaceholder = ({ label }: { label: string }) => (
+    <button
+      type="button"
+      disabled
+      className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground"
+    >
+      {label}
+    </button>
+  );
   return (
     <div className="min-h-screen bg-background">
       <AppHeader />
@@ -317,35 +328,41 @@ function PaperSetNew() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <Label>Subject</Label>
-              <Select value={subject} onValueChange={setSubject}>
-                <SelectTrigger><SelectValue placeholder="Pick subject" /></SelectTrigger>
-                <SelectContent>
-                  {SUBJECTS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              {mounted ? (
+                <Select value={subject} onValueChange={setSubject}>
+                  <SelectTrigger><SelectValue placeholder="Pick subject" /></SelectTrigger>
+                  <SelectContent>
+                    {SUBJECTS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              ) : <SelectPlaceholder label="Pick subject" />}
             </div>
             <div>
               <Label>Level</Label>
-              <Select value={level} onValueChange={setLevel}>
-                <SelectTrigger><SelectValue placeholder="Pick level" /></SelectTrigger>
-                <SelectContent>
-                  {LEVELS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              {mounted ? (
+                <Select value={level} onValueChange={setLevel}>
+                  <SelectTrigger><SelectValue placeholder="Pick level" /></SelectTrigger>
+                  <SelectContent>
+                    {LEVELS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              ) : <SelectPlaceholder label="Pick level" />}
             </div>
           </div>
           <div>
             <Label>Syllabus document</Label>
-            <Select value={syllabusDocId} onValueChange={setSyllabusDocId}>
-              <SelectTrigger>
-                <SelectValue placeholder={matchedDocs.length === 0 ? "No matching syllabus on file" : "Pick syllabus"} />
-              </SelectTrigger>
-              <SelectContent>
-                {matchedDocs.map((d) => (
-                  <SelectItem key={d.id} value={d.id}>{d.title}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {mounted ? (
+              <Select value={syllabusDocId} onValueChange={setSyllabusDocId}>
+                <SelectTrigger>
+                  <SelectValue placeholder={matchedDocs.length === 0 ? "No matching syllabus on file" : "Pick syllabus"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {matchedDocs.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>{d.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : <SelectPlaceholder label={matchedDocs.length === 0 ? "No matching syllabus on file" : "Pick syllabus"} />}
             <p className="mt-1 text-xs text-muted-foreground">
               Used to load AO weightings and the full KO/LO list so the coverage view can flag gaps.
             </p>
