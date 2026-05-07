@@ -302,6 +302,23 @@ function PaperSetView() {
     setPapers(sorted);
   };
 
+  const reclassifyOne = async (paperId: string, paperTitle: string) => {
+    setReclassifying(true);
+    try {
+      toast.message(`Reclassifying ${paperTitle}…`);
+      const { data, error } = await supabase.functions.invoke("reclassify-paper", { body: { paper_id: paperId } });
+      if (error) {
+        toast.error(`Failed: ${paperTitle}`, { description: error.message });
+        return;
+      }
+      const r = data as { classified?: number; total?: number };
+      toast.success(`Tagged ${r?.classified ?? 0}/${r?.total ?? 0} questions in ${paperTitle}`);
+      await reloadPapers();
+    } finally {
+      setReclassifying(false);
+    }
+  };
+
   const reclassifyAll = async () => {
     if (papers.length === 0) return;
     setReclassifying(true);
