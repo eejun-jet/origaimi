@@ -351,16 +351,18 @@ function PaperSetNew() {
           </div>
           <div>
             <Label>Syllabus document</Label>
-            <Select value={syllabusDocId} onValueChange={setSyllabusDocId}>
-              <SelectTrigger>
-                <SelectValue placeholder={matchedDocs.length === 0 ? "No matching syllabus on file" : "Pick syllabus"} />
-              </SelectTrigger>
-              <SelectContent>
-                {matchedDocs.map((d) => (
-                  <SelectItem key={d.id} value={d.id}>{d.title}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {mounted ? (
+              <Select value={syllabusDocId} onValueChange={setSyllabusDocId}>
+                <SelectTrigger>
+                  <SelectValue placeholder={matchedDocs.length === 0 ? "No matching syllabus on file" : "Pick syllabus"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {matchedDocs.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>{d.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : <SelectPlaceholder label={matchedDocs.length === 0 ? "No matching syllabus on file" : "Pick syllabus"} />}
             <p className="mt-1 text-xs text-muted-foreground">
               Used to load AO weightings and the full KO/LO list so the coverage view can flag gaps.
             </p>
