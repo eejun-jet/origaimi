@@ -348,15 +348,6 @@ function PaperSetNew() {
                 </Select>
               ) : <SelectPlaceholder label="Pick level" />}
             </div>
-            <div>
-              <Label>Level</Label>
-              <Select value={level} onValueChange={setLevel}>
-                <SelectTrigger><SelectValue placeholder="Pick level" /></SelectTrigger>
-                <SelectContent>
-                  {LEVELS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
           </div>
           <div>
             <Label>Syllabus document</Label>
