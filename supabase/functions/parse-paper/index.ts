@@ -132,6 +132,9 @@ type ExtractedFigure = {
   figure_description?: string;
 };
 
+// deno-lint-ignore no-explicit-any
+declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -151,12 +154,46 @@ Deno.serve(async (req) => {
 
     await supabase.from("past_papers").update({ parse_status: "processing", parse_error: null }).eq("id", paperId);
 
-    const { data: paper, error: pErr } = await supabase.from("past_papers").select("*").eq("id", paperId).single();
-    if (pErr || !paper) {
-      return new Response(JSON.stringify({ error: pErr?.message ?? "paper not found" }), {
-        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    // Kick the heavy work off in the background so the worker keeps running
+    // even if the calling client disconnects. Return 202 immediately.
+    const work = runParse(paperId).catch(async (e) => {
+      console.error("[parse-paper] runParse threw", e);
+      try {
+        await supabase.from("past_papers").update({
+          parse_status: "failed",
+          parse_error: `Unhandled: ${String(e).slice(0, 500)}`,
+        }).eq("id", paperId);
+      } catch (_) { /* ignore */ }
+    });
+    if (typeof EdgeRuntime !== "undefined" && EdgeRuntime?.waitUntil) {
+      EdgeRuntime.waitUntil(work);
     }
+    return new Response(JSON.stringify({ accepted: true, paperId }), {
+      status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (e) {
+    console.error("Unhandled in serve()", e);
+    return new Response(JSON.stringify({ error: String(e) }), {
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});
+
+async function runParse(paperId: string): Promise<void> {
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  );
+
+  const { data: paper, error: pErr } = await supabase.from("past_papers").select("*").eq("id", paperId).single();
+  if (pErr || !paper) {
+    await supabase.from("past_papers").update({
+      parse_status: "failed", parse_error: pErr?.message ?? "paper not found",
+    }).eq("id", paperId);
+    return;
+  }
+
+  try {
 
     const filePath = (paper as { file_path: string }).file_path;
     const { data: fileBlob, error: dErr } = await supabase.storage.from("papers").download(filePath);
