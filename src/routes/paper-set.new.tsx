@@ -42,6 +42,11 @@ type SyllabusDoc = {
 function PaperSetNew() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  // Avoid SSR for this page: a browser extension rewrites Radix Select's
+  // hidden <select> during hydration, which throws a hydration mismatch and
+  // kills click handlers on the dropdowns.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
   const [title, setTitle] = useState("");
   const [subject, setSubject] = useState<string>("");
