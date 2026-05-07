@@ -441,6 +441,14 @@ function PaperSetNew() {
                         <RefreshCw className="h-3.5 w-3.5" /> Retry
                       </Button>
                     ) : null}
+                    <Button
+                      type="button" size="sm" variant="ghost"
+                      onClick={() => deletePaper(p)}
+                      className="gap-1 text-destructive hover:text-destructive"
+                      title="Delete this paper"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
                   </li>
                 );
               })}
