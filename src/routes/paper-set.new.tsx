@@ -288,6 +288,7 @@ function PaperSetNew() {
     navigate({ to: "/paper-set/$id", params: { id: setId } });
   };
 
+  if (!mounted) return null;
   return (
     <div className="min-h-screen bg-background">
       <AppHeader />
