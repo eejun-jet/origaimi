@@ -301,7 +301,7 @@ function PaperSetNew() {
     </button>
   );
   return (
-    <div className="min-h-screen bg-background" data-build="ps-new-v3">
+    <div className="min-h-screen bg-background" data-build="ps-new-v4-pointerdown">
       <AppHeader />
       <main className="mx-auto max-w-4xl px-4 py-8 space-y-6">
         <div className="flex items-center gap-3">
