@@ -14,6 +14,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.0";
 import { computeFingerprint, type FingerprintQuestion } from "./fingerprint.ts";
+import { classifyQuestionsBatched, type ClassifyResult } from "../_shared/classify.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -379,15 +380,19 @@ async function runParse(paperId: string): Promise<void> {
         }));
 
         if (topicCatalogue.length > 0) {
-          classifications = await Promise.race([
-            classifyQuestions(questions, topicCatalogue, subjectName, levelName),
-            new Promise<Record<string, ClassifyResult>>((resolve) =>
-              setTimeout(() => {
-                console.warn("[parse-paper] classifier timeout, proceeding without");
-                resolve({});
-              }, 30_000),
-            ),
-          ]);
+          const outcome = await classifyQuestionsBatched(
+            questions.map((q) => ({
+              number: q.number,
+              stem: q.stem,
+              command_word: q.command_word ?? null,
+              marks: q.marks ?? null,
+              sub_parts: q.sub_parts ?? [],
+            })),
+            topicCatalogue,
+            subjectName,
+            levelName,
+          );
+          classifications = outcome.classifications;
         }
       } catch (e) {
         console.warn("[parse-paper] classifier failed", e);
@@ -487,120 +492,7 @@ type SyllabusTopicRow = {
   outcome_categories: string[] | null;
 };
 
-type TopicCatalogueEntry = {
-  topic_code: string;
-  title: string;
-  learning_outcome_code: string;
-  learning_outcomes: string[];
-  ao_codes: string[];
-  knowledge_outcomes: string[];
-};
-
-type ClassifyResult = {
-  topic_code: string;
-  learning_outcomes: string[];
-  knowledge_outcomes: string[];
-  ao_codes: string[];
-  bloom_level: string | null;
-};
-
 type PaperShape = { id: string; user_id: string; title: string };
-
-async function classifyQuestions(
-  questions: ExtractedQuestion[],
-  catalogue: TopicCatalogueEntry[],
-  subject: string,
-  level: string,
-): Promise<Record<string, ClassifyResult>> {
-  // Compact catalogue for the prompt — keep sizes manageable.
-  const catalogueText = catalogue.slice(0, 200).map((t, i) =>
-    `[${i}] code=${t.topic_code} title="${t.title}" LO_code=${t.learning_outcome_code} LOs=${(t.learning_outcomes ?? []).slice(0, 6).join("|")} AOs=${(t.ao_codes ?? []).join(",")} KOs=${(t.knowledge_outcomes ?? []).slice(0, 4).join("|")}`,
-  ).join("\n");
-
-  const items = questions.map((q) => ({
-    number: q.number,
-    stem: (q.stem ?? "").slice(0, 800),
-    sub_parts: (q.sub_parts ?? []).slice(0, 8).map((s) => ({ label: s.label, text: (s.text ?? "").slice(0, 400) })),
-    command_word: q.command_word ?? null,
-    marks: q.marks ?? null,
-  }));
-
-  const TOOL_CLASSIFY = {
-    type: "function",
-    function: {
-      name: "save_classifications",
-      description: "Map each question to syllabus topic_code, learning_outcomes, knowledge_outcomes, ao_codes, bloom_level.",
-      parameters: {
-        type: "object",
-        properties: {
-          mappings: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                question_number: { type: "string" },
-                topic_code: { type: "string" },
-                learning_outcomes: { type: "array", items: { type: "string" } },
-                knowledge_outcomes: { type: "array", items: { type: "string" } },
-                ao_codes: { type: "array", items: { type: "string" } },
-                bloom_level: {
-                  type: "string",
-                  enum: ["remember", "understand", "apply", "analyze", "evaluate", "create"],
-                },
-              },
-              required: ["question_number"],
-              additionalProperties: false,
-            },
-          },
-        },
-        required: ["mappings"],
-        additionalProperties: false,
-      },
-    },
-  };
-
-  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
-      messages: [
-        {
-          role: "system",
-          content: `You map past-paper exam questions to a syllabus catalogue. For each question pick exactly one topic_code from the catalogue, then list the specific learning_outcomes, knowledge_outcomes (high-level outcome categories), and ao_codes (assessment objectives) it tests. Add a Bloom level. Use exact codes/strings from the catalogue. Subject: ${subject}. Level: ${level}.`,
-        },
-        {
-          role: "user",
-          content: `CATALOGUE:\n${catalogueText}\n\nQUESTIONS:\n${JSON.stringify(items)}`,
-        },
-      ],
-      tools: [TOOL_CLASSIFY],
-      tool_choice: { type: "function", function: { name: "save_classifications" } },
-    }),
-  });
-
-  if (!resp.ok) {
-    console.warn("[classify] AI failed", resp.status, (await resp.text()).slice(0, 200));
-    return {};
-  }
-  const json = await resp.json();
-  const tc = json.choices?.[0]?.message?.tool_calls?.[0];
-  if (!tc) return {};
-  let parsed: { mappings?: Array<Partial<ClassifyResult> & { question_number?: string }> } = {};
-  try { parsed = JSON.parse(tc.function.arguments); } catch { return {}; }
-  const out: Record<string, ClassifyResult> = {};
-  for (const m of parsed.mappings ?? []) {
-    if (!m.question_number) continue;
-    out[m.question_number] = {
-      topic_code: m.topic_code ?? "",
-      learning_outcomes: Array.isArray(m.learning_outcomes) ? m.learning_outcomes : [],
-      knowledge_outcomes: Array.isArray(m.knowledge_outcomes) ? m.knowledge_outcomes : [],
-      ao_codes: Array.isArray(m.ao_codes) ? m.ao_codes : [],
-      bloom_level: typeof m.bloom_level === "string" ? m.bloom_level : null,
-    };
-  }
-  return out;
-}
 
 function buildBankRows(opts: {
   questions: ExtractedQuestion[];

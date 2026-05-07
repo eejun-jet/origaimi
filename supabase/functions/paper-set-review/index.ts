@@ -169,6 +169,21 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Guard: if more than half the questions have no AO/KO/LO tags, the AI
+    // would just hallucinate from nothing. Tell the teacher to reclassify.
+    if (totalQuestions > 0 && unclassifiedQuestions / totalQuestions > 0.5) {
+      return new Response(
+        JSON.stringify({
+          error: `Most questions in this set (${unclassifiedQuestions}/${totalQuestions}) have no syllabus tags yet. Click "Reclassify all papers" to tag them, then re-run the review.`,
+          needs_reclassify: true,
+          unclassified_questions: unclassifiedQuestions,
+          total_questions: totalQuestions,
+          papers_used: papersUsed,
+        }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     // Discipline scoping (e.g. Combined Science where only 2 of 3 sciences
     // are tested) — drop unrealised KOs/LOs from disciplines that aren't in
     // scope so we don't tell the teacher Biology is "untested" when it

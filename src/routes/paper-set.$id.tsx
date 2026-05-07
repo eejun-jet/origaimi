@@ -84,6 +84,7 @@ function PaperSetView() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("ko");
   const [running, setRunning] = useState(false);
+  const [reclassifying, setReclassifying] = useState(false);
   const [latestReview, setLatestReview] = useState<ReviewSnapshot | null>(null);
 
   useEffect(() => {
@@ -284,15 +285,68 @@ function PaperSetView() {
     });
   }, [papers, flatQuestions]);
 
+  const untaggedCount = useMemo(
+    () => flatQuestions.filter((x) => !((x.q.ao_codes ?? []).length > 0 || (x.q.learning_outcomes ?? []).length > 0 || (x.q.knowledge_outcomes ?? []).length > 0)).length,
+    [flatQuestions],
+  );
+
+  const reloadPapers = async () => {
+    const { data: links } = await supabase
+      .from("paper_set_papers").select("paper_id,position").eq("set_id", id).order("position");
+    const ids = ((links as { paper_id: string }[]) ?? []).map((l) => l.paper_id);
+    if (ids.length === 0) return;
+    const { data: pps } = await supabase
+      .from("past_papers").select("id,title,paper_number,year,questions_json").in("id", ids);
+    const order = new Map(ids.map((pid, i) => [pid, i] as const));
+    const sorted = ((pps as PaperRow[]) ?? []).sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+    setPapers(sorted);
+  };
+
+  const reclassifyAll = async () => {
+    if (papers.length === 0) return;
+    setReclassifying(true);
+    let okCount = 0;
+    let totalClassified = 0;
+    let totalQs = 0;
+    try {
+      for (let i = 0; i < papers.length; i++) {
+        const p = papers[i];
+        toast.message(`Reclassifying paper ${i + 1} of ${papers.length}…`, { description: p.title });
+        const { data, error } = await supabase.functions.invoke("reclassify-paper", { body: { paper_id: p.id } });
+        if (error) {
+          toast.error(`Failed: ${p.title}`, { description: error.message });
+          continue;
+        }
+        const r = data as { classified?: number; total?: number };
+        okCount++;
+        totalClassified += r?.classified ?? 0;
+        totalQs += r?.total ?? 0;
+      }
+      toast.success(`Tagged ${totalClassified}/${totalQs} questions across ${okCount} paper(s)`);
+      await reloadPapers();
+    } finally {
+      setReclassifying(false);
+    }
+  };
+
   const runReview = async () => {
     setRunning(true);
     try {
       const { data, error } = await supabase.functions.invoke("paper-set-review", {
         body: { set_id: id },
       });
+      // Functions client returns 4xx as a non-throwing error; inspect both.
+      const body = data as (ReviewSnapshot & { error?: string; needs_reclassify?: boolean }) | null;
+      if (body?.needs_reclassify || body?.error) {
+        toast.error(body?.error ?? "Review failed", {
+          action: body?.needs_reclassify
+            ? { label: "Reclassify now", onClick: () => { void reclassifyAll(); } }
+            : undefined,
+        });
+        return;
+      }
       if (error) throw error;
-      const snap = data as ReviewSnapshot;
-      setLatestReview(snap);
+      setLatestReview(body as ReviewSnapshot);
       setTab("summary");
       toast.success("Macro review complete");
     } catch (e) {
@@ -352,11 +406,28 @@ function PaperSetView() {
             </p>
             {setRow.notes ? <p className="mt-1 text-xs text-muted-foreground italic">{setRow.notes}</p> : null}
           </div>
-          <Button onClick={runReview} disabled={running}>
-            {running ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-            {latestReview ? "Re-run macro review" : "Run macro review"}
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={reclassifyAll} disabled={reclassifying || running}>
+              {reclassifying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Reclassify all papers
+            </Button>
+            <Button onClick={runReview} disabled={running || reclassifying}>
+              {running ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+              {latestReview ? "Re-run macro review" : "Run macro review"}
+            </Button>
+          </div>
         </header>
+
+        {untaggedCount > 0 && totalQuestions > 0 ? (
+          <div className="rounded-md border border-amber-300/50 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-sm">
+            <div className="font-medium text-amber-900 dark:text-amber-100">
+              {untaggedCount} of {totalQuestions} questions have no syllabus tags yet.
+            </div>
+            <p className="text-amber-800/80 dark:text-amber-200/80 mt-0.5">
+              The macro review needs AO/KO/LO tags to find drift and gaps. Click <span className="font-medium">Reclassify all papers</span> to tag them now.
+            </p>
+          </div>
+        ) : null}
 
         {disciplineUniverse.length >= 2 && (
           <PaperSetScopeStrip
