@@ -212,66 +212,121 @@ function PaperSetView() {
     return aoTotals;
   }, [flatQuestions]);
 
-  const koCoverage = useMemo(() => {
-    type Row = {
-      ko: string;
-      papers: Map<string, number>;
-      total: number;
-    };
-    const map = new Map<string, Row>();
-    for (const t of topics) {
-      for (const ko of t.outcome_categories ?? []) {
-        const k = ko.trim();
-        if (!k) continue;
-        if (!map.has(k)) map.set(k, { ko: k, papers: new Map(), total: 0 });
-      }
-    }
-    for (const { paperId, q } of flatQuestions) {
-      const kos = new Set((q.knowledge_outcomes ?? []).map((s) => s.trim()).filter(Boolean));
-      for (const ko of kos) {
-        const row = map.get(ko) ?? { ko, papers: new Map(), total: 0 };
-        row.papers.set(paperId, (row.papers.get(paperId) ?? 0) + 1);
-        row.total += 1;
-        map.set(ko, row);
-      }
-    }
-    const all = Array.from(map.values()).sort((a, b) => a.ko.localeCompare(b.ko));
-    if (!inScope) return all;
-    return all.filter((r) => {
-      const d = discLookup.byKO.get(r.ko);
-      return !d || inScope.has(d);
-    });
-  }, [flatQuestions, topics, inScope, discLookup]);
-
-  const loCoverage = useMemo(() => {
+  // ─── KO (strand) → sub_strand → LO drill-down ────────────────────────────
+  // Mirrors the Assessment Coach (assessment.$id.tsx :: koLoGroups) so the
+  // visual story stays consistent: strand is the KO container, sub_strand is
+  // the content bucket, learning_outcomes are the LO leaves.
+  const koGroups = useMemo(() => {
     const norm = (s: string) =>
       s.toLowerCase().replace(/\s+/g, " ").replace(/[.;:,!?\s]+$/g, "").trim();
-    type Row = { lo: string; papers: Map<string, number>; total: number };
-    const map = new Map<string, Row>();
-    for (const t of topics) {
-      for (const lo of t.learning_outcomes ?? []) {
-        const k = norm(lo);
-        if (!k) continue;
-        if (!map.has(k)) map.set(k, { lo, papers: new Map(), total: 0 });
-      }
-    }
+
+    type LoEntry = {
+      code: string | null;
+      text: string;
+      covered: boolean;
+      questionCount: number;
+      papers: Map<string, number>;
+    };
+    type ContentBucket = { name: string; los: LoEntry[] };
+    type KoBucket = {
+      name: string;
+      discipline: string;
+      contents: ContentBucket[];
+      flat: LoEntry[];
+      coveredLOs: number;
+      totalLOs: number;
+      questionsTouching: number;
+    };
+
+    // Index of LO tags actually used by questions, normalised.
+    const loHits = new Map<string, { papers: Map<string, number>; total: number }>();
     for (const { paperId, q } of flatQuestions) {
-      const los = new Set((q.learning_outcomes ?? []).map((s) => s.trim()).filter(Boolean));
-      for (const lo of los) {
-        const k = norm(lo);
-        const row = map.get(k) ?? { lo, papers: new Map(), total: 0 };
+      const tagged = new Set((q.learning_outcomes ?? []).map((s) => s.trim()).filter(Boolean));
+      for (const lo of tagged) {
+        const key = norm(lo);
+        if (!key) continue;
+        const row = loHits.get(key) ?? { papers: new Map(), total: 0 };
         row.papers.set(paperId, (row.papers.get(paperId) ?? 0) + 1);
         row.total += 1;
-        map.set(k, row);
+        loHits.set(key, row);
       }
     }
-    const all = Array.from(map.values()).sort((a, b) => a.lo.localeCompare(b.lo));
-    if (!inScope) return all;
-    return all.filter((r) => {
-      const d = discLookup.byLO.get(r.lo);
-      return !d || inScope.has(d);
+
+    const ko = new Map<string, Map<string, Map<string, LoEntry>>>();
+    const koDiscipline = new Map<string, string>();
+    const ensureKo = (name: string) => {
+      if (!ko.has(name)) ko.set(name, new Map());
+      return ko.get(name)!;
+    };
+    const ensureContent = (k: string, c: string) => {
+      const m = ensureKo(k);
+      if (!m.has(c)) m.set(c, new Map());
+      return m.get(c)!;
+    };
+
+    for (const t of topics) {
+      const los = t.learning_outcomes ?? [];
+      if (los.length === 0) continue;
+      const koName = (t.strand?.trim() || t.title || "Other").trim();
+      const contentName = (t.sub_strand?.trim() || t.title || "").trim() || koName;
+      const codeStem = t.learning_outcome_code?.trim() ?? null;
+      const bucket = ensureContent(koName, contentName);
+      if (!koDiscipline.has(koName)) {
+        koDiscipline.set(koName, normaliseDiscipline(t.section));
+      }
+      los.forEach((loText, i) => {
+        if (!loText) return;
+        const key = norm(loText);
+        if (!key || bucket.has(key)) return;
+        const code = codeStem
+          ? (los.length === 1 ? codeStem : `${codeStem}.${i + 1}`)
+          : null;
+        const hit = loHits.get(key);
+        bucket.set(key, {
+          code,
+          text: loText,
+          covered: !!hit && hit.total > 0,
+          questionCount: hit?.total ?? 0,
+          papers: hit?.papers ?? new Map(),
+        });
+      });
+    }
+
+    const buckets: KoBucket[] = [];
+    for (const [name, contentMap] of ko.entries()) {
+      const contents: ContentBucket[] = [];
+      const flat: LoEntry[] = [];
+      for (const [cname, loMap] of contentMap.entries()) {
+        const items = Array.from(loMap.values()).sort((a, b) => {
+          if (a.code && b.code) return a.code.localeCompare(b.code, undefined, { numeric: true });
+          return a.text.localeCompare(b.text);
+        });
+        contents.push({ name: cname, los: items });
+        for (const it of items) flat.push(it);
+      }
+      contents.sort((a, b) => a.name.localeCompare(b.name));
+      const covered = flat.filter((l) => l.covered).length;
+      const questionsTouching = flat.reduce((s, l) => s + l.questionCount, 0);
+      buckets.push({
+        name,
+        discipline: koDiscipline.get(name) ?? "General",
+        contents,
+        flat,
+        coveredLOs: covered,
+        totalLOs: flat.length,
+        questionsTouching,
+      });
+    }
+
+    const filtered = inScope ? buckets.filter((b) => inScope.has(b.discipline)) : buckets;
+    return filtered.sort((a, b) => {
+      if (a.discipline !== b.discipline) return a.discipline.localeCompare(b.discipline);
+      return a.name.localeCompare(b.name);
     });
-  }, [flatQuestions, topics, inScope, discLookup]);
+  }, [topics, flatQuestions, inScope]);
+
+  const totalLOsInScope = koGroups.reduce((s, g) => s + g.totalLOs, 0);
+  const coveredLOsInScope = koGroups.reduce((s, g) => s + g.coveredLOs, 0);
 
   const perPaper = useMemo(() => {
     return papers.map((p) => {
