@@ -132,7 +132,7 @@ function PaperSetView() {
             .order("position"),
           supabase
             .from("syllabus_topics")
-            .select("id,topic_code,title,outcome_categories,learning_outcomes,ao_codes,section")
+            .select("id,topic_code,title,outcome_categories,learning_outcomes,ao_codes,section,strand,sub_strand,learning_outcome_code")
             .eq("source_doc_id", sd)
             .order("position"),
         ]);
