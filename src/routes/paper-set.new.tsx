@@ -68,7 +68,7 @@ function PaperSetNew() {
   const loadPapers = async () => {
     let q = supabase
       .from("past_papers")
-      .select("id,title,subject,level,paper_number,year,parse_status")
+      .select("id,title,subject,level,paper_number,year,parse_status,parse_error,created_at")
       .order("created_at", { ascending: false });
     if (subject) q = q.eq("subject", subject);
     if (level) q = q.eq("level", level);
