@@ -560,17 +560,16 @@ function PaperSetView() {
           ))}
         </div>
 
-        {tab === "ko" ? (
-          <CoverageList
-            rows={koCoverage.map((r) => ({ name: r.ko, total: r.total, papers: r.papers }))}
+        {tab === "coverage" ? (
+          <CoverageExplorer
+            groups={koGroups}
             papers={papers}
-            emptyHint="No KO tags found across these papers."
-          />
-        ) : tab === "lo" ? (
-          <CoverageList
-            rows={loCoverage.map((r) => ({ name: r.lo, total: r.total, papers: r.papers }))}
-            papers={papers}
-            emptyHint="No LO tags found across these papers."
+            coveredLOs={coveredLOsInScope}
+            totalLOs={totalLOsInScope}
+            selectedKO={explorerKO}
+            onSelectKO={setExplorerKO}
+            filter={coverageFilter}
+            onFilterChange={setCoverageFilter}
           />
         ) : tab === "ao" ? (
           <AOPanel aoDefs={aoDefs} aoMarkShare={aoMarkShare} totalMarks={totalMarks} />
