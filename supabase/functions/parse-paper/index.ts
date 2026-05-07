@@ -201,9 +201,7 @@ async function runParse(paperId: string): Promise<void> {
       await supabase.from("past_papers").update({
         parse_status: "failed", parse_error: dErr?.message ?? "download failed",
       }).eq("id", paperId);
-      return new Response(JSON.stringify({ error: "download failed" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return;
     }
     const buf = new Uint8Array(await fileBlob.arrayBuffer());
     const lowerPath = filePath.toLowerCase();
@@ -218,9 +216,7 @@ async function runParse(paperId: string): Promise<void> {
         await supabase.from("past_papers").update({
           parse_status: "failed", parse_error: "Could not extract any text from the .docx file",
         }).eq("id", paperId);
-        return new Response(JSON.stringify({ error: "empty docx" }), {
-          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return;
       }
       userContent = [
         { type: "text", text: `Index this past paper. Title: ${(paper as { title: string }).title}. Subject: ${(paper as { subject: string | null }).subject ?? "unknown"}. Level: ${(paper as { level: string | null }).level ?? "unknown"}. The paper was uploaded as a .docx — figures may not be visible, so list only figures explicitly captioned in the text. Identify every numbered question and sub-part (verbatim, with marks, command word, source_excerpt if any), and produce a style_summary.\n\n--- DOCX CONTENT ---\n${docxText}` },
@@ -233,39 +229,72 @@ async function runParse(paperId: string): Promise<void> {
       ];
     }
 
-    const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-pro",
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: userContent },
-        ],
-        tools: [TOOL],
-        tool_choice: { type: "function", function: { name: "save_paper_index" } },
-      }),
-    });
+    // Retry the index extraction up to 3 times. Use Pro for the first two
+    // attempts, fall back to Flash on the final attempt — Flash is more
+    // lenient under concurrent load and still tool-calls reliably.
+    const attempts: Array<{ model: string; backoffMs: number }> = [
+      { model: "google/gemini-2.5-pro", backoffMs: 0 },
+      { model: "google/gemini-2.5-pro", backoffMs: 1500 },
+      { model: "google/gemini-2.5-flash", backoffMs: 3000 },
+    ];
 
-    if (!aiResp.ok) {
-      const txt = await aiResp.text();
-      await supabase.from("past_papers").update({
-        parse_status: "failed", parse_error: `AI ${aiResp.status}: ${txt.slice(0, 500)}`,
-      }).eq("id", paperId);
-      return new Response(JSON.stringify({ error: "AI failed", details: txt }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    let toolCall: { function: { arguments: string } } | undefined;
+    let lastErr = "";
+    for (let i = 0; i < attempts.length; i++) {
+      const { model, backoffMs } = attempts[i];
+      if (backoffMs > 0) await new Promise((r) => setTimeout(r, backoffMs));
+      try {
+        const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: "system", content: SYSTEM_PROMPT },
+              { role: "user", content: userContent },
+            ],
+            tools: [TOOL],
+            tool_choice: { type: "function", function: { name: "save_paper_index" } },
+          }),
+        });
+
+        if (!aiResp.ok) {
+          const txt = await aiResp.text();
+          lastErr = `attempt ${i + 1}/${attempts.length} (${model}): AI ${aiResp.status}: ${txt.slice(0, 300)}`;
+          console.warn("[parse-paper]", lastErr);
+          // 4xx (except 408/429) is unlikely to recover — but Gateway 402
+          // (no credits) we surface immediately.
+          if (aiResp.status === 402) {
+            await supabase.from("past_papers").update({
+              parse_status: "failed",
+              parse_error: "AI credits exhausted on the gateway. Top up to continue parsing.",
+            }).eq("id", paperId);
+            return;
+          }
+          continue;
+        }
+
+        const aiJson = await aiResp.json();
+        const tc = aiJson.choices?.[0]?.message?.tool_calls?.[0];
+        if (!tc) {
+          lastErr = `attempt ${i + 1}/${attempts.length} (${model}): no tool_calls in response`;
+          console.warn("[parse-paper]", lastErr, JSON.stringify(aiJson).slice(0, 400));
+          continue;
+        }
+        toolCall = tc;
+        break;
+      } catch (e) {
+        lastErr = `attempt ${i + 1}/${attempts.length} (${model}): ${String(e).slice(0, 300)}`;
+        console.warn("[parse-paper]", lastErr);
+      }
     }
 
-    const aiJson = await aiResp.json();
-    const toolCall = aiJson.choices?.[0]?.message?.tool_calls?.[0];
     if (!toolCall) {
       await supabase.from("past_papers").update({
-        parse_status: "failed", parse_error: "AI did not return structured index",
+        parse_status: "failed",
+        parse_error: `AI did not return a structured index after ${attempts.length} attempts. Last: ${lastErr}`,
       }).eq("id", paperId);
-      return new Response(JSON.stringify({ error: "no tool call" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return;
     }
 
     const args = JSON.parse(toolCall.function.arguments);
@@ -372,20 +401,14 @@ async function runParse(paperId: string): Promise<void> {
       paperNumber,
     });
 
-    let bankInserted = 0;
     if (bankRows.length > 0) {
-      // Insert in chunks to stay well under any row limit.
       const CHUNK = 100;
       for (let i = 0; i < bankRows.length; i += CHUNK) {
         const slice = bankRows.slice(i, i + CHUNK);
-        const { error: bErr, count } = await supabase
+        const { error: bErr } = await supabase
           .from("question_bank_items")
-          .insert(slice, { count: "exact" });
-        if (bErr) {
-          console.warn("[parse-paper] bank insert error", bErr);
-        } else {
-          bankInserted += count ?? slice.length;
-        }
+          .insert(slice);
+        if (bErr) console.warn("[parse-paper] bank insert error", bErr);
       }
     }
 
@@ -416,26 +439,14 @@ async function runParse(paperId: string): Promise<void> {
       style_summary: styleSummary,
       difficulty_fingerprint: difficultyFingerprint,
     }).eq("id", paperId);
-
-    return new Response(JSON.stringify({
-      ok: true,
-      figures: figures.length,
-      pages: pageCount,
-      questions: questions.length,
-      bankItems: bankInserted,
-      classified: Object.keys(classifications).length,
-      hasStyleSummary: Boolean(styleSummary),
-      syllabusDocId,
-    }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
   } catch (e) {
-    console.error("Unhandled", e);
-    return new Response(JSON.stringify({ error: String(e) }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    console.error("[parse-paper] runParse caught", e);
+    await supabase.from("past_papers").update({
+      parse_status: "failed",
+      parse_error: `Unhandled: ${String(e).slice(0, 500)}`,
+    }).eq("id", paperId);
   }
-});
+}
 
 // ---------- helpers ----------
 
