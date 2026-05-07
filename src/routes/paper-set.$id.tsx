@@ -582,9 +582,27 @@ function MacroSummaryPanel({ review, running }: { review: ReviewSnapshot | null;
     );
   }
   const f = review.findings ?? {};
+  const coverageBits: string[] = [];
+  if (typeof review.papers_used === "number") coverageBits.push(`${review.papers_used} question paper${review.papers_used === 1 ? "" : "s"}`);
+  if (typeof review.total_questions === "number") coverageBits.push(`${review.total_questions} questions`);
+  if (typeof review.total_marks === "number") coverageBits.push(`${review.total_marks} marks`);
+  const skipNote = review.papers_skipped && review.papers_skipped > 0
+    ? ` (skipped ${review.papers_skipped} mark scheme${review.papers_skipped === 1 ? "" : "s"})`
+    : "";
+  const unclassifiedRatio = review.total_questions && review.total_questions > 0
+    ? (review.unclassified_questions ?? 0) / review.total_questions
+    : 0;
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+        {coverageBits.length > 0 ? (
+          <p className="text-xs text-muted-foreground">Reviewed {coverageBits.join(" · ")}{skipNote}.</p>
+        ) : null}
+        {unclassifiedRatio >= 0.5 ? (
+          <div className="rounded border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-300">
+            {review.unclassified_questions} of {review.total_questions} questions have no AO/LO tags yet — re-parse the affected papers so the review can map coverage properly.
+          </div>
+        ) : null}
         {f.summary ? <p className="text-sm">{f.summary}</p> : null}
         {(f.priority_insights ?? []).length > 0 ? (
           <ul className="space-y-1 text-sm">
