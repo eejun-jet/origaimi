@@ -468,9 +468,8 @@ function PaperSetView() {
   }
 
   const tabs: { key: Tab; label: string }[] = [
-    { key: "ko", label: "By KO" },
-    { key: "lo", label: "By LO" },
-    { key: "ao", label: "AO balance" },
+    { key: "ao", label: "AO overview" },
+    { key: "coverage", label: "KO / LO coverage" },
     { key: "papers", label: "Per-paper" },
     { key: "summary", label: "Macro summary" },
   ];
