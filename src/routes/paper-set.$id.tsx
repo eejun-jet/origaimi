@@ -172,7 +172,7 @@ function PaperSetView() {
   const totalMarks = flatQuestions.reduce((s, x) => s + x.effectiveMarks, 0);
   const totalQuestions = flatQuestions.length;
 
-  const { inScope, disciplineUniverse, discLookup } = useMemo(() => {
+  const { inScope, disciplineUniverse } = useMemo(() => {
     const topicLikes = topics.map((t) => ({
       title: t.title,
       section: t.section,
