@@ -583,66 +583,243 @@ function PaperSetView() {
   );
 }
 
-function CoverageList({
-  rows,
+type LoEntry = {
+  code: string | null;
+  text: string;
+  covered: boolean;
+  questionCount: number;
+  papers: Map<string, number>;
+};
+type ContentBucket = { name: string; los: LoEntry[] };
+type KoBucket = {
+  name: string;
+  discipline: string;
+  contents: ContentBucket[];
+  flat: LoEntry[];
+  coveredLOs: number;
+  totalLOs: number;
+  questionsTouching: number;
+};
+
+function CoverageExplorer({
+  groups,
   papers,
-  emptyHint,
+  coveredLOs,
+  totalLOs,
+  selectedKO,
+  onSelectKO,
+  filter,
+  onFilterChange,
 }: {
-  rows: { name: string; total: number; papers: Map<string, number> }[];
+  groups: KoBucket[];
   papers: PaperRow[];
-  emptyHint: string;
+  coveredLOs: number;
+  totalLOs: number;
+  selectedKO: string | null;
+  onSelectKO: (k: string | null) => void;
+  filter: "all" | "covered" | "under" | "untested";
+  onFilterChange: (f: "all" | "covered" | "under" | "untested") => void;
 }) {
-  const covered = rows.filter((r) => r.total > 0);
-  const uncovered = rows.filter((r) => r.total === 0);
-  if (rows.length === 0) {
-    return <p className="text-sm text-muted-foreground">{emptyHint}</p>;
+  if (groups.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        No syllabus topics in scope — load or attach a syllabus to see KO/LO coverage.
+      </p>
+    );
   }
+
+  const selected = selectedKO ? groups.find((g) => g.name === selectedKO) ?? null : null;
+  if (selected) {
+    return <KoDetail group={selected} papers={papers} onBack={() => onSelectKO(null)} />;
+  }
+
+  const classify = (g: KoBucket): "covered" | "under" | "untested" => {
+    if (g.totalLOs === 0) return "untested";
+    const pct = g.coveredLOs / g.totalLOs;
+    if (pct === 0) return "untested";
+    if (pct < 0.34) return "under";
+    return "covered";
+  };
+
+  const filtered = groups.filter((g) => filter === "all" || classify(g) === filter);
+  const counts = {
+    all: groups.length,
+    covered: groups.filter((g) => classify(g) === "covered").length,
+    under: groups.filter((g) => classify(g) === "under").length,
+    untested: groups.filter((g) => classify(g) === "untested").length,
+  };
+
+  const filterChips: { key: typeof filter; label: string }[] = [
+    { key: "all", label: `All ${counts.all}` },
+    { key: "covered", label: `Covered ${counts.covered}` },
+    { key: "under", label: `Under-tested ${counts.under}` },
+    { key: "untested", label: `Untested ${counts.untested}` },
+  ];
+
+  // Group by discipline for visual sectioning, like the assessment coach.
+  const byDiscipline = new Map<string, KoBucket[]>();
+  for (const g of filtered) {
+    const arr = byDiscipline.get(g.discipline) ?? [];
+    arr.push(g);
+    byDiscipline.set(g.discipline, arr);
+  }
+
   return (
-    <div className="space-y-6">
-      <div className="rounded-lg border border-border bg-card overflow-hidden">
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 px-4 py-2 border-b border-border text-xs text-muted-foreground">
-          <span title="Syllabus coverage = how many syllabus outcomes are touched by at least one question in this set. A real exam typically tests only 20–30% of the full syllabus, so low coverage here is normal.">
-            {covered.length} of {rows.length} syllabus outcomes assessed by this set ({rows.length > 0 ? Math.round((covered.length / rows.length) * 100) : 0}%)
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="text-sm">
+          <span
+            className="font-medium"
+            title="Coverage = how many syllabus learning outcomes are touched by at least one question. Real exams typically test 20–30% of the full syllabus, so partial coverage is normal."
+          >
+            {coveredLOs} of {totalLOs} learning outcomes assessed
           </span>
-          <span>Per-paper coverage</span>
+          <span className="ml-2 text-muted-foreground">
+            ({totalLOs > 0 ? Math.round((coveredLOs / totalLOs) * 100) : 0}%)
+          </span>
         </div>
-        <ul className="divide-y divide-border">
-          {covered.map((r) => (
-            <li key={r.name} className="px-4 py-3 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
-              <div className="min-w-0">
-                <div className="text-sm font-medium truncate">{r.name}</div>
-                <div className="text-xs text-muted-foreground">{r.total} question{r.total === 1 ? "" : "s"} across the set</div>
-              </div>
-              <div className="flex flex-wrap gap-1 justify-end">
-                {papers.map((p, i) => {
-                  const c = r.papers.get(p.id) ?? 0;
-                  return (
-                    <Badge
-                      key={p.id}
-                      variant={c > 0 ? "default" : "outline"}
-                      title={p.title}
-                    >
-                      P{i + 1}{c > 0 ? ` ·${c}` : ""}
-                    </Badge>
-                  );
-                })}
-              </div>
-            </li>
+        <div className="flex flex-wrap gap-1.5">
+          {filterChips.map((c) => (
+            <button
+              key={c.key}
+              type="button"
+              onClick={() => onFilterChange(c.key)}
+              className={`rounded-full border px-2.5 py-0.5 text-xs transition ${
+                filter === c.key
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-card text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {c.label}
+            </button>
           ))}
-        </ul>
-      </div>
-      {uncovered.length > 0 ? (
-        <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-4">
-          <h3 className="text-sm font-semibold text-amber-700 dark:text-amber-400">
-            Unrealised — {uncovered.length} not exercised by any paper in this set
-          </h3>
-          <ul className="mt-2 space-y-1 text-sm">
-            {uncovered.map((r) => (
-              <li key={r.name} className="text-muted-foreground">{r.name}</li>
-            ))}
-          </ul>
         </div>
-      ) : null}
+      </div>
+
+      {Array.from(byDiscipline.entries()).map(([disc, items]) => (
+        <section key={disc} className="space-y-2">
+          {byDiscipline.size > 1 ? (
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{disc}</h3>
+          ) : null}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {items.map((g) => {
+              const pct = g.totalLOs > 0 ? (g.coveredLOs / g.totalLOs) * 100 : 0;
+              const status = classify(g);
+              const tone =
+                status === "covered" ? "border-emerald-500/40 bg-emerald-500/5" :
+                status === "under" ? "border-amber-500/40 bg-amber-500/5" :
+                "border-border bg-muted/30";
+              return (
+                <button
+                  key={g.name}
+                  type="button"
+                  onClick={() => onSelectKO(g.name)}
+                  onDoubleClick={() => onSelectKO(g.name)}
+                  className={`text-left rounded-lg border p-3 transition hover:border-primary/60 hover:bg-card ${tone}`}
+                  title="Click to drill into LO coverage"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="text-sm font-medium leading-tight">{g.name}</div>
+                    <Badge variant="outline" className="text-[10px] shrink-0">{g.discipline}</Badge>
+                  </div>
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    {g.coveredLOs} / {g.totalLOs} LOs · {g.questionsTouching} question{g.questionsTouching === 1 ? "" : "s"}
+                  </div>
+                  <div className="mt-2 h-1.5 rounded bg-muted overflow-hidden">
+                    <div
+                      className={`h-full ${status === "covered" ? "bg-emerald-500" : status === "under" ? "bg-amber-500" : "bg-muted-foreground/30"}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {papers.map((p, i) => {
+                      const hits = g.flat.reduce((s, l) => s + (l.papers.get(p.id) ?? 0), 0);
+                      return (
+                        <Badge
+                          key={p.id}
+                          variant={hits > 0 ? "default" : "outline"}
+                          className="text-[10px]"
+                          title={`${p.title}${hits > 0 ? ` — ${hits} question(s)` : " — no questions touch this KO"}`}
+                        >
+                          P{i + 1}{hits > 0 ? ` ·${hits}` : ""}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function KoDetail({ group, papers, onBack }: { group: KoBucket; papers: PaperRow[]; onBack: () => void }) {
+  const pct = group.totalLOs > 0 ? Math.round((group.coveredLOs / group.totalLOs) * 100) : 0;
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <button
+            type="button"
+            onClick={onBack}
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" /> Back to KO grid
+          </button>
+          <div className="mt-1 flex items-center gap-2 flex-wrap">
+            <h2 className="text-lg font-semibold">{group.name}</h2>
+            <Badge variant="outline" className="text-[10px]">{group.discipline}</Badge>
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {group.coveredLOs} of {group.totalLOs} LOs covered ({pct}%) · {group.questionsTouching} question{group.questionsTouching === 1 ? "" : "s"} across the set
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {group.contents.map((c) => (
+          <div key={c.name} className="rounded-lg border border-border bg-card overflow-hidden">
+            <div className="px-4 py-2 border-b border-border bg-muted/30 text-sm font-medium">
+              {c.name}
+              <span className="ml-2 text-xs text-muted-foreground">
+                {c.los.filter((l) => l.covered).length} / {c.los.length} covered
+              </span>
+            </div>
+            <ul className="divide-y divide-border">
+              {c.los.map((lo) => (
+                <li key={lo.text} className="px-4 py-3 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm">
+                      {lo.code ? <span className="font-mono text-xs text-muted-foreground mr-2">{lo.code}</span> : null}
+                      {lo.text}
+                    </div>
+                    {lo.covered ? (
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {lo.questionCount} question{lo.questionCount === 1 ? "" : "s"}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">Not assessed by this set</div>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-1 justify-end">
+                    {papers.map((p, i) => {
+                      const c2 = lo.papers.get(p.id) ?? 0;
+                      return (
+                        <Badge key={p.id} variant={c2 > 0 ? "default" : "outline"} className="text-[10px]" title={p.title}>
+                          P{i + 1}{c2 > 0 ? ` ·${c2}` : ""}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
