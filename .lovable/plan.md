@@ -1,41 +1,48 @@
-## Why "Review paper set" looked broken
+## Why papers get stuck
 
-When you upload ~10 papers at once on `/paper-set/new`, the client loops through every file, uploads to storage, inserts a `past_papers` row, and **fires `parse-paper` per file without awaiting** (`paper-set.new.tsx:161-164`). Each parse call sends the full PDF base64 to Gemini 2.5 Pro via the Lovable AI gateway.
-
-Three failure modes happen, often together:
-
-1. **Connection dropped mid-parse.** The browser kills in-flight invocations on re-render / poll / navigation. `parse-paper` doesn't use `EdgeRuntime.waitUntil`, so the worker shuts down → paper stuck in `processing`. Edge logs confirm: `"Http: connection closed before message completed"`.
-2. **Gemini returns no `tool_calls` under concurrent load.** `parse-paper/index.ts:224` immediately marks the paper `failed` with `"AI did not return structured index"` — no retry, no fallback model.
-3. **No concurrency throttle, no retry, no UI recovery.** All 10 invocations fire simultaneously; failed papers have no obvious "Retry" button.
-
-Of your last 10 uploads: 5 ready, 3 still `processing`, 2 `failed` with that exact error.
+`parse-paper` does too much in one Edge invocation. After Gemini extracts the question index, it loops sequentially through every detected figure and calls `gemini-3-pro-image-preview` (15–40s per figure) to re-render it. A typical question paper has 8–15 figures → 3–8+ minutes of work, which exceeds the Edge wall-clock cap. The worker is killed mid-loop, so the row stays `processing` forever with no `parse_error`. File size is irrelevant — figure count is what kills it. (Confirmed: stuck rows are all `[QP]` papers; `[MS]` mark schemes with few figures all completed.)
 
 ## Fix
 
-### 1. Make `parse-paper` survive client disconnect (`supabase/functions/parse-paper/index.ts`)
-- Return `202 Accepted` immediately after marking the paper `processing`, then run the heavy work via `EdgeRuntime.waitUntil(...)`. The browser closing the connection no longer kills the worker.
+### 1. Mark paper `ready` as soon as the index is extracted
+File: `supabase/functions/parse-paper/index.ts`
 
-### 2. Retry transient AI failures inside `parse-paper`
-- When `tool_calls` is missing or `aiResp.status` is 429/5xx, retry up to 2 times with exponential backoff (1s, 3s).
-- On the final retry, fall back from `google/gemini-2.5-pro` to `google/gemini-2.5-flash` (still tool-calling capable, more lenient under load).
-- Only mark the paper `failed` after all retries exhaust; include attempt count + last upstream status in `parse_error` so we can diagnose later.
+- Remove the inline `renderAndUploadFigure` loop from `runParse`.
+- Insert `past_paper_diagrams` rows up front with `image_path` pointing to the source PDF (`papers/${filePath}`) so coverage and diagram references still work.
+- Write `questions_json`, `style_summary`, classifications, bank rows, fingerprint, then flip `parse_status='ready'` immediately.
+- Cap `figures` at 30 to bound work.
+- Wrap `classifyQuestions` in a 30s timeout via `Promise.race`; on timeout, proceed with empty classifications instead of failing the whole parse.
+- After marking ready, kick off the new `render-paper-figures` function via `EdgeRuntime.waitUntil(supabase.functions.invoke("render-paper-figures", { body: { paperId } }))`.
 
-### 3. Throttle the upload fan-out (`src/routes/paper-set.new.tsx`)
-- Replace the unconditional loop with a small concurrency pool (max 3 parses in flight). Upload all files to storage + insert rows fast; gate only the `parse-paper` invocations.
-- `await` the invocation (don't fire-and-forget) so the client knows when each parse settled. Combined with `waitUntil` on the server, this stops the connection-drop issue without making the user wait the full duration — the function returns `202` quickly.
+### 2. New edge function `render-paper-figures`
+File: `supabase/functions/render-paper-figures/index.ts` (new)
 
-### 4. Add a "Retry parsing" affordance
-- On `/paper-set/new` and `/papers`, show a small Retry button next to any paper whose `parse_status` is `failed` or has been `processing` for >5 minutes. Clicking it re-invokes `parse-paper` for that single paper.
+- Accepts `{ paperId }`. Returns 202 immediately, does work via `EdgeRuntime.waitUntil`.
+- Loads `past_paper_diagrams` rows for the paper where `image_path LIKE 'papers/%'` (i.e. unrendered).
+- Concurrency pool of 3, per-figure timeout 25s (`Promise.race` with abort). On success, update the row's `image_path` to the new `diagrams/...` key. On timeout/error, leave `image_path` untouched — can be retried later.
+- Idempotent and re-runnable.
 
-### 5. Surface clearer status
-- In the upload toast, report `Uploaded X · parsing in background. Y already ready.` and update as each finishes.
-- In the paper list row, show the actual `parse_error` on hover for `failed` items so you don't have to ask me what went wrong.
+### 3. Watchdog cron for stuck rows
+File: `src/routes/api/public/cron/sweep-stuck-papers.ts` (new)
 
-## Out of scope (call out, don't do unless you ask)
-- Switching the parse pipeline to extract text deterministically with a PDF library before sending to the AI (would cut payload size massively and make Gemini far more reliable, but is a bigger refactor).
-- Splitting very large PDFs page-by-page.
+- POST handler. Updates any `past_papers` row where `parse_status='processing'` AND `updated_at < now() - interval '5 minutes'` to `parse_status='failed'`, `parse_error='Worker died during parsing — likely timeout. Click Retry.'`
+- Uses `supabaseAdmin`.
+- Schedule via `pg_cron` + `pg_net` to call this endpoint every 2 minutes (using anon key in `apikey` header).
+
+### 4. UI: "diagrams rendering" affordance
+Files: `src/routes/paper-set.new.tsx`, `src/routes/papers.tsx`
+
+- For papers with `parse_status='ready'` but any diagram rows still pointing at `papers/%`, show a small "diagrams pending" badge and a "Re-render diagrams" button that invokes `render-paper-figures`.
+- Doesn't block the user from creating the set.
+
+### 5. Cleanup currently-stuck rows
+Run a one-shot UPDATE flipping the 3 rows currently `processing` for >15 min to `failed` so the existing Retry button becomes reachable.
 
 ## Files touched
-- `supabase/functions/parse-paper/index.ts` — `waitUntil`, retry+fallback model.
-- `src/routes/paper-set.new.tsx` — concurrency pool, awaited invokes, Retry button, better toast.
-- `src/routes/papers.tsx` — Retry button + error tooltip on failed/stuck rows.
+
+- `supabase/functions/parse-paper/index.ts` — strip inline figure render, mark ready earlier, cap figures, classifier timeout, kick off render-paper-figures
+- `supabase/functions/render-paper-figures/index.ts` — new, pooled time-bounded renders
+- `src/routes/api/public/cron/sweep-stuck-papers.ts` — new watchdog endpoint
+- migration: enable `pg_cron`/`pg_net` (if needed) and schedule sweep
+- one-shot UPDATE for currently stuck rows
+- `src/routes/paper-set.new.tsx`, `src/routes/papers.tsx` — "diagrams pending" badge + re-render button

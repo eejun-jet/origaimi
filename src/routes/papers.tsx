@@ -382,6 +382,16 @@ function PaperCard({
           <RefreshCw className="h-3.5 w-3.5" /> Re-parse
         </Button>
         {paper.parse_status === "ready" && (
+          <Button
+            size="sm" variant="ghost"
+            onClick={() => supabase.functions.invoke("render-paper-figures", { body: { paperId: paper.id } })}
+            className="gap-1"
+            title="Re-render diagrams in the background"
+          >
+            <RefreshCw className="h-3.5 w-3.5" /> Diagrams
+          </Button>
+        )}
+        {paper.parse_status === "ready" && (
           <a
             href={`/bank?paper=${paper.id}`}
             className="inline-flex h-8 items-center gap-1 rounded-md px-3 text-xs font-medium text-primary hover:bg-primary-soft"

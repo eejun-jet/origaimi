@@ -21,6 +21,7 @@ import { Route as PaperSetIdRouteImport } from './routes/paper-set.$id'
 import { Route as AssessmentIdRouteImport } from './routes/assessment.$id'
 import { Route as AdminSyllabusIndexRouteImport } from './routes/admin.syllabus.index'
 import { Route as AdminSyllabusIdRouteImport } from './routes/admin.syllabus.$id'
+import { Route as ApiPublicCronSweepStuckPapersRouteImport } from './routes/api/public/cron/sweep-stuck-papers'
 
 const PapersRoute = PapersRouteImport.update({
   id: '/papers',
@@ -82,6 +83,12 @@ const AdminSyllabusIdRoute = AdminSyllabusIdRouteImport.update({
   path: '/admin/syllabus/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicCronSweepStuckPapersRoute =
+  ApiPublicCronSweepStuckPapersRouteImport.update({
+    id: '/api/public/cron/sweep-stuck-papers',
+    path: '/api/public/cron/sweep-stuck-papers',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -96,6 +103,7 @@ export interface FileRoutesByFullPath {
   '/paper-set/new': typeof PaperSetNewRoute
   '/admin/syllabus/$id': typeof AdminSyllabusIdRoute
   '/admin/syllabus/': typeof AdminSyllabusIndexRoute
+  '/api/public/cron/sweep-stuck-papers': typeof ApiPublicCronSweepStuckPapersRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -110,6 +118,7 @@ export interface FileRoutesByTo {
   '/paper-set/new': typeof PaperSetNewRoute
   '/admin/syllabus/$id': typeof AdminSyllabusIdRoute
   '/admin/syllabus': typeof AdminSyllabusIndexRoute
+  '/api/public/cron/sweep-stuck-papers': typeof ApiPublicCronSweepStuckPapersRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -125,6 +134,7 @@ export interface FileRoutesById {
   '/paper-set/new': typeof PaperSetNewRoute
   '/admin/syllabus/$id': typeof AdminSyllabusIdRoute
   '/admin/syllabus/': typeof AdminSyllabusIndexRoute
+  '/api/public/cron/sweep-stuck-papers': typeof ApiPublicCronSweepStuckPapersRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -141,6 +151,7 @@ export interface FileRouteTypes {
     | '/paper-set/new'
     | '/admin/syllabus/$id'
     | '/admin/syllabus/'
+    | '/api/public/cron/sweep-stuck-papers'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -155,6 +166,7 @@ export interface FileRouteTypes {
     | '/paper-set/new'
     | '/admin/syllabus/$id'
     | '/admin/syllabus'
+    | '/api/public/cron/sweep-stuck-papers'
   id:
     | '__root__'
     | '/'
@@ -169,6 +181,7 @@ export interface FileRouteTypes {
     | '/paper-set/new'
     | '/admin/syllabus/$id'
     | '/admin/syllabus/'
+    | '/api/public/cron/sweep-stuck-papers'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -184,6 +197,7 @@ export interface RootRouteChildren {
   PaperSetNewRoute: typeof PaperSetNewRoute
   AdminSyllabusIdRoute: typeof AdminSyllabusIdRoute
   AdminSyllabusIndexRoute: typeof AdminSyllabusIndexRoute
+  ApiPublicCronSweepStuckPapersRoute: typeof ApiPublicCronSweepStuckPapersRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -272,6 +286,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSyllabusIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/cron/sweep-stuck-papers': {
+      id: '/api/public/cron/sweep-stuck-papers'
+      path: '/api/public/cron/sweep-stuck-papers'
+      fullPath: '/api/public/cron/sweep-stuck-papers'
+      preLoaderRoute: typeof ApiPublicCronSweepStuckPapersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -288,6 +309,7 @@ const rootRouteChildren: RootRouteChildren = {
   PaperSetNewRoute: PaperSetNewRoute,
   AdminSyllabusIdRoute: AdminSyllabusIdRoute,
   AdminSyllabusIndexRoute: AdminSyllabusIndexRoute,
+  ApiPublicCronSweepStuckPapersRoute: ApiPublicCronSweepStuckPapersRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
