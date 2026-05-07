@@ -542,7 +542,9 @@ function CoverageList({
     <div className="space-y-6">
       <div className="rounded-lg border border-border bg-card overflow-hidden">
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 px-4 py-2 border-b border-border text-xs text-muted-foreground">
-          <span>{covered.length} of {rows.length} covered</span>
+          <span title="Syllabus coverage = how many syllabus outcomes are touched by at least one question in this set. A real exam typically tests only 20–30% of the full syllabus, so low coverage here is normal.">
+            {covered.length} of {rows.length} syllabus outcomes assessed by this set ({rows.length > 0 ? Math.round((covered.length / rows.length) * 100) : 0}%)
+          </span>
           <span>Per-paper coverage</span>
         </div>
         <ul className="divide-y divide-border">
