@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import {
   inferInScopeDisciplines,
   buildDisciplineLookup,
+  normaliseDiscipline,
 } from "@/lib/discipline-scope";
 
 export const Route = createFileRoute("/paper-set/$id")({
@@ -55,9 +56,12 @@ type SyllabusTopic = {
   learning_outcomes: string[];
   ao_codes: string[];
   section: string | null;
+  strand: string | null;
+  sub_strand: string | null;
+  learning_outcome_code: string | null;
 };
 
-type Tab = "ao" | "ko" | "lo" | "papers" | "summary";
+type Tab = "ao" | "coverage" | "papers" | "summary";
 
 type ReviewSnapshot = {
   ran_at: string;
@@ -82,7 +86,9 @@ function PaperSetView() {
   const [aoDefs, setAoDefs] = useState<AODef[]>([]);
   const [topics, setTopics] = useState<SyllabusTopic[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<Tab>("ko");
+  const [tab, setTab] = useState<Tab>("coverage");
+  const [explorerKO, setExplorerKO] = useState<string | null>(null);
+  const [coverageFilter, setCoverageFilter] = useState<"all" | "covered" | "under" | "untested">("all");
   const [running, setRunning] = useState(false);
   const [reclassifying, setReclassifying] = useState(false);
   const [latestReview, setLatestReview] = useState<ReviewSnapshot | null>(null);
@@ -129,7 +135,7 @@ function PaperSetView() {
             .order("position"),
           supabase
             .from("syllabus_topics")
-            .select("id,topic_code,title,outcome_categories,learning_outcomes,ao_codes,section")
+            .select("id,topic_code,title,outcome_categories,learning_outcomes,ao_codes,section,strand,sub_strand,learning_outcome_code")
             .eq("source_doc_id", sd)
             .order("position"),
         ]);
@@ -166,7 +172,7 @@ function PaperSetView() {
   const totalMarks = flatQuestions.reduce((s, x) => s + x.effectiveMarks, 0);
   const totalQuestions = flatQuestions.length;
 
-  const { inScope, disciplineUniverse, discLookup } = useMemo(() => {
+  const { inScope, disciplineUniverse } = useMemo(() => {
     const topicLikes = topics.map((t) => ({
       title: t.title,
       section: t.section,
@@ -184,7 +190,7 @@ function PaperSetView() {
       topics: topicLikes,
       override: setRow?.scoped_disciplines ?? null,
     });
-    return { inScope: scope, disciplineUniverse: universe, discLookup: lookup };
+    return { inScope: scope, disciplineUniverse: universe };
   }, [topics, flatQuestions, setRow?.scoped_disciplines]);
 
   const updateScope = async (next: string[] | null) => {
@@ -206,66 +212,121 @@ function PaperSetView() {
     return aoTotals;
   }, [flatQuestions]);
 
-  const koCoverage = useMemo(() => {
-    type Row = {
-      ko: string;
-      papers: Map<string, number>;
-      total: number;
-    };
-    const map = new Map<string, Row>();
-    for (const t of topics) {
-      for (const ko of t.outcome_categories ?? []) {
-        const k = ko.trim();
-        if (!k) continue;
-        if (!map.has(k)) map.set(k, { ko: k, papers: new Map(), total: 0 });
-      }
-    }
-    for (const { paperId, q } of flatQuestions) {
-      const kos = new Set((q.knowledge_outcomes ?? []).map((s) => s.trim()).filter(Boolean));
-      for (const ko of kos) {
-        const row = map.get(ko) ?? { ko, papers: new Map(), total: 0 };
-        row.papers.set(paperId, (row.papers.get(paperId) ?? 0) + 1);
-        row.total += 1;
-        map.set(ko, row);
-      }
-    }
-    const all = Array.from(map.values()).sort((a, b) => a.ko.localeCompare(b.ko));
-    if (!inScope) return all;
-    return all.filter((r) => {
-      const d = discLookup.byKO.get(r.ko);
-      return !d || inScope.has(d);
-    });
-  }, [flatQuestions, topics, inScope, discLookup]);
-
-  const loCoverage = useMemo(() => {
+  // ─── KO (strand) → sub_strand → LO drill-down ────────────────────────────
+  // Mirrors the Assessment Coach (assessment.$id.tsx :: koLoGroups) so the
+  // visual story stays consistent: strand is the KO container, sub_strand is
+  // the content bucket, learning_outcomes are the LO leaves.
+  const koGroups = useMemo(() => {
     const norm = (s: string) =>
       s.toLowerCase().replace(/\s+/g, " ").replace(/[.;:,!?\s]+$/g, "").trim();
-    type Row = { lo: string; papers: Map<string, number>; total: number };
-    const map = new Map<string, Row>();
-    for (const t of topics) {
-      for (const lo of t.learning_outcomes ?? []) {
-        const k = norm(lo);
-        if (!k) continue;
-        if (!map.has(k)) map.set(k, { lo, papers: new Map(), total: 0 });
-      }
-    }
+
+    type LoEntry = {
+      code: string | null;
+      text: string;
+      covered: boolean;
+      questionCount: number;
+      papers: Map<string, number>;
+    };
+    type ContentBucket = { name: string; los: LoEntry[] };
+    type KoBucket = {
+      name: string;
+      discipline: string;
+      contents: ContentBucket[];
+      flat: LoEntry[];
+      coveredLOs: number;
+      totalLOs: number;
+      questionsTouching: number;
+    };
+
+    // Index of LO tags actually used by questions, normalised.
+    const loHits = new Map<string, { papers: Map<string, number>; total: number }>();
     for (const { paperId, q } of flatQuestions) {
-      const los = new Set((q.learning_outcomes ?? []).map((s) => s.trim()).filter(Boolean));
-      for (const lo of los) {
-        const k = norm(lo);
-        const row = map.get(k) ?? { lo, papers: new Map(), total: 0 };
+      const tagged = new Set((q.learning_outcomes ?? []).map((s) => s.trim()).filter(Boolean));
+      for (const lo of tagged) {
+        const key = norm(lo);
+        if (!key) continue;
+        const row = loHits.get(key) ?? { papers: new Map(), total: 0 };
         row.papers.set(paperId, (row.papers.get(paperId) ?? 0) + 1);
         row.total += 1;
-        map.set(k, row);
+        loHits.set(key, row);
       }
     }
-    const all = Array.from(map.values()).sort((a, b) => a.lo.localeCompare(b.lo));
-    if (!inScope) return all;
-    return all.filter((r) => {
-      const d = discLookup.byLO.get(r.lo);
-      return !d || inScope.has(d);
+
+    const ko = new Map<string, Map<string, Map<string, LoEntry>>>();
+    const koDiscipline = new Map<string, string>();
+    const ensureKo = (name: string) => {
+      if (!ko.has(name)) ko.set(name, new Map());
+      return ko.get(name)!;
+    };
+    const ensureContent = (k: string, c: string) => {
+      const m = ensureKo(k);
+      if (!m.has(c)) m.set(c, new Map());
+      return m.get(c)!;
+    };
+
+    for (const t of topics) {
+      const los = t.learning_outcomes ?? [];
+      if (los.length === 0) continue;
+      const koName = (t.strand?.trim() || t.title || "Other").trim();
+      const contentName = (t.sub_strand?.trim() || t.title || "").trim() || koName;
+      const codeStem = t.learning_outcome_code?.trim() ?? null;
+      const bucket = ensureContent(koName, contentName);
+      if (!koDiscipline.has(koName)) {
+        koDiscipline.set(koName, normaliseDiscipline(t.section));
+      }
+      los.forEach((loText, i) => {
+        if (!loText) return;
+        const key = norm(loText);
+        if (!key || bucket.has(key)) return;
+        const code = codeStem
+          ? (los.length === 1 ? codeStem : `${codeStem}.${i + 1}`)
+          : null;
+        const hit = loHits.get(key);
+        bucket.set(key, {
+          code,
+          text: loText,
+          covered: !!hit && hit.total > 0,
+          questionCount: hit?.total ?? 0,
+          papers: hit?.papers ?? new Map(),
+        });
+      });
+    }
+
+    const buckets: KoBucket[] = [];
+    for (const [name, contentMap] of ko.entries()) {
+      const contents: ContentBucket[] = [];
+      const flat: LoEntry[] = [];
+      for (const [cname, loMap] of contentMap.entries()) {
+        const items = Array.from(loMap.values()).sort((a, b) => {
+          if (a.code && b.code) return a.code.localeCompare(b.code, undefined, { numeric: true });
+          return a.text.localeCompare(b.text);
+        });
+        contents.push({ name: cname, los: items });
+        for (const it of items) flat.push(it);
+      }
+      contents.sort((a, b) => a.name.localeCompare(b.name));
+      const covered = flat.filter((l) => l.covered).length;
+      const questionsTouching = flat.reduce((s, l) => s + l.questionCount, 0);
+      buckets.push({
+        name,
+        discipline: koDiscipline.get(name) ?? "General",
+        contents,
+        flat,
+        coveredLOs: covered,
+        totalLOs: flat.length,
+        questionsTouching,
+      });
+    }
+
+    const filtered = inScope ? buckets.filter((b) => inScope.has(b.discipline)) : buckets;
+    return filtered.sort((a, b) => {
+      if (a.discipline !== b.discipline) return a.discipline.localeCompare(b.discipline);
+      return a.name.localeCompare(b.name);
     });
-  }, [flatQuestions, topics, inScope, discLookup]);
+  }, [topics, flatQuestions, inScope]);
+
+  const totalLOsInScope = koGroups.reduce((s, g) => s + g.totalLOs, 0);
+  const coveredLOsInScope = koGroups.reduce((s, g) => s + g.coveredLOs, 0);
 
   const perPaper = useMemo(() => {
     return papers.map((p) => {
@@ -407,9 +468,8 @@ function PaperSetView() {
   }
 
   const tabs: { key: Tab; label: string }[] = [
-    { key: "ko", label: "By KO" },
-    { key: "lo", label: "By LO" },
-    { key: "ao", label: "AO balance" },
+    { key: "ao", label: "AO overview" },
+    { key: "coverage", label: "KO / LO coverage" },
     { key: "papers", label: "Per-paper" },
     { key: "summary", label: "Macro summary" },
   ];
@@ -500,17 +560,16 @@ function PaperSetView() {
           ))}
         </div>
 
-        {tab === "ko" ? (
-          <CoverageList
-            rows={koCoverage.map((r) => ({ name: r.ko, total: r.total, papers: r.papers }))}
+        {tab === "coverage" ? (
+          <CoverageExplorer
+            groups={koGroups}
             papers={papers}
-            emptyHint="No KO tags found across these papers."
-          />
-        ) : tab === "lo" ? (
-          <CoverageList
-            rows={loCoverage.map((r) => ({ name: r.lo, total: r.total, papers: r.papers }))}
-            papers={papers}
-            emptyHint="No LO tags found across these papers."
+            coveredLOs={coveredLOsInScope}
+            totalLOs={totalLOsInScope}
+            selectedKO={explorerKO}
+            onSelectKO={setExplorerKO}
+            filter={coverageFilter}
+            onFilterChange={setCoverageFilter}
           />
         ) : tab === "ao" ? (
           <AOPanel aoDefs={aoDefs} aoMarkShare={aoMarkShare} totalMarks={totalMarks} />
@@ -524,66 +583,243 @@ function PaperSetView() {
   );
 }
 
-function CoverageList({
-  rows,
+type LoEntry = {
+  code: string | null;
+  text: string;
+  covered: boolean;
+  questionCount: number;
+  papers: Map<string, number>;
+};
+type ContentBucket = { name: string; los: LoEntry[] };
+type KoBucket = {
+  name: string;
+  discipline: string;
+  contents: ContentBucket[];
+  flat: LoEntry[];
+  coveredLOs: number;
+  totalLOs: number;
+  questionsTouching: number;
+};
+
+function CoverageExplorer({
+  groups,
   papers,
-  emptyHint,
+  coveredLOs,
+  totalLOs,
+  selectedKO,
+  onSelectKO,
+  filter,
+  onFilterChange,
 }: {
-  rows: { name: string; total: number; papers: Map<string, number> }[];
+  groups: KoBucket[];
   papers: PaperRow[];
-  emptyHint: string;
+  coveredLOs: number;
+  totalLOs: number;
+  selectedKO: string | null;
+  onSelectKO: (k: string | null) => void;
+  filter: "all" | "covered" | "under" | "untested";
+  onFilterChange: (f: "all" | "covered" | "under" | "untested") => void;
 }) {
-  const covered = rows.filter((r) => r.total > 0);
-  const uncovered = rows.filter((r) => r.total === 0);
-  if (rows.length === 0) {
-    return <p className="text-sm text-muted-foreground">{emptyHint}</p>;
+  if (groups.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        No syllabus topics in scope — load or attach a syllabus to see KO/LO coverage.
+      </p>
+    );
   }
+
+  const selected = selectedKO ? groups.find((g) => g.name === selectedKO) ?? null : null;
+  if (selected) {
+    return <KoDetail group={selected} papers={papers} onBack={() => onSelectKO(null)} />;
+  }
+
+  const classify = (g: KoBucket): "covered" | "under" | "untested" => {
+    if (g.totalLOs === 0) return "untested";
+    const pct = g.coveredLOs / g.totalLOs;
+    if (pct === 0) return "untested";
+    if (pct < 0.34) return "under";
+    return "covered";
+  };
+
+  const filtered = groups.filter((g) => filter === "all" || classify(g) === filter);
+  const counts = {
+    all: groups.length,
+    covered: groups.filter((g) => classify(g) === "covered").length,
+    under: groups.filter((g) => classify(g) === "under").length,
+    untested: groups.filter((g) => classify(g) === "untested").length,
+  };
+
+  const filterChips: { key: typeof filter; label: string }[] = [
+    { key: "all", label: `All ${counts.all}` },
+    { key: "covered", label: `Covered ${counts.covered}` },
+    { key: "under", label: `Under-tested ${counts.under}` },
+    { key: "untested", label: `Untested ${counts.untested}` },
+  ];
+
+  // Group by discipline for visual sectioning, like the assessment coach.
+  const byDiscipline = new Map<string, KoBucket[]>();
+  for (const g of filtered) {
+    const arr = byDiscipline.get(g.discipline) ?? [];
+    arr.push(g);
+    byDiscipline.set(g.discipline, arr);
+  }
+
   return (
-    <div className="space-y-6">
-      <div className="rounded-lg border border-border bg-card overflow-hidden">
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 px-4 py-2 border-b border-border text-xs text-muted-foreground">
-          <span title="Syllabus coverage = how many syllabus outcomes are touched by at least one question in this set. A real exam typically tests only 20–30% of the full syllabus, so low coverage here is normal.">
-            {covered.length} of {rows.length} syllabus outcomes assessed by this set ({rows.length > 0 ? Math.round((covered.length / rows.length) * 100) : 0}%)
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="text-sm">
+          <span
+            className="font-medium"
+            title="Coverage = how many syllabus learning outcomes are touched by at least one question. Real exams typically test 20–30% of the full syllabus, so partial coverage is normal."
+          >
+            {coveredLOs} of {totalLOs} learning outcomes assessed
           </span>
-          <span>Per-paper coverage</span>
+          <span className="ml-2 text-muted-foreground">
+            ({totalLOs > 0 ? Math.round((coveredLOs / totalLOs) * 100) : 0}%)
+          </span>
         </div>
-        <ul className="divide-y divide-border">
-          {covered.map((r) => (
-            <li key={r.name} className="px-4 py-3 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
-              <div className="min-w-0">
-                <div className="text-sm font-medium truncate">{r.name}</div>
-                <div className="text-xs text-muted-foreground">{r.total} question{r.total === 1 ? "" : "s"} across the set</div>
-              </div>
-              <div className="flex flex-wrap gap-1 justify-end">
-                {papers.map((p, i) => {
-                  const c = r.papers.get(p.id) ?? 0;
-                  return (
-                    <Badge
-                      key={p.id}
-                      variant={c > 0 ? "default" : "outline"}
-                      title={p.title}
-                    >
-                      P{i + 1}{c > 0 ? ` ·${c}` : ""}
-                    </Badge>
-                  );
-                })}
-              </div>
-            </li>
+        <div className="flex flex-wrap gap-1.5">
+          {filterChips.map((c) => (
+            <button
+              key={c.key}
+              type="button"
+              onClick={() => onFilterChange(c.key)}
+              className={`rounded-full border px-2.5 py-0.5 text-xs transition ${
+                filter === c.key
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-card text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {c.label}
+            </button>
           ))}
-        </ul>
-      </div>
-      {uncovered.length > 0 ? (
-        <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-4">
-          <h3 className="text-sm font-semibold text-amber-700 dark:text-amber-400">
-            Unrealised — {uncovered.length} not exercised by any paper in this set
-          </h3>
-          <ul className="mt-2 space-y-1 text-sm">
-            {uncovered.map((r) => (
-              <li key={r.name} className="text-muted-foreground">{r.name}</li>
-            ))}
-          </ul>
         </div>
-      ) : null}
+      </div>
+
+      {Array.from(byDiscipline.entries()).map(([disc, items]) => (
+        <section key={disc} className="space-y-2">
+          {byDiscipline.size > 1 ? (
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{disc}</h3>
+          ) : null}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {items.map((g) => {
+              const pct = g.totalLOs > 0 ? (g.coveredLOs / g.totalLOs) * 100 : 0;
+              const status = classify(g);
+              const tone =
+                status === "covered" ? "border-emerald-500/40 bg-emerald-500/5" :
+                status === "under" ? "border-amber-500/40 bg-amber-500/5" :
+                "border-border bg-muted/30";
+              return (
+                <button
+                  key={g.name}
+                  type="button"
+                  onClick={() => onSelectKO(g.name)}
+                  onDoubleClick={() => onSelectKO(g.name)}
+                  className={`text-left rounded-lg border p-3 transition hover:border-primary/60 hover:bg-card ${tone}`}
+                  title="Click to drill into LO coverage"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="text-sm font-medium leading-tight">{g.name}</div>
+                    <Badge variant="outline" className="text-[10px] shrink-0">{g.discipline}</Badge>
+                  </div>
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    {g.coveredLOs} / {g.totalLOs} LOs · {g.questionsTouching} question{g.questionsTouching === 1 ? "" : "s"}
+                  </div>
+                  <div className="mt-2 h-1.5 rounded bg-muted overflow-hidden">
+                    <div
+                      className={`h-full ${status === "covered" ? "bg-emerald-500" : status === "under" ? "bg-amber-500" : "bg-muted-foreground/30"}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {papers.map((p, i) => {
+                      const hits = g.flat.reduce((s, l) => s + (l.papers.get(p.id) ?? 0), 0);
+                      return (
+                        <Badge
+                          key={p.id}
+                          variant={hits > 0 ? "default" : "outline"}
+                          className="text-[10px]"
+                          title={`${p.title}${hits > 0 ? ` — ${hits} question(s)` : " — no questions touch this KO"}`}
+                        >
+                          P{i + 1}{hits > 0 ? ` ·${hits}` : ""}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function KoDetail({ group, papers, onBack }: { group: KoBucket; papers: PaperRow[]; onBack: () => void }) {
+  const pct = group.totalLOs > 0 ? Math.round((group.coveredLOs / group.totalLOs) * 100) : 0;
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <button
+            type="button"
+            onClick={onBack}
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" /> Back to KO grid
+          </button>
+          <div className="mt-1 flex items-center gap-2 flex-wrap">
+            <h2 className="text-lg font-semibold">{group.name}</h2>
+            <Badge variant="outline" className="text-[10px]">{group.discipline}</Badge>
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {group.coveredLOs} of {group.totalLOs} LOs covered ({pct}%) · {group.questionsTouching} question{group.questionsTouching === 1 ? "" : "s"} across the set
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {group.contents.map((c) => (
+          <div key={c.name} className="rounded-lg border border-border bg-card overflow-hidden">
+            <div className="px-4 py-2 border-b border-border bg-muted/30 text-sm font-medium">
+              {c.name}
+              <span className="ml-2 text-xs text-muted-foreground">
+                {c.los.filter((l) => l.covered).length} / {c.los.length} covered
+              </span>
+            </div>
+            <ul className="divide-y divide-border">
+              {c.los.map((lo) => (
+                <li key={lo.text} className="px-4 py-3 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm">
+                      {lo.code ? <span className="font-mono text-xs text-muted-foreground mr-2">{lo.code}</span> : null}
+                      {lo.text}
+                    </div>
+                    {lo.covered ? (
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {lo.questionCount} question{lo.questionCount === 1 ? "" : "s"}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">Not assessed by this set</div>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-1 justify-end">
+                    {papers.map((p, i) => {
+                      const c2 = lo.papers.get(p.id) ?? 0;
+                      return (
+                        <Badge key={p.id} variant={c2 > 0 ? "default" : "outline"} className="text-[10px]" title={p.title}>
+                          P{i + 1}{c2 > 0 ? ` ·${c2}` : ""}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
