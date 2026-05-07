@@ -84,6 +84,7 @@ function PaperSetView() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("ko");
   const [running, setRunning] = useState(false);
+  const [reclassifying, setReclassifying] = useState(false);
   const [latestReview, setLatestReview] = useState<ReviewSnapshot | null>(null);
 
   useEffect(() => {
