@@ -123,6 +123,9 @@ function PaperSetNew() {
     setUploading(true);
     const newIds: string[] = [];
     try {
+      // 1. Upload all files to storage + insert past_papers rows fast.
+      type Pending = { id: string; name: string };
+      const pending: Pending[] = [];
       for (const file of valid) {
         const ext = file.name.split(".").pop() || "pdf";
         const baseTitle = file.name.replace(/\.(pdf|docx)$/i, "");
@@ -158,12 +161,13 @@ function PaperSetNew() {
         }
         const id = (inserted as { id: string }).id;
         newIds.push(id);
-        supabase.functions
-          .invoke("parse-paper", { body: { paperId: id } })
-          .catch((err) => console.warn("parse-paper invocation error", err));
+        pending.push({ id, name: file.name });
       }
+
       if (newIds.length > 0) {
-        toast.success(`Uploaded ${newIds.length} paper${newIds.length > 1 ? "s" : ""} — parsing in background. They'll be selectable once ready.`);
+        toast.success(
+          `Uploaded ${newIds.length} paper${newIds.length > 1 ? "s" : ""} — parsing in background. The list updates as each one finishes.`,
+        );
         setSelected((s) => {
           const n = new Set(s);
           newIds.forEach((id) => n.add(id));
@@ -171,11 +175,46 @@ function PaperSetNew() {
         });
         await loadPapers();
       }
+
+      // 2. Fan-out parse-paper with bounded concurrency. We await each call so
+      //    the connection stays open until the function returns 202; combined
+      //    with EdgeRuntime.waitUntil on the server, the worker keeps running
+      //    even after we move on, so disconnects no longer kill parses.
+      const POOL = 3;
+      let cursor = 0;
+      const workers = Array.from({ length: Math.min(POOL, pending.length) }, async () => {
+        while (cursor < pending.length) {
+          const idx = cursor++;
+          const item = pending[idx];
+          try {
+            await supabase.functions.invoke("parse-paper", { body: { paperId: item.id } });
+          } catch (err) {
+            console.warn(`parse-paper kickoff failed for ${item.name}`, err);
+          }
+        }
+      });
+      await Promise.all(workers);
+      await loadPapers();
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";
     }
   };
+
+  const retryParse = async (paperId: string) => {
+    await supabase
+      .from("past_papers")
+      .update({ parse_status: "pending", parse_error: null })
+      .eq("id", paperId);
+    await loadPapers();
+    try {
+      await supabase.functions.invoke("parse-paper", { body: { paperId } });
+      toast.success("Re-parsing — this row will refresh in a moment.");
+    } catch (err) {
+      toast.error(`Could not start re-parse: ${String(err)}`);
+    }
+  };
+
 
   const readySelected = papers.filter((p) => selected.has(p.id) && p.parse_status === "ready").length;
   const canSave = title.trim().length > 0 && subject && level && readySelected >= 2 && !saving;
