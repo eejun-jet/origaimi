@@ -83,7 +83,7 @@ function AuthenticPlanPage() {
       supabase.from("authentic_ideas").select("*").eq("plan_id", id).order("position"),
     ]);
     setPlan((p as Plan) ?? null);
-    setIdeas((i as Idea[]) ?? []);
+    setIdeas(((i as unknown) as Idea[]) ?? []);
     setLoading(false);
   };
 
