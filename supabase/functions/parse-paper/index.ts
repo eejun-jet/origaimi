@@ -309,37 +309,42 @@ async function runParse(paperId: string): Promise<void> {
     const paperYear = (paper as { year: number | null }).year ?? null;
     const paperNumber = (paper as { paper_number: string | null }).paper_number ?? null;
 
-    // Map figureIndex -> uploaded image_path so we can attach to questions later.
+    // Map figureIndex -> source PDF path (placeholder until render-paper-figures runs).
+    // We DO NOT re-render figures inline anymore — it takes 15-40s per figure
+    // and blows the Edge wall-clock cap on papers with many diagrams. Instead
+    // we insert rows pointing at the source PDF and let render-paper-figures
+    // upgrade them in the background.
+    const FIG_CAP = 30;
+    const cappedFigures = figures.slice(0, FIG_CAP);
     const figureIndexToPath: Record<number, string> = {};
+    const sourcePdfPath = `papers/${filePath}`;
 
-    if (figures.length > 0) {
-      // Replace existing diagram rows for this paper to keep things idempotent on re-parse.
+    if (cappedFigures.length > 0) {
       await supabase.from("past_paper_diagrams").delete().eq("paper_id", paperId);
-
-      const rows: Array<{
-        paper_id: string; page_number: number; image_path: string;
-        caption: string; topic_tags: string[]; bbox: null;
-      }> = [];
-
-      for (let i = 0; i < figures.length; i++) {
-        const f = figures[i];
-        const imageKey = await renderAndUploadFigure({
-          supabase, paperId, figure: f, subject: subjectName, level: levelName,
-        });
-        const finalPath = imageKey ?? `papers/${filePath}`;
-        figureIndexToPath[i] = finalPath;
-        rows.push({
+      const rows = cappedFigures.map((f, i) => {
+        figureIndexToPath[i] = sourcePdfPath;
+        return {
           paper_id: paperId,
           page_number: f.page_number,
-          image_path: finalPath,
+          image_path: sourcePdfPath,
           caption: f.caption,
           topic_tags: f.topic_tags,
           bbox: null,
-        });
-      }
-      if (rows.length > 0) {
-        await supabase.from("past_paper_diagrams").insert(rows);
-      }
+          // Stash render hints in caption metadata so render-paper-figures
+          // can re-render without re-running the full extraction.
+          // We append a fenced JSON block which the renderer will strip.
+        };
+      });
+      // Persist render hints separately on the rows via a side-channel: encode
+      // figure_description into the caption suffix so render-paper-figures can
+      // pick it up. Simpler than adding a new column.
+      const rowsWithHints = rows.map((r, i) => ({
+        ...r,
+        caption: cappedFigures[i].figure_description
+          ? `${r.caption}\n<!--render:${JSON.stringify({ d: cappedFigures[i].figure_description, s: subjectName, l: levelName })}-->`
+          : r.caption,
+      }));
+      await supabase.from("past_paper_diagrams").insert(rowsWithHints);
     }
 
     // Try to classify questions against a matching syllabus document.
