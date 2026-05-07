@@ -26,7 +26,10 @@ type PaperRow = {
   paper_number: string | null;
   year: number | null;
   parse_status: string;
+  parse_error: string | null;
+  created_at: string;
 };
+
 
 type SyllabusDoc = {
   id: string;
