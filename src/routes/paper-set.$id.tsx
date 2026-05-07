@@ -446,13 +446,33 @@ function PaperSetView() {
         </header>
 
         {untaggedCount > 0 && totalQuestions > 0 ? (
-          <div className="rounded-md border border-amber-300/50 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-sm">
+          <div className="rounded-md border border-amber-300/50 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-sm space-y-2">
             <div className="font-medium text-amber-900 dark:text-amber-100">
-              {untaggedCount} of {totalQuestions} questions have no syllabus tags yet.
+              {untaggedCount} of {totalQuestions} questions ({Math.round((untaggedCount / totalQuestions) * 100)}%) have no syllabus tags yet.
             </div>
-            <p className="text-amber-800/80 dark:text-amber-200/80 mt-0.5">
-              The macro review needs AO/KO/LO tags to find drift and gaps. Click <span className="font-medium">Reclassify all papers</span> to tag them now.
+            <p className="text-amber-800/80 dark:text-amber-200/80">
+              This is a tagging gap, not a syllabus gap. The macro review needs AO/KO/LO tags on each question to map demand. Reclassify the affected papers below.
             </p>
+            {untaggedByPaper.length > 0 ? (
+              <ul className="space-y-1.5 pt-1">
+                {untaggedByPaper.map((r) => (
+                  <li key={r.paper.id} className="flex items-center justify-between gap-3 flex-wrap">
+                    <span className="text-amber-900 dark:text-amber-100">
+                      <span className="font-medium">{r.paper.title}</span>{" "}
+                      <span className="text-amber-800/70 dark:text-amber-200/70">— {r.untagged}/{r.total} untagged</span>
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => reclassifyOne(r.paper.id, r.paper.title)}
+                      disabled={reclassifying || running}
+                    >
+                      Reclassify this paper
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </div>
         ) : null}
 
