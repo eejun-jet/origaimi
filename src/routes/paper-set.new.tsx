@@ -328,41 +328,31 @@ function PaperSetNew() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <Label>Subject</Label>
-              {mounted ? (
-                <Select value={subject} onValueChange={setSubject}>
-                  <SelectTrigger><SelectValue placeholder="Pick subject" /></SelectTrigger>
-                  <SelectContent>
-                    {SUBJECTS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              ) : <SelectPlaceholder label="Pick subject" />}
+              <PlainSelect
+                value={subject}
+                onValueChange={setSubject}
+                placeholder="Pick subject"
+                options={SUBJECTS.map((s) => ({ value: s, label: s }))}
+              />
             </div>
             <div>
               <Label>Level</Label>
-              {mounted ? (
-                <Select value={level} onValueChange={setLevel}>
-                  <SelectTrigger><SelectValue placeholder="Pick level" /></SelectTrigger>
-                  <SelectContent>
-                    {LEVELS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              ) : <SelectPlaceholder label="Pick level" />}
+              <PlainSelect
+                value={level}
+                onValueChange={setLevel}
+                placeholder="Pick level"
+                options={LEVELS.map((l) => ({ value: l, label: l }))}
+              />
             </div>
           </div>
           <div>
             <Label>Syllabus document</Label>
-            {mounted ? (
-              <Select value={syllabusDocId} onValueChange={setSyllabusDocId}>
-                <SelectTrigger>
-                  <SelectValue placeholder={matchedDocs.length === 0 ? "No matching syllabus on file" : "Pick syllabus"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {matchedDocs.map((d) => (
-                    <SelectItem key={d.id} value={d.id}>{d.title}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : <SelectPlaceholder label={matchedDocs.length === 0 ? "No matching syllabus on file" : "Pick syllabus"} />}
+            <PlainSelect
+              value={syllabusDocId}
+              onValueChange={setSyllabusDocId}
+              placeholder={matchedDocs.length === 0 ? "No matching syllabus on file" : "Pick syllabus"}
+              options={matchedDocs.map((d) => ({ value: d.id, label: d.title }))}
+            />
             <p className="mt-1 text-xs text-muted-foreground">
               Used to load AO weightings and the full KO/LO list so the coverage view can flag gaps.
             </p>
