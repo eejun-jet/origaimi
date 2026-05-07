@@ -406,11 +406,28 @@ function PaperSetView() {
             </p>
             {setRow.notes ? <p className="mt-1 text-xs text-muted-foreground italic">{setRow.notes}</p> : null}
           </div>
-          <Button onClick={runReview} disabled={running}>
-            {running ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-            {latestReview ? "Re-run macro review" : "Run macro review"}
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={reclassifyAll} disabled={reclassifying || running}>
+              {reclassifying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Reclassify all papers
+            </Button>
+            <Button onClick={runReview} disabled={running || reclassifying}>
+              {running ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+              {latestReview ? "Re-run macro review" : "Run macro review"}
+            </Button>
+          </div>
         </header>
+
+        {untaggedCount > 0 && totalQuestions > 0 ? (
+          <div className="rounded-md border border-amber-300/50 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-sm">
+            <div className="font-medium text-amber-900 dark:text-amber-100">
+              {untaggedCount} of {totalQuestions} questions have no syllabus tags yet.
+            </div>
+            <p className="text-amber-800/80 dark:text-amber-200/80 mt-0.5">
+              The macro review needs AO/KO/LO tags to find drift and gaps. Click <span className="font-medium">Reclassify all papers</span> to tag them now.
+            </p>
+          </div>
+        ) : null}
 
         {disciplineUniverse.length >= 2 && (
           <PaperSetScopeStrip
