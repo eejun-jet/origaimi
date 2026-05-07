@@ -285,6 +285,50 @@ function PaperSetView() {
     });
   }, [papers, flatQuestions]);
 
+  const untaggedCount = useMemo(
+    () => flatQuestions.filter((x) => !((x.q.ao_codes ?? []).length > 0 || (x.q.learning_outcomes ?? []).length > 0 || (x.q.knowledge_outcomes ?? []).length > 0)).length,
+    [flatQuestions],
+  );
+
+  const reloadPapers = async () => {
+    const { data: links } = await supabase
+      .from("paper_set_papers").select("paper_id,position").eq("set_id", id).order("position");
+    const ids = ((links as { paper_id: string }[]) ?? []).map((l) => l.paper_id);
+    if (ids.length === 0) return;
+    const { data: pps } = await supabase
+      .from("past_papers").select("id,title,paper_number,year,questions_json").in("id", ids);
+    const order = new Map(ids.map((pid, i) => [pid, i] as const));
+    const sorted = ((pps as PaperRow[]) ?? []).sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+    setPapers(sorted);
+  };
+
+  const reclassifyAll = async () => {
+    if (papers.length === 0) return;
+    setReclassifying(true);
+    let okCount = 0;
+    let totalClassified = 0;
+    let totalQs = 0;
+    try {
+      for (let i = 0; i < papers.length; i++) {
+        const p = papers[i];
+        toast.message(`Reclassifying paper ${i + 1} of ${papers.length}…`, { description: p.title });
+        const { data, error } = await supabase.functions.invoke("reclassify-paper", { body: { paper_id: p.id } });
+        if (error) {
+          toast.error(`Failed: ${p.title}`, { description: error.message });
+          continue;
+        }
+        const r = data as { classified?: number; total?: number };
+        okCount++;
+        totalClassified += r?.classified ?? 0;
+        totalQs += r?.total ?? 0;
+      }
+      toast.success(`Tagged ${totalClassified}/${totalQs} questions across ${okCount} paper(s)`);
+      await reloadPapers();
+    } finally {
+      setReclassifying(false);
+    }
+  };
+
   const runReview = async () => {
     setRunning(true);
     try {
