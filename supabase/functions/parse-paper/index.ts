@@ -380,15 +380,19 @@ async function runParse(paperId: string): Promise<void> {
         }));
 
         if (topicCatalogue.length > 0) {
-          classifications = await Promise.race([
-            classifyQuestions(questions, topicCatalogue, subjectName, levelName),
-            new Promise<Record<string, ClassifyResult>>((resolve) =>
-              setTimeout(() => {
-                console.warn("[parse-paper] classifier timeout, proceeding without");
-                resolve({});
-              }, 30_000),
-            ),
-          ]);
+          const outcome = await classifyQuestionsBatched(
+            questions.map((q) => ({
+              number: q.number,
+              stem: q.stem,
+              command_word: q.command_word ?? null,
+              marks: q.marks ?? null,
+              sub_parts: q.sub_parts ?? [],
+            })),
+            topicCatalogue,
+            subjectName,
+            levelName,
+          );
+          classifications = outcome.classifications;
         }
       } catch (e) {
         console.warn("[parse-paper] classifier failed", e);
