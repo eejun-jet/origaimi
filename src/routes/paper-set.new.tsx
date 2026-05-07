@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SUBJECTS, LEVELS } from "@/lib/syllabus";
-import { Loader2, Layers, Upload, RefreshCw } from "lucide-react";
+import { Loader2, Layers, Upload, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/paper-set/new")({
