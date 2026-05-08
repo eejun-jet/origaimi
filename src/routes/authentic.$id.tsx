@@ -378,10 +378,15 @@ function IdeaDetail({ idea, topics, onChanged }: { idea: Idea; topics: SyllabusT
     if (!instruction.trim()) return;
     setRefining(true);
     try {
-      const { error } = await supabase.functions.invoke("refine-authentic-idea", {
+      const { data, error } = await supabase.functions.invoke("refine-authentic-idea", {
         body: { idea_id: idea.id, instruction: instruction.trim() },
       });
-      if (error) throw error;
+      // Edge function returns 4xx/5xx with { error } — surface the real message.
+      const errMsg = error?.message || (data as { error?: string } | null)?.error;
+      if (errMsg) {
+        toast.error(errMsg);
+        return;
+      }
       setInstruction("");
       await onChanged();
       toast.success("Refined.");
