@@ -1,7 +1,8 @@
-// Extract plain text from a Scheme of Work upload (PDF or DOCX) using Gemini.
-// Returns { text } so the client can drop it straight into the SoW textarea.
+// Extract plain text from a Scheme of Work upload (PDF or DOCX).
+// PDFs go through Gemini (vision). DOCX is unzipped in-process.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import JSZip from "https://esm.sh/jszip@3.10.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -9,6 +10,36 @@ const corsHeaders = {
 };
 
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
+
+function b64ToBytes(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+async function extractDocxText(b64: string): Promise<string> {
+  const bytes = b64ToBytes(b64);
+  const zip = await JSZip.loadAsync(bytes);
+  const file = zip.file("word/document.xml");
+  if (!file) throw new Error("Not a valid .docx (missing word/document.xml)");
+  const xml = await file.async("string");
+  // Convert paragraph/break boundaries to newlines, strip remaining tags.
+  const withBreaks = xml
+    .replace(/<\/w:p>/g, "\n")
+    .replace(/<w:br[^/]*\/>/g, "\n")
+    .replace(/<w:tab[^/]*\/>/g, "\t");
+  const stripped = withBreaks.replace(/<[^>]+>/g, "");
+  // Decode the few entities Word emits.
+  const decoded = stripped
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'");
+  // Collapse 3+ blank lines.
+  return decoded.replace(/\n{3,}/g, "\n\n").trim();
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -27,6 +58,23 @@ Deno.serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    if (isDocx) {
+      try {
+        const text = await extractDocxText(file_base64);
+        if (!text) {
+          return new Response(JSON.stringify({ error: "DOCX had no readable text" }),
+            { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        return new Response(JSON.stringify({ text }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      } catch (e) {
+        console.error("extract-sow-text docx error:", e);
+        return new Response(JSON.stringify({ error: `DOCX read failed: ${e instanceof Error ? e.message : "unknown"}` }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    }
+
+    // PDF path → Gemini.
     const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
@@ -60,7 +108,7 @@ Deno.serve(async (req) => {
     if (!aiResp.ok) {
       const txt = await aiResp.text();
       console.error("extract-sow-text AI error:", aiResp.status, txt);
-      return new Response(JSON.stringify({ error: "Extraction failed" }),
+      return new Response(JSON.stringify({ error: `Extraction failed (${aiResp.status}): ${txt.slice(0, 300)}` }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     const aiJson = await aiResp.json();

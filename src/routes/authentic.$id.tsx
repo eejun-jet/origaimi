@@ -25,9 +25,14 @@ type Plan = {
   status: string;
   goals: string | null;
   constraints: string | null;
+  syllabus_doc_id: string | null;
+  notes: string | null;
 };
 
-type RubricLevel = { label: string; descriptor: string };
+type SyllabusDoc = { id: string; title: string; subject: string | null; level: string | null; syllabus_code: string | null };
+type SyllabusTopic = { id: string; strand: string | null; sub_strand: string | null; title: string; learning_outcomes: string[] | null };
+
+type RubricLevel = string | { label?: string; descriptor?: string };
 type RubricCriterion = { criterion: string; levels: RubricLevel[] };
 type Idea = {
   id: string;
@@ -76,18 +81,46 @@ function AuthenticPlanPage() {
   const [filter, setFilter] = useState<string>("all");
   const [savedOnly, setSavedOnly] = useState(false);
   const [openIdeaId, setOpenIdeaId] = useState<string | null>(null);
+  const [topics, setTopics] = useState<SyllabusTopic[]>([]);
+  const [docs, setDocs] = useState<SyllabusDoc[]>([]);
 
   const load = async () => {
     const [{ data: p }, { data: i }] = await Promise.all([
       supabase.from("authentic_plans").select("*").eq("id", id).single(),
       supabase.from("authentic_ideas").select("*").eq("plan_id", id).order("position"),
     ]);
-    setPlan((p as Plan) ?? null);
+    setPlan((p as unknown as Plan) ?? null);
     setIdeas(((i as unknown) as Idea[]) ?? []);
     setLoading(false);
   };
 
   useEffect(() => { load(); }, [id]);
+
+  // Load syllabus topics for the picker
+  useEffect(() => {
+    const docId = plan?.syllabus_doc_id;
+    if (!docId) { setTopics([]); return; }
+    (async () => {
+      const { data } = await supabase
+        .from("syllabus_topics")
+        .select("id,strand,sub_strand,title,learning_outcomes")
+        .eq("source_doc_id", docId)
+        .order("position")
+        .limit(300);
+      setTopics(((data as unknown) as SyllabusTopic[]) ?? []);
+    })();
+  }, [plan?.syllabus_doc_id]);
+
+  // Load syllabus docs list (for picker when none set)
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from("syllabus_documents")
+        .select("id,title,subject,level,syllabus_code")
+        .order("title");
+      setDocs(((data as unknown) as SyllabusDoc[]) ?? []);
+    })();
+  }, []);
 
   // Auto-generate when the plan is freshly created.
   useEffect(() => {
@@ -174,6 +207,38 @@ function AuthenticPlanPage() {
           </Button>
         </div>
 
+        {plan.status === "failed" && plan.notes ? (
+          <div className="mt-4 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm">
+            <div className="font-medium text-destructive">Generation failed</div>
+            <p className="mt-1 text-xs text-muted-foreground">{plan.notes}</p>
+            <Button size="sm" variant="outline" className="mt-2" onClick={runGenerate} disabled={generating}>Retry</Button>
+          </div>
+        ) : null}
+
+        {!plan.syllabus_doc_id ? (
+          <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+            <div className="font-medium">Pick a syllabus to enable KO/LO alignment</div>
+            <p className="mt-1 text-xs text-muted-foreground">Teachers can then tag each idea with the actual KOs and LOs.</p>
+            <select
+              className="mt-2 rounded-md border border-border bg-background px-2 py-1 text-xs"
+              defaultValue=""
+              onChange={async (e) => {
+                const v = e.target.value;
+                if (!v) return;
+                await supabase.from("authentic_plans").update({ syllabus_doc_id: v }).eq("id", id);
+                load();
+              }}
+            >
+              <option value="">— choose syllabus —</option>
+              {docs
+                .filter((d) => (!plan.subject || d.subject === plan.subject) && (!plan.level || d.level === plan.level))
+                .map((d) => (
+                  <option key={d.id} value={d.id}>{`${d.syllabus_code ?? ""} ${d.title}`.trim()}</option>
+                ))}
+            </select>
+          </div>
+        ) : null}
+
         <div className="mt-4 flex flex-wrap gap-2">
           <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>All ({ideas.filter((i) => i.status !== "rejected").length})</FilterChip>
           {Object.keys(MODE_LABEL).map((m) => (
@@ -209,7 +274,7 @@ function AuthenticPlanPage() {
 
       <Sheet open={!!openIdea} onOpenChange={(o) => !o && setOpenIdeaId(null)}>
         <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
-          {openIdea ? <IdeaDetail idea={openIdea} onChanged={load} /> : null}
+          {openIdea ? <IdeaDetail idea={openIdea} topics={topics} onChanged={load} /> : null}
         </SheetContent>
       </Sheet>
     </div>
@@ -242,9 +307,11 @@ function IdeaTile({ idea, onOpen, onSave, onReject }: { idea: Idea; onOpen: () =
         {idea.duration_minutes ? <span className="inline-flex items-center gap-1"><Clock className="h-3 w-3" />{idea.duration_minutes} min</span> : null}
         {idea.group_size ? <span className="inline-flex items-center gap-1"><Users className="h-3 w-3" />{idea.group_size}</span> : null}
       </div>
-      {idea.ao_codes.length ? (
+      {idea.ao_codes.length || idea.knowledge_outcomes.length || idea.learning_outcomes.length ? (
         <div className="mt-2 flex flex-wrap gap-1">
           {idea.ao_codes.map((a) => <Badge key={a} variant="secondary" className="text-[10px]">{a}</Badge>)}
+          {idea.knowledge_outcomes.length ? <Badge variant="outline" className="text-[10px]">{idea.knowledge_outcomes.length} KO</Badge> : null}
+          {idea.learning_outcomes.length ? <Badge variant="outline" className="text-[10px]">{idea.learning_outcomes.length} LO</Badge> : null}
         </div>
       ) : null}
       <div className="mt-4 flex justify-between gap-2 border-t border-border pt-3">
@@ -258,9 +325,54 @@ function IdeaTile({ idea, onOpen, onSave, onReject }: { idea: Idea; onOpen: () =
   );
 }
 
-function IdeaDetail({ idea, onChanged }: { idea: Idea; onChanged: () => void | Promise<void> }) {
+function IdeaDetail({ idea, topics, onChanged }: { idea: Idea; topics: SyllabusTopic[]; onChanged: () => void | Promise<void> }) {
   const [instruction, setInstruction] = useState("");
   const [refining, setRefining] = useState(false);
+  const [selectedKOs, setSelectedKOs] = useState<string[]>(idea.knowledge_outcomes ?? []);
+  const [selectedLOs, setSelectedLOs] = useState<string[]>(idea.learning_outcomes ?? []);
+  const [savingAlign, setSavingAlign] = useState(false);
+
+  // Build KO list (unique strands/titles) and LO list (filtered by selected KOs).
+  const koOptions = useMemo(() => {
+    const set = new Map<string, SyllabusTopic[]>();
+    for (const t of topics) {
+      const key = (t.strand ?? t.title ?? "").trim();
+      if (!key) continue;
+      const arr = set.get(key) ?? [];
+      arr.push(t);
+      set.set(key, arr);
+    }
+    return Array.from(set.entries()).map(([ko, ts]) => ({ ko, topics: ts }));
+  }, [topics]);
+
+  const loOptions = useMemo(() => {
+    const allowed = selectedKOs.length ? new Set(selectedKOs) : null;
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const t of topics) {
+      const key = (t.strand ?? t.title ?? "").trim();
+      if (allowed && !allowed.has(key)) continue;
+      for (const lo of (t.learning_outcomes ?? [])) {
+        if (lo && !seen.has(lo)) { seen.add(lo); out.push(lo); }
+      }
+    }
+    return out;
+  }, [topics, selectedKOs]);
+
+  const toggle = (arr: string[], setArr: (v: string[]) => void, v: string) =>
+    setArr(arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
+
+  const saveAlignment = async () => {
+    setSavingAlign(true);
+    const { error } = await supabase
+      .from("authentic_ideas")
+      .update({ knowledge_outcomes: selectedKOs, learning_outcomes: selectedLOs })
+      .eq("id", idea.id);
+    setSavingAlign(false);
+    if (error) { toast.error(error.message); return; }
+    await onChanged();
+    toast.success("Alignment saved.");
+  };
 
   const refine = async () => {
     if (!instruction.trim()) return;
@@ -299,6 +411,53 @@ function IdeaDetail({ idea, onChanged }: { idea: Idea; onChanged: () => void | P
 
         {idea.brief ? <p className="text-muted-foreground italic">{idea.brief}</p> : null}
 
+        <section className="rounded-lg border border-border bg-muted/20 p-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Syllabus alignment</h4>
+            <Button size="sm" variant="outline" onClick={saveAlignment} disabled={savingAlign}>
+              {savingAlign ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save alignment"}
+            </Button>
+          </div>
+          {topics.length === 0 ? (
+            <p className="mt-2 text-xs text-muted-foreground">Pick a syllabus on this plan to enable KO/LO alignment.</p>
+          ) : (
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div>
+                <div className="mb-1 text-[11px] font-medium text-muted-foreground">Knowledge outcomes (KOs)</div>
+                <div className="flex max-h-48 flex-wrap gap-1 overflow-y-auto">
+                  {koOptions.map(({ ko }) => {
+                    const active = selectedKOs.includes(ko);
+                    return (
+                      <button key={ko} type="button" onClick={() => toggle(selectedKOs, setSelectedKOs, ko)}
+                        className={`rounded-full border px-2 py-0.5 text-[11px] transition ${active ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:border-primary/40"}`}>
+                        {ko}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div>
+                <div className="mb-1 text-[11px] font-medium text-muted-foreground">Learning outcomes (LOs)</div>
+                <div className="flex max-h-48 flex-wrap gap-1 overflow-y-auto">
+                  {loOptions.length === 0 ? (
+                    <span className="text-[11px] text-muted-foreground">Select KOs to filter LOs, or leave KOs empty to see all.</span>
+                  ) : loOptions.map((lo) => {
+                    const active = selectedLOs.includes(lo);
+                    return (
+                      <button key={lo} type="button" onClick={() => toggle(selectedLOs, setSelectedLOs, lo)}
+                        className={`max-w-full truncate rounded-full border px-2 py-0.5 text-left text-[11px] transition ${active ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:border-primary/40"}`}
+                        title={lo}>
+                        {lo}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+
+
         {idea.student_brief ? (
           <section>
             <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Student brief</h4>
@@ -328,12 +487,17 @@ function IdeaDetail({ idea, onChanged }: { idea: Idea; onChanged: () => void | P
                 <div key={i} className="rounded-lg border border-border p-3">
                   <div className="text-sm font-medium">{c.criterion}</div>
                   <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                    {c.levels.map((lv, j) => (
-                      <div key={j} className="rounded-md bg-muted/40 p-2">
-                        <div className="text-xs font-semibold">{lv.label}</div>
-                        <div className="text-xs text-muted-foreground">{lv.descriptor}</div>
-                      </div>
-                    ))}
+                    {c.levels.map((lv, j) => {
+                      const isStr = typeof lv === "string";
+                      const label = isStr ? "" : (lv.label ?? "");
+                      const descriptor = isStr ? lv : (lv.descriptor ?? "");
+                      return (
+                        <div key={j} className="rounded-md bg-muted/40 p-2">
+                          {label ? <div className="text-xs font-semibold">{label}</div> : null}
+                          <div className="text-xs text-muted-foreground">{descriptor}</div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               ))}
