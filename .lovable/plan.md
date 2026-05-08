@@ -1,51 +1,89 @@
-Three fixes for the Authentic Assessment ("WA") flow.
+# Fix LO tagging recall in paper classifier
 
-## 1. SoW upload returns an error
+## Problem
 
-Logs show no rows for `extract-sow-text` recently, but the function uses Gemini chat-completions with `image_url: data:<mime>;base64,...`. That works for PDFs but not for `.docx` (the model rejects non-image/non-PDF MIME), and large PDFs sometimes fail because the whole base64 file is JSON-posted in one shot.
+The shared classifier (`supabase/functions/_shared/classify.ts`, used by both
+`parse-paper` and `reclassify-paper`) misses obvious topics like "Acids and
+Bases" because of how it filters the syllabus catalogue *before* the AI sees
+it. Three concrete causes:
 
-Fix:
+1. **Per-batch pre-pruning by token overlap** keeps only the top 60 of up to
+   500 syllabus entries. Pruning is computed against a *batch of 6 questions
+   together*, so an off-topic question in the same batch can crowd out the
+   right topic. Synonyms in the syllabus (e.g. "proton donor",
+   "neutralisation") don't share tokens with question text saying "acid".
+2. **LO truncation to 6 per topic** in the prompt — any LO past the 6th is
+   invisible.
+3. **One topic per question** — cross-topic questions lose the secondary tag.
 
-- For PDFs: keep the inline base64 path but reduce the size cap to 16 MB and switch the message to a `file`-typed part where supported, falling back to `image_url`. Surface the AI gateway error body in the response so the client can show why it failed (currently we just say "Extraction failed").
-- For DOCX: don't send to Gemini. Add a tiny in-function DOCX reader (unzip the docx in-memory using `JSZip` from esm.sh and concat the text from `word/document.xml`, stripping XML tags). Return the resulting text. This avoids the 502 entirely.
-- Client (`authentic.new.tsx`): bubble up the function's error message in the toast instead of the generic "Upload failed" so future failures are diagnosable.
+## Fix
 
-## 2. Idea generation produces nothing
+Edit `supabase/functions/_shared/classify.ts` only. No DB changes, no UI
+changes, no schema changes. Behavior stays the same on small catalogues.
 
-Edge logs show: Google AI returns 400 — *"The specified schema produces a constraint that has too many states for serving"*. The current `submit_ideas` tool schema is too large (deep nested rubric + milestones + 6 string enums + min/max array bounds).
+### 1. Score and prune per question, not per batch
 
-Fix in `generate-authentic-ideas/index.ts`:
+Replace `pruneCatalogue(catalogue, batch, 60)` with a per-question scorer:
+- Build the batch's pruned set as the **union of each question's top-K
+  topics** (K = 12) plus any topic whose `topic_code` already appears in any
+  question's existing tags.
+- Cap final size at 90 (was 60). Fits comfortably in the prompt.
+- Score against `title + learning_outcomes + knowledge_outcomes + topic_code`,
+  and also boost when a question token equals the **first significant word
+  of the topic title** (so "acid" hits "Acids and Bases" even if the LO text
+  uses "proton donor").
 
-- Drop `minItems`/`maxItems` on every array.
-- Remove the `enum` on `mode` (validate in code on insert).
-- Flatten rubric: `rubric` becomes `array<{ criterion: string; levels: array<string> }>` — one string per level instead of `{label, descriptor}` (we re-split client-side, or just render the string).
-- Drop `additionalProperties: false` everywhere (also a Gemini gotcha).
-- Reduce `required` to the minimum: `mode, title, brief`.
-- Lower target to **5–8 ideas** in the system prompt (user said 5 is fine), and ask for at least 4 distinct modes.
-- Add a one-shot retry without the `tools` array using plain JSON-mode (`response_format: json_object`) if the structured call still 400s, so we degrade gracefully.
-- Persist `parse_error` style info on the plan (`status='failed'`, write the AI error text into `notes`) so the detail page can show "Generation failed: …" instead of a silent empty state.
+### 2. Add a synonym/stem boost
 
-`authentic.$id.tsx`: when `plan.status === 'failed'`, show the stored error and a Retry button (already wired to `runGenerate`).
+Tiny static map in the file: e.g. `acid ↔ acidic, acidity, neutralis*,
+proton donor, ph`; `base ↔ alkali, alkaline, hydroxide`; `oxidation ↔ redox,
+electron loss`. Used only for scoring (not sent to the AI). Keeps the change
+deterministic and reviewable.
 
-## 3. Building stage: let teachers pick KOs / LOs to align with syllabus
+### 3. Stop truncating LOs in the prompt
 
-Right now ideas carry `knowledge_outcomes` / `learning_outcomes` as free-text strings the model invented. Teachers should be able to **pick** from the actual syllabus KOs/LOs of the chosen `syllabus_doc_id`.
+Change `(t.learning_outcomes ?? []).slice(0, 6)` to send all LOs, but
+truncate each LO string to ~140 chars. Net token cost is similar but recall
+improves.
 
-Plan:
+### 4. Allow up to 2 topic codes per question
 
-- In `IdeaDetail` (Sheet on `authentic.$id.tsx`), when the parent plan has a `syllabus_doc_id`, load `syllabus_topics` for that doc once (cached on the page) and group them by `strand` → KO, with their `learning_outcomes[]` as LOs.
-- Add a new "Syllabus alignment" section above the rubric:
-  - Two-column tag picker. Left = KOs (one chip per `strand` / top-level topic). Right = LOs (chips, filtered by selected KOs).
-  - Pre-select chips matching the model's suggested `knowledge_outcomes` / `learning_outcomes` strings via case-insensitive contains match.
-  - "Save alignment" button writes the selected KOs/LOs back to `authentic_ideas.knowledge_outcomes` / `learning_outcomes`.
-- On the tile (`IdeaTile`), surface count badges: e.g. "3 KOs · 5 LOs" so teachers see at a glance which ideas are aligned.
-- If no `syllabus_doc_id` is set on the plan, show an inline note "Pick a syllabus on the plan to enable KO/LO alignment" and a small dropdown to set it (updates `authentic_plans.syllabus_doc_id`).
+Update the `save_classifications` tool schema:
+- Add optional `secondary_topic_code: string` and
+  `secondary_learning_outcomes: string[]`.
+- Merge into the result so `learning_outcomes` and `knowledge_outcomes`
+  arrays union both topics. `topic_code` stays the primary.
 
-## Files to edit
+### 5. Smaller batches by default
 
-- `supabase/functions/extract-sow-text/index.ts` — DOCX branch + better errors
-- `supabase/functions/generate-authentic-ideas/index.ts` — simpler tool schema, JSON-mode fallback, persist failure
-- `src/routes/authentic.new.tsx` — surface upload error
-- `src/routes/authentic.$id.tsx` — failed-state UI, KO/LO picker section, alignment counts on tiles
+Lower `batchSize` default from 6 → 4. Reduces cross-question contamination
+of the pruned shortlist. Slight cost increase, well under the per-batch
+60s timeout.
 
-No DB migrations or new dependencies (JSZip via esm.sh in the edge function only).
+### 6. Better keyword fallback
+
+Lower the score-2 floor to score-1 when the question has ≤5 content tokens,
+and let the fallback return the **top 2** topics (not 1). Keeps the
+"never empty" guarantee but adds breadth.
+
+## Technical details (for reviewers)
+
+- Files changed: `supabase/functions/_shared/classify.ts` only.
+- Functions to redeploy: `parse-paper`, `reclassify-paper`.
+- No client changes; the existing "Re-classify" button in the paper-set
+  review UI is sufficient to retag previously-parsed papers.
+- Risk: prompt size grows ~30%. Still well within Gemini Flash limits
+  (catalogue lines stay under ~250 tokens each × 90 = ~22k tokens; question
+  payload ~3k; system prompt small).
+- Validation: after deploy, run reclassify on the user's existing paper set
+  and compare LO coverage for chemistry questions mentioning acid/base/pH
+  before vs after.
+
+## What this does NOT change
+
+- The macro reviewer logic, status chips, or any UI.
+- The blueprint/section-pool tagger (`retag-questions`) used by the
+  authoring flow — that one already filters strictly to a curated section
+  pool and is not affected.
+- Database schema, RLS, or stored question rows beyond what reclassify
+  rewrites.
