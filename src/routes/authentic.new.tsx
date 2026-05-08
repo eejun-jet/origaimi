@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { PlainSelect } from "@/components/PlainSelect";
 import { SUBJECTS, LEVELS } from "@/lib/syllabus";
-import { Loader2, Sparkles, Lightbulb } from "lucide-react";
+import { Loader2, Sparkles, Lightbulb, FileUp } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/authentic/new")({
@@ -48,6 +48,8 @@ function NewAuthenticPlan() {
   const [constraints, setConstraints] = useState("");
   const [mix, setMix] = useState<string[]>(["balanced"]);
   const [saving, setSaving] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const [sowFileName, setSowFileName] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -154,11 +156,72 @@ function NewAuthenticPlan() {
           </div>
 
           <div>
-            <Label>Scheme of work — paste text</Label>
-            <Textarea value={sowText} onChange={(e) => setSowText(e.target.value)} rows={8}
-              placeholder="Paste your weekly SoW here — lessons, key concepts, planned activities, materials. The richer this is, the better the ideas." />
-            <p className="mt-1 text-xs text-muted-foreground">PDF/DOCX upload is coming next; for now paste the text directly.</p>
+            <Label>Scheme of work</Label>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <input
+                id="sow-file"
+                type="file"
+                accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                className="hidden"
+                onChange={async (e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = "";
+                  if (!f) return;
+                  const lower = f.name.toLowerCase();
+                  if (!lower.endsWith(".pdf") && !lower.endsWith(".docx")) {
+                    toast.error("Only PDF or .docx supported");
+                    return;
+                  }
+                  if (f.size > 15 * 1024 * 1024) {
+                    toast.error("File too large (max 15 MB)");
+                    return;
+                  }
+                  setExtracting(true);
+                  try {
+                    const buf = await f.arrayBuffer();
+                    const bytes = new Uint8Array(buf);
+                    let bin = "";
+                    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+                    const b64 = btoa(bin);
+                    const { data, error } = await supabase.functions.invoke("extract-sow-text", {
+                      body: { file_base64: b64, mime_type: f.type, filename: f.name },
+                    });
+                    if (error) throw error;
+                    const text = (data as { text?: string } | null)?.text ?? "";
+                    if (!text.trim()) { toast.error("Could not read text from that file."); return; }
+                    setSowText((prev) => prev ? `${prev}\n\n${text}` : text);
+                    setSowFileName(f.name);
+                    toast.success(`Loaded ${f.name}`);
+                  } catch (err) {
+                    toast.error(`Upload failed: ${err instanceof Error ? err.message : "unknown"}`);
+                  } finally {
+                    setExtracting(false);
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={extracting}
+                onClick={() => document.getElementById("sow-file")?.click()}
+                className="gap-2"
+              >
+                {extracting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
+                {extracting ? "Reading file…" : "Upload PDF or .docx"}
+              </Button>
+              {sowFileName && <span className="text-xs text-muted-foreground">Loaded: {sowFileName}</span>}
+            </div>
+            <Textarea
+              className="mt-2"
+              value={sowText}
+              onChange={(e) => setSowText(e.target.value)}
+              rows={8}
+              placeholder="…or paste your weekly SoW here — lessons, key concepts, planned activities, materials. The richer this is, the better the ideas."
+            />
+            <p className="mt-1 text-xs text-muted-foreground">Upload a PDF/.docx and we'll extract the text into the box below — you can edit it before generating.</p>
           </div>
+
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
