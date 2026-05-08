@@ -98,14 +98,14 @@ function Dashboard() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link to="/authentic/new">
-              <Button variant="outline" className="gap-2 bg-green-800 text-white hover:bg-green-700 border-green-700">
-                <Lightbulb className="h-4 w-4" /> Generate WA idea
-              </Button>
-            </Link>
             <Link to="/paper-set/new">
               <Button variant="outline" className="gap-2">
                 <Layers className="h-4 w-4" /> Review paper set
+              </Button>
+            </Link>
+            <Link to="/authentic/new">
+              <Button variant="outline" className="gap-2 bg-green-800 text-white hover:bg-green-700 border-green-700">
+                <Lightbulb className="h-4 w-4" /> Generate WA idea
               </Button>
             </Link>
             <Link to="/new">
