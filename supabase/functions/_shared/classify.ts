@@ -335,7 +335,7 @@ export async function classifyQuestionsBatched(
   level: string,
   opts: ClassifyOptions = {},
 ): Promise<ClassifyOutcome> {
-  const batchSize = opts.batchSize ?? 6;
+  const batchSize = opts.batchSize ?? 4;
   const concurrency = opts.concurrency ?? 3;
   const primary = opts.primaryModel ?? "google/gemini-2.5-flash";
   const fallback = opts.fallbackModel ?? "google/gemini-2.5-flash-lite";
