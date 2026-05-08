@@ -49,7 +49,7 @@ type Idea = {
   learning_outcomes: string[];
   materials: string[];
   rubric: RubricCriterion[];
-  milestones: { label: string; when: string }[];
+  milestones: { label: string; when: string; description?: string | null }[];
   teacher_notes: string | null;
   status: "suggested" | "saved" | "rejected" | string;
 };
