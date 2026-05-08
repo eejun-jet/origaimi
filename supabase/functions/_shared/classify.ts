@@ -60,29 +60,85 @@ function questionText(q: ClassifyQuestionInput): string {
   return `${q.stem ?? ""} ${sub}`;
 }
 
-// Pick the top N catalogue entries most relevant to the given batch of
-// questions, by simple token-overlap scoring. Falls back to the first N if
-// nothing scores.
+// Synonym/stem expansion used only for catalogue scoring (NOT sent to the AI).
+// Each line: trigger token -> additional pseudo-tokens added to the question
+// token set. Keeps "acid" matching topics whose LO statements use "proton donor"
+// or "neutralisation", etc. Keep this list short, deterministic, and reviewable.
+const SYNONYMS: Record<string, string[]> = {
+  acid: ["acidic", "acidity", "neutralisation", "neutralise", "neutralize", "proton", "ph"],
+  acids: ["acidic", "acidity", "neutralisation", "neutralise", "proton", "ph"],
+  base: ["alkali", "alkaline", "hydroxide", "neutralisation", "ph"],
+  bases: ["alkali", "alkaline", "hydroxide", "neutralisation", "ph"],
+  alkali: ["base", "hydroxide", "neutralisation", "ph"],
+  salt: ["salts", "neutralisation", "crystallisation"],
+  oxidation: ["redox", "electron", "oxidising"],
+  reduction: ["redox", "electron", "reducing"],
+  electrolysis: ["electrode", "electrolyte", "anode", "cathode", "ions"],
+  mole: ["moles", "stoichiometry", "molar"],
+  energy: ["enthalpy", "exothermic", "endothermic", "kinetic", "potential"],
+  force: ["forces", "newton", "friction", "weight"],
+  wave: ["waves", "frequency", "wavelength", "amplitude"],
+  cell: ["cells", "mitochondria", "membrane", "organelle"],
+  gene: ["genes", "genetic", "dna", "allele", "chromosome"],
+};
+
+function expandTokens(toks: Set<string>): Set<string> {
+  const out = new Set(toks);
+  for (const t of toks) {
+    const syn = SYNONYMS[t];
+    if (syn) for (const s of syn) out.add(s);
+  }
+  return out;
+}
+
+// Score a single catalogue entry against a question's expanded token set.
+// Title-token matches are boosted because topic titles ("Acids and Bases") are
+// the most reliable retrieval signal.
+function scoreEntry(entry: CatalogueEntry, qTokens: Set<string>): number {
+  const titleToks = tokens(entry.title);
+  const bodyText = [
+    entry.learning_outcomes.join(" "),
+    entry.knowledge_outcomes.join(" "),
+    entry.topic_code,
+  ].join(" ");
+  let score = 0;
+  for (const tok of titleToks) if (qTokens.has(tok)) score += 3;
+  for (const tok of tokens(bodyText)) if (qTokens.has(tok)) score += 1;
+  return score;
+}
+
+// Per-question pruning: take the union of each question's top-K topics so a
+// single off-topic question in the batch can't crowd out the correct topic
+// for the others. Caps total at `limit`.
 function pruneCatalogue(
   catalogue: CatalogueEntry[],
   batch: ClassifyQuestionInput[],
-  limit = 60,
+  limit = 90,
+  perQuestion = 12,
 ): CatalogueEntry[] {
   if (catalogue.length <= limit) return catalogue;
-  const batchTokens = new Set(batch.flatMap((q) => tokens(questionText(q))));
-  if (batchTokens.size === 0) return catalogue.slice(0, limit);
-  const scored = catalogue.map((t) => {
-    const text = [
-      t.title,
-      t.learning_outcomes.join(" "),
-      t.knowledge_outcomes.join(" "),
-    ].join(" ");
-    let score = 0;
-    for (const tok of tokens(text)) if (batchTokens.has(tok)) score++;
-    return { t, score };
-  });
-  scored.sort((a, b) => b.score - a.score);
-  const top = scored.filter((s) => s.score > 0).slice(0, limit).map((s) => s.t);
+  const picked = new Map<string, { t: CatalogueEntry; score: number }>();
+  let anyTokens = false;
+  for (const q of batch) {
+    const qTok = expandTokens(new Set(tokens(questionText(q))));
+    if (qTok.size === 0) continue;
+    anyTokens = true;
+    const scored = catalogue
+      .map((t) => ({ t, score: scoreEntry(t, qTok) }))
+      .filter((s) => s.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, perQuestion);
+    for (const s of scored) {
+      const key = s.t.topic_code + "|" + s.t.learning_outcome_code;
+      const prev = picked.get(key);
+      if (!prev || s.score > prev.score) picked.set(key, s);
+    }
+  }
+  if (!anyTokens) return catalogue.slice(0, limit);
+  const top = Array.from(picked.values())
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((s) => s.t);
   if (top.length >= 20) return top;
   // Backfill with first-N to ensure the model sees a reasonable canvas.
   const seen = new Set(top.map((x) => x.topic_code + "|" + x.learning_outcome_code));
@@ -94,9 +150,13 @@ function pruneCatalogue(
   return top;
 }
 
+function clip(s: string, n: number): string {
+  return s.length > n ? s.slice(0, n) : s;
+}
+
 function catalogueLines(catalogue: CatalogueEntry[]): string {
   return catalogue.map((t, i) =>
-    `[${i}] code=${t.topic_code} title="${t.title}" LO_code=${t.learning_outcome_code} LOs=${(t.learning_outcomes ?? []).slice(0, 6).join("|")} AOs=${(t.ao_codes ?? []).join(",")} KOs=${(t.knowledge_outcomes ?? []).slice(0, 4).join("|")}`,
+    `[${i}] code=${t.topic_code} title="${t.title}" LO_code=${t.learning_outcome_code} LOs=${(t.learning_outcomes ?? []).map((lo) => clip(lo, 140)).join("|")} AOs=${(t.ao_codes ?? []).join(",")} KOs=${(t.knowledge_outcomes ?? []).slice(0, 6).join("|")}`,
   ).join("\n");
 }
 
