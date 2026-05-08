@@ -2006,7 +2006,7 @@ function LOGroupedSelector({
   // (and across multiple sections, e.g. both Section A and Section B). We
   // keep its first-seen topic grouping so the user picks once, but also
   // record every section it covers so we can mark cross-section LOs with "*".
-  const { groups, loSections } = useMemo(() => {
+  const { groups, loSections, disciplines } = useMemo(() => {
     const seen = new Set<string>();
     const sectionsByLo = new Map<string, Set<string>>();
     const out: { topicId: string; title: string; los: string[]; section: string | null }[] = [];
@@ -2031,55 +2031,116 @@ function LOGroupedSelector({
       }
       if (los.length > 0) out.push({ topicId: t.id, title: t.title, los, section: t.section ?? null });
     }
-    return { groups: out, loSections: sectionsByLo };
+    // Group topics by their discipline/section (e.g. Physics, Chemistry,
+    // Biology for Combined Science). When ≥2 disciplines are present we
+    // surface a per-discipline "Select all" so teachers don't have to
+    // expand every topic individually.
+    const byDisc = new Map<string, typeof out>();
+    for (const g of out) {
+      const key = g.section ?? "General";
+      const arr = byDisc.get(key) ?? [];
+      arr.push(g);
+      byDisc.set(key, arr);
+    }
+    const discList = Array.from(byDisc.entries()).map(([name, items]) => ({ name, items }));
+    return { groups: out, loSections: sectionsByLo, disciplines: discList };
   }, [topics]);
 
+  const showDisciplineGroups = disciplines.length > 1;
+
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  const [discOpen, setDiscOpen] = useState<Record<string, boolean>>({});
+
+  const renderTopic = (g: { topicId: string; title: string; los: string[] }) => {
+    const selectedInGroup = g.los.filter((lo) => selected.includes(lo));
+    const isOpen = !!open[g.topicId];
+    const allChecked = g.los.length > 0 && selectedInGroup.length === g.los.length;
+    const someChecked = selectedInGroup.length > 0 && !allChecked;
+    return (
+      <div key={g.topicId} className="rounded-md border border-border">
+        <div className="flex items-center gap-2 p-2">
+          <Checkbox
+            checked={allChecked ? true : someChecked ? "indeterminate" : false}
+            onCheckedChange={() => onToggleMany(g.los, !allChecked)}
+            aria-label={`Select all in ${g.title}`}
+          />
+          <button
+            type="button"
+            className="flex flex-1 items-center gap-2 text-left"
+            onClick={() => setOpen((p) => ({ ...p, [g.topicId]: !isOpen }))}
+          >
+            {isOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+            <span className="text-sm font-medium">{g.title}</span>
+            <span className="ml-auto text-xs text-muted-foreground">
+              {selectedInGroup.length} / {g.los.length}
+            </span>
+          </button>
+        </div>
+        {isOpen && (
+          <div className="border-t border-border p-1.5 space-y-1">
+            {g.los.map((lo) => {
+              const checked = selected.includes(lo);
+              const isCrossSection = (loSections.get(lo)?.size ?? 0) > 1;
+              return (
+                <label
+                  key={lo}
+                  className={`flex cursor-pointer items-start gap-2 rounded p-1.5 text-xs ${checked ? "bg-primary-soft/40" : "hover:bg-muted/40"}`}
+                >
+                  <Checkbox checked={checked} onCheckedChange={() => onToggle(lo)} />
+                  <span className="flex-1">
+                    {isCrossSection && <span className="mr-1 font-semibold text-primary" title="Testable in multiple sections">*</span>}
+                    {lo}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="mt-3 max-h-96 space-y-2 overflow-auto rounded-md border border-border bg-background p-2">
       <p className="px-1 pb-1 text-[11px] text-muted-foreground">
         <span className="font-semibold">*</span> indicates an LO that can be tested in more than one section (e.g. both Section A and Section B).
       </p>
-      {groups.map(({ topicId, title, los }) => {
-        const selectedInGroup = los.filter((lo) => selected.includes(lo));
-        const isOpen = !!open[topicId];
-        return (
-          <div key={topicId} className="rounded-md border border-border">
-            <button
-              type="button"
-              className="flex w-full items-center gap-2 p-2 text-left"
-              onClick={() => setOpen((p) => ({ ...p, [topicId]: !isOpen }))}
-            >
-              {isOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-              <span className="text-sm font-medium">{title}</span>
-              <span className="ml-auto text-xs text-muted-foreground">
-                {selectedInGroup.length} / {los.length}
-              </span>
-            </button>
-            {isOpen && (
-              <div className="border-t border-border p-1.5 space-y-1">
-                {los.map((lo) => {
-                  const checked = selected.includes(lo);
-                  const isCrossSection = (loSections.get(lo)?.size ?? 0) > 1;
-                  return (
-                    <label
-                      key={lo}
-                      className={`flex cursor-pointer items-start gap-2 rounded p-1.5 text-xs ${checked ? "bg-primary-soft/40" : "hover:bg-muted/40"}`}
-                    >
-                      <Checkbox checked={checked} onCheckedChange={() => onToggle(lo)} />
-                      <span className="flex-1">
-                        {isCrossSection && <span className="mr-1 font-semibold text-primary" title="Testable in multiple sections">*</span>}
-                        {lo}
-                      </span>
-                    </label>
-                  );
-                })}
+      {showDisciplineGroups
+        ? disciplines.map(({ name, items }) => {
+            const allLos = items.flatMap((g) => g.los);
+            const selInDisc = allLos.filter((lo) => selected.includes(lo));
+            const allChecked = allLos.length > 0 && selInDisc.length === allLos.length;
+            const someChecked = selInDisc.length > 0 && !allChecked;
+            const isOpen = discOpen[name] ?? true;
+            return (
+              <div key={name} className="rounded-md border border-primary/30 bg-muted/20">
+                <div className="flex items-center gap-2 p-2">
+                  <Checkbox
+                    checked={allChecked ? true : someChecked ? "indeterminate" : false}
+                    onCheckedChange={() => onToggleMany(allLos, !allChecked)}
+                    aria-label={`Select all ${name}`}
+                  />
+                  <button
+                    type="button"
+                    className="flex flex-1 items-center gap-2 text-left"
+                    onClick={() => setDiscOpen((p) => ({ ...p, [name]: !isOpen }))}
+                  >
+                    {isOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                    <span className="text-sm font-semibold">{name}</span>
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      {selInDisc.length} / {allLos.length} selected
+                    </span>
+                  </button>
+                </div>
+                {isOpen && (
+                  <div className="border-t border-border p-1.5 space-y-1.5">
+                    {items.map(renderTopic)}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        );
-      })}
+            );
+          })
+        : groups.map(renderTopic)}
     </div>
   );
 }
