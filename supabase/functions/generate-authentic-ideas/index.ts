@@ -1,7 +1,4 @@
-// Generate a portfolio of authentic assessment ideas (mini-tests, performance
-// tasks, projects, oral, written-authentic, self/peer) from a teacher's
-// scheme of work + chosen syllabus context. Persists ideas into
-// `authentic_ideas` and returns them.
+// Generate a portfolio of authentic assessment ideas.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.0";
@@ -13,15 +10,11 @@ const corsHeaders = {
 
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 
-const MODES = [
-  "mini_test",
-  "performance_task",
-  "project",
-  "oral",
-  "written_authentic",
-  "self_peer",
-] as const;
+const ALLOWED_MODES = new Set([
+  "mini_test", "performance_task", "project", "oral", "written_authentic", "self_peer",
+]);
 
+// Simpler schema — no enums, no min/max, no additionalProperties, fewer required.
 const TOOL = {
   type: "function",
   function: {
@@ -32,48 +25,32 @@ const TOOL = {
       properties: {
         ideas: {
           type: "array",
-          minItems: 6,
-          maxItems: 12,
           items: {
             type: "object",
             properties: {
-              mode: { type: "string", enum: [...MODES] },
+              mode: { type: "string", description: "One of: mini_test, performance_task, project, oral, written_authentic, self_peer." },
               title: { type: "string" },
-              brief: { type: "string", description: "One-sentence teacher summary." },
-              student_brief: { type: "string", description: "1–2 paragraph task description as the student would read it." },
+              brief: { type: "string" },
+              student_brief: { type: "string" },
               duration_minutes: { type: "integer" },
-              group_size: { type: "string", description: "e.g. 'individual', 'pairs', 'groups of 3–4'." },
+              group_size: { type: "string" },
               ao_codes: { type: "array", items: { type: "string" } },
               knowledge_outcomes: { type: "array", items: { type: "string" } },
               learning_outcomes: { type: "array", items: { type: "string" } },
               materials: { type: "array", items: { type: "string" } },
               rubric: {
                 type: "array",
-                description: "3–5 criteria, each with 3–4 performance levels.",
                 items: {
                   type: "object",
                   properties: {
                     criterion: { type: "string" },
-                    levels: {
-                      type: "array",
-                      items: {
-                        type: "object",
-                        properties: {
-                          label: { type: "string" },
-                          descriptor: { type: "string" },
-                        },
-                        required: ["label", "descriptor"],
-                        additionalProperties: false,
-                      },
-                    },
+                    levels: { type: "array", items: { type: "string" } },
                   },
                   required: ["criterion", "levels"],
-                  additionalProperties: false,
                 },
               },
               milestones: {
                 type: "array",
-                description: "For multi-lesson projects only; otherwise empty.",
                 items: {
                   type: "object",
                   properties: {
@@ -81,25 +58,22 @@ const TOOL = {
                     when: { type: "string" },
                   },
                   required: ["label", "when"],
-                  additionalProperties: false,
                 },
               },
               teacher_notes: { type: "string" },
             },
-            required: ["mode", "title", "brief", "student_brief", "duration_minutes", "group_size", "ao_codes", "rubric"],
-            additionalProperties: false,
+            required: ["mode", "title", "brief"],
           },
         },
       },
       required: ["ideas"],
-      additionalProperties: false,
     },
   },
 };
 
 const SYSTEM = `You are an Assessment Design Coach for Singapore MOE teachers, helping them design AUTHENTIC, BALANCED assessment portfolios that go beyond year-end exam papers.
 
-Given a unit / scheme of work, propose 8–12 ideas spanning multiple modes:
+Given a unit / scheme of work, propose 5–8 ideas across at least 4 of these modes:
 - mini_test: 10–25 min low-stakes formative checks
 - performance_task: short authentic task in a real-world context (lab investigation, data brief, design challenge, fieldwork write-up)
 - project: multi-lesson, often group, with milestones
@@ -107,15 +81,29 @@ Given a unit / scheme of work, propose 8–12 ideas spanning multiple modes:
 - written_authentic: letter, op-ed, source-based memo, infographic copy
 - self_peer: structured self- or peer-assessment moment
 
+Use ONLY these mode strings: mini_test, performance_task, project, oral, written_authentic, self_peer.
+
 Rules:
-- Cover MULTIPLE modes; do not return six mini-tests.
+- Cover MULTIPLE modes; never return just mini-tests.
 - Tag each idea with the AO codes from the syllabus context provided. Use the EXACT codes given (e.g. "AO1", "AO2", "AO3").
 - Use Singapore-relevant authentic contexts (HDB, hawker, MRT, NEA, PUB, local industries, local news) when natural — but for Social Studies a global case is fine.
-- Be concrete: students should know exactly what to produce. Teachers should know exactly what materials/time are needed.
-- Rubrics: 3–5 criteria, each with 3–4 levels (e.g. Beginning / Developing / Proficient / Distinguished). Descriptors are short and observable.
-- Respect class size, duration_weeks, and any constraints the teacher gave.
-- British spelling, plain teacher language. No jargon.
+- Be concrete: students should know exactly what to produce.
+- Rubric: 3–5 criteria, each with 3–4 short level descriptors as plain strings (e.g. "Beginning: ...", "Proficient: ...").
+- Respect class size, duration_weeks, and any constraints.
+- British spelling, plain teacher language.
 Return strictly through the submit_ideas tool.`;
+
+const JSON_SYSTEM = SYSTEM + `
+
+Return JSON of shape: { "ideas": [ { mode, title, brief, student_brief, duration_minutes, group_size, ao_codes:[], knowledge_outcomes:[], learning_outcomes:[], materials:[], rubric:[{criterion, levels:[]}], milestones:[{label, when}], teacher_notes } ] }`;
+
+async function callTool(body: unknown) {
+  return await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -134,17 +122,13 @@ Deno.serve(async (req) => {
     );
 
     const { data: plan, error: planErr } = await supabase
-      .from("authentic_plans")
-      .select("*")
-      .eq("id", plan_id)
-      .single();
+      .from("authentic_plans").select("*").eq("id", plan_id).single();
     if (planErr || !plan) {
       return new Response(JSON.stringify({ error: planErr?.message ?? "Plan not found" }), {
         status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Pull syllabus context (AOs, KOs, sample LOs) if available.
     let aoLines: string[] = [];
     let koLines: string[] = [];
     if (plan.syllabus_doc_id) {
@@ -192,12 +176,20 @@ ${aoLines.join("\n") || "(none)"}
 SYLLABUS KNOWLEDGE OUTCOMES (selected):
 ${koLines.join("\n") || "(none)"}
 
-Return 8–12 balanced ideas via submit_ideas.`;
+Return 5–8 balanced ideas spanning at least 4 modes.`;
 
-    const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
+    const recordFailure = async (msg: string) => {
+      await supabase.from("authentic_plans")
+        .update({ status: "failed", notes: msg.slice(0, 1000) })
+        .eq("id", plan_id);
+    };
+
+    // Attempt 1: tool call.
+    let parsed: { ideas: Array<Record<string, unknown>> } | null = null;
+    let lastErr = "";
+
+    try {
+      const aiResp = await callTool({
         model: "google/gemini-2.5-pro",
         messages: [
           { role: "system", content: SYSTEM },
@@ -205,73 +197,102 @@ Return 8–12 balanced ideas via submit_ideas.`;
         ],
         tools: [TOOL],
         tool_choice: { type: "function", function: { name: "submit_ideas" } },
-      }),
-    });
+      });
+      if (aiResp.status === 429) {
+        await recordFailure("Rate limit reached.");
+        return new Response(JSON.stringify({ error: "Rate limit reached. Try again in a minute." }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      if (aiResp.status === 402) {
+        await recordFailure("AI credits exhausted.");
+        return new Response(JSON.stringify({ error: "AI credits exhausted." }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      if (aiResp.ok) {
+        const aiJson = await aiResp.json();
+        const args = aiJson?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
+        if (args) {
+          try { parsed = JSON.parse(args); } catch { lastErr = "tool args not JSON"; }
+        } else {
+          lastErr = "no tool call in response";
+        }
+      } else {
+        lastErr = `tool path ${aiResp.status}: ${(await aiResp.text()).slice(0, 300)}`;
+        console.error("generate-authentic-ideas tool error:", lastErr);
+      }
+    } catch (e) {
+      lastErr = `tool path threw: ${e instanceof Error ? e.message : "unknown"}`;
+    }
 
-    if (aiResp.status === 429) {
-      return new Response(JSON.stringify({ error: "Rate limit reached. Try again in a minute." }),
-        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-    if (aiResp.status === 402) {
-      return new Response(JSON.stringify({ error: "AI credits exhausted. Top up to continue." }),
-        { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-    if (!aiResp.ok) {
-      const txt = await aiResp.text();
-      console.error("generate-authentic-ideas AI error:", aiResp.status, txt);
-      return new Response(JSON.stringify({ error: "Generation failed" }),
-        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    // Attempt 2: plain JSON mode fallback.
+    if (!parsed) {
+      try {
+        const aiResp2 = await callTool({
+          model: "google/gemini-2.5-flash",
+          messages: [
+            { role: "system", content: JSON_SYSTEM },
+            { role: "user", content: userPayload },
+          ],
+          response_format: { type: "json_object" },
+        });
+        if (!aiResp2.ok) {
+          const txt = await aiResp2.text();
+          lastErr = `json path ${aiResp2.status}: ${txt.slice(0, 300)}`;
+          console.error("generate-authentic-ideas json error:", lastErr);
+        } else {
+          const j = await aiResp2.json();
+          const content = j?.choices?.[0]?.message?.content ?? "";
+          try { parsed = JSON.parse(content); } catch { lastErr = "json content not JSON: " + content.slice(0, 200); }
+        }
+      } catch (e) {
+        lastErr = `json path threw: ${e instanceof Error ? e.message : "unknown"}`;
+      }
     }
 
-    const aiJson = await aiResp.json();
-    const args = aiJson?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
-    if (!args) {
-      return new Response(JSON.stringify({ error: "No ideas returned" }),
-        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-    let parsed: { ideas: Array<Record<string, unknown>> };
-    try { parsed = JSON.parse(args); } catch {
-      return new Response(JSON.stringify({ error: "Bad model output" }),
+    if (!parsed || !Array.isArray(parsed.ideas) || parsed.ideas.length === 0) {
+      await recordFailure(`Generation failed: ${lastErr || "no ideas returned"}`);
+      return new Response(JSON.stringify({ error: `Generation failed: ${lastErr || "no ideas returned"}` }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // Replace previous "suggested" ideas; keep saved ones.
-    await supabase.from("authentic_ideas")
-      .delete()
-      .eq("plan_id", plan_id)
-      .eq("status", "suggested");
+    await supabase.from("authentic_ideas").delete()
+      .eq("plan_id", plan_id).eq("status", "suggested");
 
-    const rows = (parsed.ideas ?? []).map((i, idx) => ({
-      plan_id,
-      position: idx,
-      mode: String(i.mode ?? "performance_task"),
-      title: String(i.title ?? "Untitled"),
-      brief: String(i.brief ?? ""),
-      student_brief: String(i.student_brief ?? ""),
-      duration_minutes: Number(i.duration_minutes ?? 0) || null,
-      group_size: String(i.group_size ?? "individual"),
-      ao_codes: Array.isArray(i.ao_codes) ? i.ao_codes : [],
-      knowledge_outcomes: Array.isArray(i.knowledge_outcomes) ? i.knowledge_outcomes : [],
-      learning_outcomes: Array.isArray(i.learning_outcomes) ? i.learning_outcomes : [],
-      materials: Array.isArray(i.materials) ? i.materials : [],
-      rubric: Array.isArray(i.rubric) ? i.rubric : [],
-      milestones: Array.isArray(i.milestones) ? i.milestones : [],
-      teacher_notes: String(i.teacher_notes ?? ""),
-      status: "suggested",
-    }));
+    const rows = parsed.ideas.map((i, idx) => {
+      const mode = String(i.mode ?? "performance_task");
+      return {
+        plan_id,
+        position: idx,
+        mode: ALLOWED_MODES.has(mode) ? mode : "performance_task",
+        title: String(i.title ?? "Untitled"),
+        brief: String(i.brief ?? ""),
+        student_brief: String(i.student_brief ?? ""),
+        duration_minutes: Number(i.duration_minutes ?? 0) || null,
+        group_size: String(i.group_size ?? "individual"),
+        ao_codes: Array.isArray(i.ao_codes) ? i.ao_codes : [],
+        knowledge_outcomes: Array.isArray(i.knowledge_outcomes) ? i.knowledge_outcomes : [],
+        learning_outcomes: Array.isArray(i.learning_outcomes) ? i.learning_outcomes : [],
+        materials: Array.isArray(i.materials) ? i.materials : [],
+        rubric: Array.isArray(i.rubric) ? i.rubric : [],
+        milestones: Array.isArray(i.milestones) ? i.milestones : [],
+        teacher_notes: String(i.teacher_notes ?? ""),
+        status: "suggested",
+      };
+    });
 
     if (rows.length) {
       const { error: insErr } = await supabase.from("authentic_ideas").insert(rows);
       if (insErr) {
         console.error("insert ideas failed:", insErr);
+        await recordFailure(`Insert failed: ${insErr.message}`);
         return new Response(JSON.stringify({ error: insErr.message }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
     }
 
     await supabase.from("authentic_plans")
-      .update({ status: "ready" })
-      .eq("id", plan_id);
+      .update({ status: "ready", notes: null }).eq("id", plan_id);
 
     return new Response(JSON.stringify({ ok: true, count: rows.length }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
