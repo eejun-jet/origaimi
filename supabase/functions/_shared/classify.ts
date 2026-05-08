@@ -203,7 +203,7 @@ async function classifyBatch(
   model: string,
   timeoutMs: number,
 ): Promise<Record<string, ClassifyResult>> {
-  const pruned = pruneCatalogue(catalogue, batch, 60);
+  const pruned = pruneCatalogue(catalogue, batch, 90, 12);
   const items = batch.map((q) => ({
     number: q.number,
     stem: (q.stem ?? "").slice(0, 800),
@@ -225,7 +225,7 @@ async function classifyBatch(
         messages: [
           {
             role: "system",
-            content: `You map past-paper exam questions to a syllabus catalogue. For each question pick exactly one topic_code from the catalogue, then list the specific learning_outcomes, knowledge_outcomes (high-level outcome categories), and ao_codes (assessment objectives) it tests. Add a Bloom level. Use exact codes/strings from the catalogue. Subject: ${subject}. Level: ${level}.`,
+            content: `You map past-paper exam questions to a syllabus catalogue. For each question pick a primary topic_code (the dominant topic) AND, ONLY when the question genuinely tests a second distinct topic, a secondary_topic_code. Then list the SPECIFIC learning_outcomes (verbatim from the catalogue), knowledge_outcomes (high-level outcome categories), and ao_codes the question actually tests — drawn from BOTH topics if you set a secondary. Be generous with LO recall: if a question on acids/bases mentions neutralisation, pH, salt formation, indicators, or proton transfer, include those LOs even if the question word is just "acid". Use exact codes/strings from the catalogue. Add a Bloom level. Subject: ${subject}. Level: ${level}.`,
           },
           {
             role: "user",
