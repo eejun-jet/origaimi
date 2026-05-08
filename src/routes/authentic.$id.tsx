@@ -25,7 +25,12 @@ type Plan = {
   status: string;
   goals: string | null;
   constraints: string | null;
+  syllabus_doc_id: string | null;
+  notes: string | null;
 };
+
+type SyllabusDoc = { id: string; title: string; subject: string | null; level: string | null; syllabus_code: string | null };
+type SyllabusTopic = { id: string; strand: string | null; sub_strand: string | null; title: string; learning_outcomes: string[] | null };
 
 type RubricLevel = { label: string; descriptor: string };
 type RubricCriterion = { criterion: string; levels: RubricLevel[] };
