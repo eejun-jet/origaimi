@@ -180,7 +180,7 @@ Deno.serve(async (req) => {
     if (totalQuestions > 0 && unclassifiedQuestions / totalQuestions > 0.5) {
       return new Response(
         JSON.stringify({
-          error: `Most questions in this set (${unclassifiedQuestions}/${totalQuestions}) have no syllabus tags yet. Click "Reclassify all papers" to tag them, then re-run the review.`,
+          error: `Most questions in this set (${unclassifiedQuestions}/${totalQuestions}) have no LO/KO tags yet. Click "Reclassify all papers" to tag them, then re-run the review.`,
           needs_reclassify: true,
           unclassified_questions: unclassifiedQuestions,
           total_questions: totalQuestions,
