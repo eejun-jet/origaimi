@@ -1,89 +1,96 @@
-# Fix LO tagging recall in paper classifier
+# Fix WA "Refine idea → Apply" silently reverting
 
-## Problem
+## What's actually happening
 
-The shared classifier (`supabase/functions/_shared/classify.ts`, used by both
-`parse-paper` and `reclassify-paper`) misses obvious topics like "Acids and
-Bases" because of how it filters the syllabus catalogue *before* the AI sees
-it. Three concrete causes:
+Clicking **Apply** calls `refine-authentic-idea`. The function uses an AI tool
+schema (`submit_idea`) with the same shape that previously broke
+`generate-authentic-ideas`: deep nested rubric (`array<{criterion, levels:
+array<{label, descriptor}>}>` with `required` and `additionalProperties:
+false` everywhere). On the AI gateway this can return a 400 *"specified
+schema produces a constraint that has too many states for serving"*, which
+the function turns into a generic 502 *"Refine failed"*. The client toast
+fires but the UI doesn't change → it looks like a revert.
 
-1. **Per-batch pre-pruning by token overlap** keeps only the top 60 of up to
-   500 syllabus entries. Pruning is computed against a *batch of 6 questions
-   together*, so an off-topic question in the same batch can crowd out the
-   right topic. Synonyms in the syllabus (e.g. "proton donor",
-   "neutralisation") don't share tokens with question text saying "acid".
-2. **LO truncation to 6 per topic** in the prompt — any LO past the 6th is
-   invisible.
-3. **One topic per question** — cross-topic questions lose the secondary tag.
+A second, separate problem: the schema has **no field** for the things the
+teacher is actually asking for — a student worksheet/scaffold and a session
+timeline. The DB row already has a `milestones jsonb` column that nothing
+in the refine flow writes to, and there is no `worksheet` field at all.
+Even when the schema *does* accept the call, the model has nowhere to put
+the requested content, so it can only stuff it into `student_brief` or
+`teacher_notes` — easy to miss.
 
 ## Fix
 
-Edit `supabase/functions/_shared/classify.ts` only. No DB changes, no UI
-changes, no schema changes. Behavior stays the same on small catalogues.
+Edit `supabase/functions/refine-authentic-idea/index.ts` and the idea
+detail UI in `src/routes/authentic.$id.tsx`. No DB migration needed —
+`milestones` already exists; we add a `worksheet` field by reusing
+`teacher_notes` + a structured `milestones` array.
 
-### 1. Score and prune per question, not per batch
+### 1. Simplify the tool schema (same fix as generate-authentic-ideas)
 
-Replace `pruneCatalogue(catalogue, batch, 60)` with a per-question scorer:
-- Build the batch's pruned set as the **union of each question's top-K
-  topics** (K = 12) plus any topic whose `topic_code` already appears in any
-  question's existing tags.
-- Cap final size at 90 (was 60). Fits comfortably in the prompt.
-- Score against `title + learning_outcomes + knowledge_outcomes + topic_code`,
-  and also boost when a question token equals the **first significant word
-  of the topic title** (so "acid" hits "Acids and Bases" even if the LO text
-  uses "proton donor").
+- Drop `additionalProperties: false` everywhere.
+- Flatten rubric levels to `levels: { type: "array", items: { type: "string" } }`
+  (a list of "Level — descriptor" strings). The UI already handles this
+  shape after the earlier `Rubric` flattening change.
+- Reduce `required` to just `title`, `brief`.
+- Remove deep nesting on milestones (use `array<{label, duration_minutes,
+  description}>`).
 
-### 2. Add a synonym/stem boost
+### 2. Add fields that match the teacher's request
 
-Tiny static map in the file: e.g. `acid ↔ acidic, acidity, neutralis*,
-proton donor, ph`; `base ↔ alkali, alkaline, hydroxide`; `oxidation ↔ redox,
-electron loss`. Used only for scoring (not sent to the AI). Keeps the change
-deterministic and reviewable.
+Add to `submit_idea`:
+- `milestones`: array of `{ label, duration_minutes, description }` — for
+  the 3×1-hour timeline.
+- `student_worksheet`: long string — the scaffold/preparation questions
+  the teacher asked for (markdown, free-form). Persisted into the existing
+  `teacher_notes` column under a clear `## Student worksheet` heading
+  appended to whatever else the model puts there, OR (preferred) into a
+  new `student_brief` section. We keep DB writes to existing columns only.
 
-### 3. Stop truncating LOs in the prompt
+Mapping on save:
+- `milestones` → `authentic_ideas.milestones` (already a jsonb column).
+- `student_worksheet` → appended to `student_brief` under a `## Worksheet
+  / Scaffold` heading so it shows in the existing student-facing panel.
+- Everything else maps as today.
 
-Change `(t.learning_outcomes ?? []).slice(0, 6)` to send all LOs, but
-truncate each LO string to ~140 chars. Net token cost is similar but recall
-improves.
+### 3. JSON-mode fallback
 
-### 4. Allow up to 2 topic codes per question
+If the tool call returns no arguments OR the gateway responds 400/502, retry
+once with `response_format: { type: "json_object" }` and a system message
+that asks for a JSON object matching the same field names. Same pattern we
+used in `generate-authentic-ideas`.
 
-Update the `save_classifications` tool schema:
-- Add optional `secondary_topic_code: string` and
-  `secondary_learning_outcomes: string[]`.
-- Merge into the result so `learning_outcomes` and `knowledge_outcomes`
-  arrays union both topics. `topic_code` stays the primary.
+### 4. Surface real errors, don't silently revert
 
-### 5. Smaller batches by default
+In the edge function: bubble the upstream gateway error body (truncated to
+~300 chars) in the JSON error response instead of a flat
+"Refine failed". In `authentic.$id.tsx` `refine()`:
+- Read `data?.error` from the function response and show it in the toast.
+- On error, **do NOT clear the instruction textarea** so the teacher can
+  retry/edit without retyping their whole brief. (Today, the field is
+  cleared on error too because `setInstruction("")` is called even when
+  the catch fires for some error paths — verify and gate behind success.)
 
-Lower `batchSize` default from 6 → 4. Reduces cross-question contamination
-of the pruned shortlist. Slight cost increase, well under the per-batch
-60s timeout.
+### 5. Render new fields in the detail drawer
 
-### 6. Better keyword fallback
+In `IdeaDetail`:
+- New "Timeline" section listing `milestones` (label, duration, description)
+  if present.
+- The worksheet content arrives inside `student_brief`, so it renders in
+  the existing student brief block — no UI change needed there beyond
+  ensuring markdown line breaks render (use `whitespace-pre-wrap`).
 
-Lower the score-2 floor to score-1 when the question has ≤5 content tokens,
-and let the fallback return the **top 2** topics (not 1). Keeps the
-"never empty" guarantee but adds breadth.
+## Technical details
 
-## Technical details (for reviewers)
-
-- Files changed: `supabase/functions/_shared/classify.ts` only.
-- Functions to redeploy: `parse-paper`, `reclassify-paper`.
-- No client changes; the existing "Re-classify" button in the paper-set
-  review UI is sufficient to retag previously-parsed papers.
-- Risk: prompt size grows ~30%. Still well within Gemini Flash limits
-  (catalogue lines stay under ~250 tokens each × 90 = ~22k tokens; question
-  payload ~3k; system prompt small).
-- Validation: after deploy, run reclassify on the user's existing paper set
-  and compare LO coverage for chemistry questions mentioning acid/base/pH
-  before vs after.
+- Files changed: `supabase/functions/refine-authentic-idea/index.ts`,
+  `src/routes/authentic.$id.tsx`.
+- Functions to redeploy: `refine-authentic-idea`.
+- DB: no migration. `milestones` column already exists on
+  `authentic_ideas`.
+- Risk: low. Schema simplification has been validated for the same model
+  in `generate-authentic-ideas`. JSON fallback covers the edge case.
 
 ## What this does NOT change
 
-- The macro reviewer logic, status chips, or any UI.
-- The blueprint/section-pool tagger (`retag-questions`) used by the
-  authoring flow — that one already filters strictly to a curated section
-  pool and is not affected.
-- Database schema, RLS, or stored question rows beyond what reclassify
-  rewrites.
+- Idea generation, KO/LO alignment picker, or any other WA flow.
+- The `Rubric` type or rubric persistence.
