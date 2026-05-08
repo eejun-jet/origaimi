@@ -142,7 +142,7 @@ function Dashboard() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Link to="/paper-set/new">
-              <Button variant="outline" className="gap-2">
+              <Button variant="outline" className="gap-2 bg-violet-700 text-slate-50 hover:bg-violet-600 hover:text-slate-50 border-violet-700">
                 <Layers className="h-4 w-4" /> Review paper set
               </Button>
             </Link>
