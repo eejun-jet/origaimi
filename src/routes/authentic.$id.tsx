@@ -487,12 +487,17 @@ function IdeaDetail({ idea, topics, onChanged }: { idea: Idea; topics: SyllabusT
                 <div key={i} className="rounded-lg border border-border p-3">
                   <div className="text-sm font-medium">{c.criterion}</div>
                   <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                    {c.levels.map((lv, j) => (
-                      <div key={j} className="rounded-md bg-muted/40 p-2">
-                        <div className="text-xs font-semibold">{lv.label}</div>
-                        <div className="text-xs text-muted-foreground">{lv.descriptor}</div>
-                      </div>
-                    ))}
+                    {c.levels.map((lv, j) => {
+                      const isStr = typeof lv === "string";
+                      const label = isStr ? "" : (lv.label ?? "");
+                      const descriptor = isStr ? lv : (lv.descriptor ?? "");
+                      return (
+                        <div key={j} className="rounded-md bg-muted/40 p-2">
+                          {label ? <div className="text-xs font-semibold">{label}</div> : null}
+                          <div className="text-xs text-muted-foreground">{descriptor}</div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               ))}
