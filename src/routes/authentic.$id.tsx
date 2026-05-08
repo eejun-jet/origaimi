@@ -193,7 +193,8 @@ function AuthenticPlanPage() {
     <div className="min-h-screen bg-background">
       <AppHeader />
       <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-        <div className="flex flex-wrap items-end justify-between gap-3">
+        <Link to="/dashboard" className="text-xs text-muted-foreground hover:text-foreground">← Back to dashboard</Link>
+        <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="font-paper text-2xl font-semibold tracking-tight">{plan.title}</h1>
             <p className="mt-1 text-sm text-muted-foreground">
