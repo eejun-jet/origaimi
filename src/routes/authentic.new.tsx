@@ -26,7 +26,7 @@ const MIX_OPTIONS = [
   "include a long project",
   "include presentation / oral",
   "no group work",
-  "must include ICT",
+  "must include use of digital tools",
 ] as const;
 
 function NewAuthenticPlan() {
