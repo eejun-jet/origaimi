@@ -652,12 +652,42 @@ function CoverageExplorer({
     return <KoDetail group={selected} papers={papers} onBack={() => onSelectKO(null)} />;
   }
 
-  const classify = (g: KoBucket): "covered" | "under" | "untested" => {
+  // Set-wide average coverage % — used for the "Over-tested" rule, mirroring
+  // the Assessment Coach: a topic is over-tested when it's well covered AND
+  // the rest of the set is meaningfully behind it.
+  const avgPct = (() => {
+    const eligible = groups.filter((g) => g.totalLOs > 0);
+    if (eligible.length === 0) return 0;
+    return eligible.reduce((s, g) => s + g.coveredLOs / g.totalLOs, 0) / eligible.length;
+  })();
+
+  type Status = "covered" | "under" | "untested" | "over";
+  const classify = (g: KoBucket): Status => {
     if (g.totalLOs === 0) return "untested";
     const pct = g.coveredLOs / g.totalLOs;
     if (pct === 0) return "untested";
     if (pct < 0.34) return "under";
+    if (pct > 0.8 && avgPct < 0.7 && pct - avgPct >= 0.3) return "over";
     return "covered";
+  };
+
+  const STATUS_META: Record<Status, { label: string; chip: string; bar: string }> = {
+    untested: { label: "Untested", chip: "bg-destructive/15 text-destructive border-destructive/30", bar: "bg-muted-foreground/30" },
+    under:    { label: "Under-tested", chip: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/40", bar: "bg-amber-500" },
+    covered:  { label: "Covered", chip: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/40", bar: "bg-emerald-500" },
+    over:     { label: "Over-tested", chip: "bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-500/40", bar: "bg-purple-500" },
+  };
+
+  // Per-discipline left-border accent so Physics/Chemistry/Biology tiles are
+  // visually distinguishable at a glance — addresses the "tiles all look the
+  // same" feedback for Combined Science sets.
+  const disciplineSpine = (d: string): string => {
+    const t = d.toLowerCase();
+    if (t.includes("physic")) return "border-l-4 border-l-blue-500";
+    if (t.includes("chem")) return "border-l-4 border-l-emerald-500";
+    if (t.includes("bio")) return "border-l-4 border-l-rose-500";
+    if (t.includes("practical")) return "border-l-4 border-l-amber-500";
+    return "border-l-4 border-l-slate-400";
   };
 
   const filtered = groups.filter((g) => filter === "all" || classify(g) === filter);
@@ -666,12 +696,14 @@ function CoverageExplorer({
     covered: groups.filter((g) => classify(g) === "covered").length,
     under: groups.filter((g) => classify(g) === "under").length,
     untested: groups.filter((g) => classify(g) === "untested").length,
+    over: groups.filter((g) => classify(g) === "over").length,
   };
 
   const filterChips: { key: typeof filter; label: string }[] = [
     { key: "all", label: `All ${counts.all}` },
     { key: "covered", label: `Covered ${counts.covered}` },
     { key: "under", label: `Under-tested ${counts.under}` },
+    { key: "over", label: `Over-tested ${counts.over}` },
     { key: "untested", label: `Untested ${counts.untested}` },
   ];
 
@@ -724,9 +756,11 @@ function CoverageExplorer({
             {items.map((g) => {
               const pct = g.totalLOs > 0 ? (g.coveredLOs / g.totalLOs) * 100 : 0;
               const status = classify(g);
+              const meta = STATUS_META[status];
               const tone =
                 status === "covered" ? "border-emerald-500/40 bg-emerald-500/5" :
                 status === "under" ? "border-amber-500/40 bg-amber-500/5" :
+                status === "over" ? "border-purple-500/40 bg-purple-500/5" :
                 "border-border bg-muted/30";
               return (
                 <button
@@ -734,19 +768,24 @@ function CoverageExplorer({
                   type="button"
                   onClick={() => onSelectKO(g.name)}
                   onDoubleClick={() => onSelectKO(g.name)}
-                  className={`text-left rounded-lg border p-3 transition hover:border-primary/60 hover:bg-card ${tone}`}
+                  className={`text-left rounded-lg border p-3 transition hover:border-primary/60 hover:bg-card ${tone} ${disciplineSpine(g.discipline)}`}
                   title="Click to drill into LO coverage"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="text-sm font-medium leading-tight">{g.name}</div>
-                    <Badge variant="outline" className="text-[10px] shrink-0">{g.discipline}</Badge>
+                    <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${meta.chip}`}>
+                      {meta.label}
+                    </span>
                   </div>
-                  <div className="mt-2 text-xs text-muted-foreground">
-                    {g.coveredLOs} / {g.totalLOs} LOs · {g.questionsTouching} question{g.questionsTouching === 1 ? "" : "s"}
+                  <div className="mt-1 flex items-center gap-2">
+                    <Badge variant="outline" className="text-[10px]">{g.discipline}</Badge>
+                    <span className="text-xs text-muted-foreground">
+                      {g.coveredLOs} / {g.totalLOs} LOs · {g.questionsTouching} question{g.questionsTouching === 1 ? "" : "s"}
+                    </span>
                   </div>
                   <div className="mt-2 h-1.5 rounded bg-muted overflow-hidden">
                     <div
-                      className={`h-full ${status === "covered" ? "bg-emerald-500" : status === "under" ? "bg-amber-500" : "bg-muted-foreground/30"}`}
+                      className={`h-full ${meta.bar}`}
                       style={{ width: `${pct}%` }}
                     />
                   </div>
