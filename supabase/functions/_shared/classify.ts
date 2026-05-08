@@ -247,16 +247,28 @@ async function classifyBatch(
   const json = await resp.json();
   const tc = json.choices?.[0]?.message?.tool_calls?.[0];
   if (!tc) return {};
-  let parsed: { mappings?: Array<Partial<ClassifyResult> & { question_number?: string }> } = {};
+  let parsed: { mappings?: Array<Partial<ClassifyResult> & { question_number?: string; secondary_topic_code?: string }> } = {};
   try { parsed = JSON.parse(tc.function.arguments); } catch { return {}; }
+  const byCode = new Map<string, CatalogueEntry>();
+  for (const e of catalogue) if (e.topic_code) byCode.set(e.topic_code, e);
   const out: Record<string, ClassifyResult> = {};
   for (const m of parsed.mappings ?? []) {
     if (!m.question_number) continue;
+    const los = new Set(Array.isArray(m.learning_outcomes) ? m.learning_outcomes : []);
+    const kos = new Set(Array.isArray(m.knowledge_outcomes) ? m.knowledge_outcomes : []);
+    const aos = new Set(Array.isArray(m.ao_codes) ? m.ao_codes : []);
+    // If a secondary topic was provided, surface its KOs/AOs even if the
+    // model didn't echo them in the arrays — improves recall on cross-topic Qs.
+    const sec = m.secondary_topic_code ? byCode.get(m.secondary_topic_code) : undefined;
+    if (sec) {
+      for (const ko of sec.knowledge_outcomes ?? []) kos.add(ko);
+      for (const ao of sec.ao_codes ?? []) aos.add(ao);
+    }
     out[String(m.question_number)] = {
       topic_code: m.topic_code ?? "",
-      learning_outcomes: Array.isArray(m.learning_outcomes) ? m.learning_outcomes : [],
-      knowledge_outcomes: Array.isArray(m.knowledge_outcomes) ? m.knowledge_outcomes : [],
-      ao_codes: Array.isArray(m.ao_codes) ? m.ao_codes : [],
+      learning_outcomes: Array.from(los),
+      knowledge_outcomes: Array.from(kos),
+      ao_codes: Array.from(aos),
       bloom_level: typeof m.bloom_level === "string" ? m.bloom_level : null,
     };
   }
