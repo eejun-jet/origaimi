@@ -186,8 +186,13 @@ function NewAuthenticPlan() {
                     const { data, error } = await supabase.functions.invoke("extract-sow-text", {
                       body: { file_base64: b64, mime_type: f.type, filename: f.name },
                     });
-                    if (error) throw error;
-                    const text = (data as { text?: string } | null)?.text ?? "";
+                    const payload = data as { text?: string; error?: string } | null;
+                    if (error || payload?.error) {
+                      const msg = payload?.error ?? (error instanceof Error ? error.message : "unknown");
+                      toast.error(`Upload failed: ${msg}`);
+                      return;
+                    }
+                    const text = payload?.text ?? "";
                     if (!text.trim()) { toast.error("Could not read text from that file."); return; }
                     setSowText((prev) => prev ? `${prev}\n\n${text}` : text);
                     setSowFileName(f.name);
