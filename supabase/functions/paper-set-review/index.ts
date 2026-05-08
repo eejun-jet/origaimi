@@ -161,7 +161,13 @@ Deno.serve(async (req) => {
         if (codes.length > 0) {
           const per = m / codes.length;
           for (const c of codes) aoMarks.set(c, (aoMarks.get(c) ?? 0) + per);
-        } else {
+        }
+        // "Unclassified" = no LO and no KO. AO codes alone aren't enough —
+        // some parse paths seed generic AO arrays without ever mapping
+        // LOs/KOs, which silently broke the macro reviewer.
+        const losLen = (q.learning_outcomes ?? []).filter(Boolean).length;
+        const kosLen = (q.knowledge_outcomes ?? []).filter(Boolean).length;
+        if (losLen === 0 && kosLen === 0) {
           unclassifiedQuestions++;
         }
         for (const k of q.knowledge_outcomes ?? []) if (k) kosSeen.add(k.trim());
