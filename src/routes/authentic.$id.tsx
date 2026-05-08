@@ -32,7 +32,7 @@ type Plan = {
 type SyllabusDoc = { id: string; title: string; subject: string | null; level: string | null; syllabus_code: string | null };
 type SyllabusTopic = { id: string; strand: string | null; sub_strand: string | null; title: string; learning_outcomes: string[] | null };
 
-type RubricLevel = { label: string; descriptor: string };
+type RubricLevel = string | { label?: string; descriptor?: string };
 type RubricCriterion = { criterion: string; levels: RubricLevel[] };
 type Idea = {
   id: string;
