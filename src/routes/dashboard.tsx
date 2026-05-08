@@ -100,7 +100,7 @@ function Dashboard() {
           <div className="flex flex-wrap gap-2">
             <Link to="/authentic/new">
               <Button variant="outline" className="gap-2">
-                <Lightbulb className="h-4 w-4" /> Authentic plan
+                <Lightbulb className="h-4 w-4" /> Generate WA idea
               </Button>
             </Link>
             <Link to="/paper-set/new">
