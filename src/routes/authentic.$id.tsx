@@ -411,6 +411,53 @@ function IdeaDetail({ idea, topics, onChanged }: { idea: Idea; topics: SyllabusT
 
         {idea.brief ? <p className="text-muted-foreground italic">{idea.brief}</p> : null}
 
+        <section className="rounded-lg border border-border bg-muted/20 p-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Syllabus alignment</h4>
+            <Button size="sm" variant="outline" onClick={saveAlignment} disabled={savingAlign}>
+              {savingAlign ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save alignment"}
+            </Button>
+          </div>
+          {topics.length === 0 ? (
+            <p className="mt-2 text-xs text-muted-foreground">Pick a syllabus on this plan to enable KO/LO alignment.</p>
+          ) : (
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div>
+                <div className="mb-1 text-[11px] font-medium text-muted-foreground">Knowledge outcomes (KOs)</div>
+                <div className="flex max-h-48 flex-wrap gap-1 overflow-y-auto">
+                  {koOptions.map(({ ko }) => {
+                    const active = selectedKOs.includes(ko);
+                    return (
+                      <button key={ko} type="button" onClick={() => toggle(selectedKOs, setSelectedKOs, ko)}
+                        className={`rounded-full border px-2 py-0.5 text-[11px] transition ${active ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:border-primary/40"}`}>
+                        {ko}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div>
+                <div className="mb-1 text-[11px] font-medium text-muted-foreground">Learning outcomes (LOs)</div>
+                <div className="flex max-h-48 flex-wrap gap-1 overflow-y-auto">
+                  {loOptions.length === 0 ? (
+                    <span className="text-[11px] text-muted-foreground">Select KOs to filter LOs, or leave KOs empty to see all.</span>
+                  ) : loOptions.map((lo) => {
+                    const active = selectedLOs.includes(lo);
+                    return (
+                      <button key={lo} type="button" onClick={() => toggle(selectedLOs, setSelectedLOs, lo)}
+                        className={`max-w-full truncate rounded-full border px-2 py-0.5 text-left text-[11px] transition ${active ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:border-primary/40"}`}
+                        title={lo}>
+                        {lo}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+
+
         {idea.student_brief ? (
           <section>
             <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Student brief</h4>
