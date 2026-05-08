@@ -98,12 +98,13 @@ function AuthenticPlanPage() {
 
   // Load syllabus topics for the picker
   useEffect(() => {
-    if (!plan?.syllabus_doc_id) { setTopics([]); return; }
+    const docId = plan?.syllabus_doc_id;
+    if (!docId) { setTopics([]); return; }
     (async () => {
       const { data } = await supabase
         .from("syllabus_topics")
         .select("id,strand,sub_strand,title,learning_outcomes")
-        .eq("source_doc_id", plan.syllabus_doc_id)
+        .eq("source_doc_id", docId)
         .order("position")
         .limit(300);
       setTopics(((data as unknown) as SyllabusTopic[]) ?? []);
