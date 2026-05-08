@@ -49,7 +49,7 @@ type Idea = {
   learning_outcomes: string[];
   materials: string[];
   rubric: RubricCriterion[];
-  milestones: { label: string; when: string }[];
+  milestones: { label: string; when: string; description?: string | null }[];
   teacher_notes: string | null;
   status: "suggested" | "saved" | "rejected" | string;
 };
@@ -378,10 +378,15 @@ function IdeaDetail({ idea, topics, onChanged }: { idea: Idea; topics: SyllabusT
     if (!instruction.trim()) return;
     setRefining(true);
     try {
-      const { error } = await supabase.functions.invoke("refine-authentic-idea", {
+      const { data, error } = await supabase.functions.invoke("refine-authentic-idea", {
         body: { idea_id: idea.id, instruction: instruction.trim() },
       });
-      if (error) throw error;
+      // Edge function returns 4xx/5xx with { error } — surface the real message.
+      const errMsg = error?.message || (data as { error?: string } | null)?.error;
+      if (errMsg) {
+        toast.error(errMsg);
+        return;
+      }
       setInstruction("");
       await onChanged();
       toast.success("Refined.");
@@ -474,8 +479,15 @@ function IdeaDetail({ idea, topics, onChanged }: { idea: Idea; topics: SyllabusT
 
         {idea.milestones?.length ? (
           <section>
-            <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Milestones</h4>
-            <ul className="list-disc pl-5">{idea.milestones.map((m, i) => <li key={i}><b>{m.when}:</b> {m.label}</li>)}</ul>
+            <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Timeline</h4>
+            <ul className="space-y-1.5 pl-0">
+              {idea.milestones.map((m, i) => (
+                <li key={i} className="rounded-md border border-border bg-muted/20 px-2.5 py-1.5">
+                  <div className="text-xs font-semibold text-foreground">{m.when} — {m.label}</div>
+                  {m.description ? <div className="mt-0.5 whitespace-pre-wrap text-xs text-muted-foreground">{m.description}</div> : null}
+                </li>
+              ))}
+            </ul>
           </section>
         ) : null}
 
