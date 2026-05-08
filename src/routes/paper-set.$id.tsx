@@ -88,7 +88,7 @@ function PaperSetView() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("coverage");
   const [explorerKO, setExplorerKO] = useState<string | null>(null);
-  const [coverageFilter, setCoverageFilter] = useState<"all" | "covered" | "under" | "untested">("all");
+  const [coverageFilter, setCoverageFilter] = useState<"all" | "covered" | "under" | "untested" | "over">("all");
   const [running, setRunning] = useState(false);
   const [reclassifying, setReclassifying] = useState(false);
   const [latestReview, setLatestReview] = useState<ReviewSnapshot | null>(null);
