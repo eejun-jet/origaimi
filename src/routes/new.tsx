@@ -240,8 +240,15 @@ function NewAssessment() {
     if (paper.durationMinutes) setDuration(paper.durationMinutes);
     if (paper.marks) setTotalMarks(paper.marks);
     setTopicsLoading(true);
+    // For multi-discipline syllabuses (e.g. Combined Science 5086/5087/5088 =
+    // Physics + Chemistry + Biology), always load the full doc-level topic
+    // universe so the LO selector exposes all three discipline pools — even
+    // if the chosen paper component is tagged to a single discipline.
+    const isCombinedSci =
+      /\bcombined\b/i.test(doc.title ?? "") && /science|physics|chem|bio/i.test(doc.title ?? "")
+      || /5086|5087|5088/.test(doc.syllabusCode ?? "");
     Promise.all([
-      loadPaperTopics(paper.id).then(async (t) => {
+      (isCombinedSci ? loadDocTopics(doc.id) : loadPaperTopics(paper.id).then(async (t) => {
         // Fallback to doc-level topics when the paper has none of its own.
         // This covers multi-track papers (e.g. Combined Sci) AND syllabi
         // where topics are shared across all papers (e.g. History 2261/2126).
@@ -249,7 +256,7 @@ function NewAssessment() {
           return loadDocTopics(doc.id);
         }
         return t;
-      }),
+      })),
       loadDocAssessmentObjectives(doc.id),
       loadDocSkillsOutcomes(doc.id).catch(() => []),
     ])
