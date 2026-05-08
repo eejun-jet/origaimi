@@ -164,7 +164,7 @@ const TOOL_CLASSIFY = {
   type: "function",
   function: {
     name: "save_classifications",
-    description: "Map each question to syllabus topic_code, learning_outcomes, knowledge_outcomes, ao_codes, bloom_level.",
+    description: "Map each question to a primary syllabus topic_code (the dominant topic), and an optional secondary_topic_code if the question genuinely spans two topics. List the specific learning_outcomes, knowledge_outcomes, ao_codes from BOTH topics that are tested.",
     parameters: {
       type: "object",
       properties: {
@@ -175,6 +175,7 @@ const TOOL_CLASSIFY = {
             properties: {
               question_number: { type: "string" },
               topic_code: { type: "string" },
+              secondary_topic_code: { type: "string", description: "Optional. Only set when the question clearly tests a second distinct topic." },
               learning_outcomes: { type: "array", items: { type: "string" } },
               knowledge_outcomes: { type: "array", items: { type: "string" } },
               ao_codes: { type: "array", items: { type: "string" } },
