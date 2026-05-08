@@ -202,7 +202,7 @@ function AuthenticPlanPage() {
             </p>
             {plan.unit_focus ? <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{plan.unit_focus}</p> : null}
           </div>
-          <Button onClick={runGenerate} disabled={generating} variant="outline" className="gap-2">
+          <Button onClick={runGenerate} disabled={generating} variant="outline" className="gap-2 bg-violet-700 text-slate-50 hover:bg-violet-600 hover:text-slate-50 border-violet-700">
             {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             Regenerate suggestions
           </Button>
