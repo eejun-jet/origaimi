@@ -160,22 +160,27 @@ function Dashboard() {
         </div>
 
         {sets.length > 0 ? (
-          <section className="mt-6 rounded-xl border border-border bg-card p-4">
+          <section className="mt-6 rounded-xl border border-border border-l-4 border-l-violet-600 bg-card p-4">
             <div className="flex items-center gap-2 mb-3">
-              <Layers className="h-4 w-4 text-primary" />
+              <Layers className="h-4 w-4 text-violet-600" />
               <h2 className="text-sm font-medium">Paper sets</h2>
               <span className="text-xs text-muted-foreground">— macro coverage across multiple papers</span>
             </div>
             <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {sets.map((s) => (
-                <li key={s.id}>
+                <li key={s.id} className="group relative">
                   <Link
                     to="/paper-set/$id"
                     params={{ id: s.id }}
-                    className="block rounded-lg border border-border px-3 py-2 hover:border-primary/40"
+                    className="block rounded-lg border border-border px-3 py-2 pr-9 hover:border-primary/40"
                   >
                     <div className="text-sm font-medium truncate">{s.title}</div>
-                    <div className="text-xs text-muted-foreground">{s.subject} · {s.level}</div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {[s.subject, s.level].filter(Boolean).join(" · ") || "—"}
+                    </div>
+                    <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <span>Updated {new Date(s.updated_at).toLocaleDateString()}</span>
+                    </div>
                   </Link>
                 </li>
               ))}
@@ -184,7 +189,7 @@ function Dashboard() {
         ) : null}
 
         {waPlans.length > 0 ? (
-          <section className="mt-6 rounded-xl border border-border bg-card p-4">
+          <section className="mt-6 rounded-xl border border-border border-l-4 border-l-teal-600 bg-card p-4">
             <div className="flex items-center gap-2 mb-3">
               <Lightbulb className="h-4 w-4 text-teal-600" />
               <h2 className="text-sm font-medium">WA plans</h2>
@@ -222,104 +227,94 @@ function Dashboard() {
           </section>
         ) : null}
 
-        <div className="mt-6 flex flex-wrap gap-3">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by title..."
-              className="pl-9"
-            />
+        <section className="mt-6 rounded-xl border border-border border-l-4 border-l-primary bg-card p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <FileText className="h-4 w-4 text-primary" />
+            <h2 className="text-sm font-medium">Assessments</h2>
+            <span className="text-xs text-muted-foreground">— individual papers</span>
           </div>
-          <Select value={subjectFilter} onValueChange={setSubjectFilter}>
-            <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All subjects</SelectItem>
-              {SUBJECTS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All status</SelectItem>
-              <SelectItem value="draft">Draft</SelectItem>
-              <SelectItem value="in_review">In review</SelectItem>
-              <SelectItem value="finalised">Finalised</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
 
-        <div className="mt-6">
-          {fetching ? (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="h-40 animate-pulse rounded-xl border border-border bg-card" />
-              ))}
+          <div className="flex flex-wrap gap-3">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by title..."
+                className="pl-9"
+              />
             </div>
-          ) : filtered.length === 0 ? (
-            <EmptyState hasAny={items.length > 0} />
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {filtered.map((a) => (
-                <AssessmentCard key={a.id} a={a} onDelete={handleDelete} />
-              ))}
-            </div>
-          )}
-        </div>
+            <Select value={subjectFilter} onValueChange={setSubjectFilter}>
+              <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All subjects</SelectItem>
+                {SUBJECTS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All status</SelectItem>
+                <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="in_review">In review</SelectItem>
+                <SelectItem value="finalised">Finalised</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="mt-4">
+            {fetching ? (
+              <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {[0, 1, 2].map((i) => (
+                  <li key={i} className="h-20 animate-pulse rounded-lg border border-border bg-card" />
+                ))}
+              </ul>
+            ) : filtered.length === 0 ? (
+              <EmptyState hasAny={items.length > 0} />
+            ) : (
+              <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {filtered.map((a) => (
+                  <AssessmentCard key={a.id} a={a} onDelete={handleDelete} />
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
       </main>
     </div>
   );
 }
 
-const SUBJECT_ICON_STYLES: Record<string, string> = {
-  Mathematics: "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300",
-  Science: "bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-300",
-  "English Language": "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
-  "Mother Tongue": "bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300",
-  Humanities: "bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300",
-};
-
 function AssessmentCard({ a, onDelete }: { a: Assessment; onDelete: (a: Assessment) => void }) {
-  const iconStyle = SUBJECT_ICON_STYLES[a.subject] ?? "bg-primary-soft text-primary";
   return (
-    <div className="group relative rounded-xl border border-border bg-card p-5 transition-all hover:border-primary/40 hover:shadow-sm">
+    <li className="group relative">
       <Link
         to="/assessment/$id"
         params={{ id: a.id }}
-        className="block"
+        className="block rounded-lg border border-border px-3 py-2 pr-9 hover:border-primary/40"
       >
-        <div className="flex items-start justify-between gap-3">
-          <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${iconStyle}`} aria-label={`${a.subject} icon`}>
-            <FileText className="h-5 w-5" />
-          </div>
+        <div className="flex items-start justify-between gap-2">
+          <div className="text-sm font-medium truncate">{a.title}</div>
           <StatusBadge status={a.status} />
         </div>
-        <h3 className="mt-4 line-clamp-2 pr-8 font-medium text-foreground group-hover:text-primary">
-          {a.title}
-        </h3>
-        <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-          <span>{a.subject}</span>
-          <span>·</span>
-          <span>{a.level}</span>
-          <span>·</span>
-          <span>{a.total_marks} marks</span>
-          <span>·</span>
-          <span>{a.duration_minutes} min</span>
+        <div className="text-xs text-muted-foreground truncate">
+          {[a.subject, a.level].filter(Boolean).join(" · ")}
         </div>
-        <div className="mt-3 text-xs text-muted-foreground">
-          Updated {new Date(a.updated_at).toLocaleDateString()}
+        <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+          <span>{a.total_marks} marks</span>
+          <span>· {a.duration_minutes} min</span>
+          <span>· Updated {new Date(a.updated_at).toLocaleDateString()}</span>
         </div>
       </Link>
       <button
         type="button"
         onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(a); }}
         aria-label={`Delete ${a.title}`}
-        className="absolute bottom-3 right-3 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground opacity-0 transition hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 focus:opacity-100"
+        className="absolute right-2 top-2 rounded-md p-1 text-muted-foreground opacity-0 transition hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 focus:opacity-100"
       >
-        <Trash2 className="h-3.5 w-3.5" /> Delete
+        <Trash2 className="h-3.5 w-3.5" />
       </button>
-    </div>
+    </li>
   );
 }
 

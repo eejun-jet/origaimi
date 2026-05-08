@@ -1,74 +1,53 @@
-# Surface saved WA plans on the dashboard
+## Goal
 
-## Background
+On `/dashboard`, make the three sub-sections (Paper sets, WA plans, Paper assessments) visually consistent and clearly separated.
 
-Every Authentic Assessment (WA) plan is already persisted in `authentic_plans`,
-and ideas in `authentic_ideas`. The detail route `/authentic/$id` works
-fine — there's just no list anywhere, so once you navigate away the plan
-is "lost" unless you remember the URL. The dashboard already lists Paper
-sets and Assessments; we add a third section for WA plans alongside them.
+## Changes (single file: `src/routes/dashboard.tsx`)
 
-## Fix
+### 1. Standardise tile style — follow "WA plans"
 
-Edit `src/routes/dashboard.tsx` only. No DB migration. No edge function
-changes.
+Apply the WA-plan tile look to all three sections:
 
-### 1. Load plans
+- Tile shell: `block rounded-lg border border-border px-3 py-2 pr-9 hover:border-primary/40`
+- Title: `text-sm font-medium truncate`
+- Meta line: `text-xs text-muted-foreground truncate` (joined with " · ")
+- Footer line: `mt-1 flex items-center gap-2 text-[11px] text-muted-foreground` (counts/marks/duration + "Updated <date>")
+- Status pill: render inline at the top-right corner only for assessments (small Badge)
+- Hover trash icon (top-right `absolute`, opacity-0 → group-hover:opacity-100), same as WA tiles
+- Use `<ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">` for all three
 
-In the dashboard's existing data load, fetch:
+This means **replacing the current large `AssessmentCard`** (with subject icon block, line-clamp title, bottom-right delete button) with the compact WA-style tile. Paper sets already use the compact tile and gain the count/updated footer + hover delete.
 
-```
-supabase
-  .from("authentic_plans")
-  .select("id, title, subject, level, unit_focus, duration_weeks, status, updated_at")
-  .order("updated_at", { ascending: false })
-  .limit(24);
-```
+### 2. Section containers — colour-coded borders
 
-For each plan, also fetch a count of ideas (single grouped query):
+Wrap each section in a card whose left border + icon colour matches its CTA button:
 
-```
-supabase
-  .from("authentic_ideas")
-  .select("plan_id, status", { count: "exact", head: false });
+```text
+Paper sets      → violet  (matches "Review paper set" button)
+WA plans        → teal    (matches "Generate WA idea" button)
+Assessments     → primary (matches "Create new assessment" button)
 ```
 
-Aggregate in JS to `{ plan_id → {total, saved} }`. Avoids per-plan round
-trips.
+Implementation: section uses `rounded-xl border bg-card p-4 border-l-4 border-l-violet-600` (and `border-l-teal-600`, `border-l-primary` respectively). Section heading keeps the existing icon + title + muted subtitle pattern, with the icon tinted to match.
 
-### 2. Render a "WA plans" section
+### 3. Section ordering & headings
 
-Mirror the existing "Paper sets" card visually, with a Lightbulb icon to
-match the "Generate WA idea" CTA. Each tile shows:
+Order: Paper sets → WA plans → Assessments. The Assessments section absorbs the existing search/filter row at the top of its card, then renders the tile grid (or skeleton / empty state) below — so the filters visibly belong to that section instead of floating between sections.
 
-- Plan title
-- Subject · Level · unit focus (if set)
-- Idea count: `N ideas · M saved`
-- Status pill (`draft` / `published` / etc., reusing existing pill styles)
-- Updated relative timestamp
+### 4. Empty / loading states
 
-Click navigates to `/authentic/$id`.
+Keep current behaviour but render inside the section card so the colour border still frames the area:
+- Loading: 3 skeleton tiles
+- Empty (assessments): keep current `EmptyState` but place it inside the assessments section card
 
-Empty state: small muted line "No saved WA plans yet — click Generate WA
-idea to start one." Only shown when the user has zero plans (matches the
-pattern used for Paper sets).
+Paper sets and WA plans sections continue to render only when non-empty (unchanged).
 
-### 3. Quick delete (optional, low risk)
+## Out of scope
 
-Add a small trash icon on hover that calls
-`supabase.from("authentic_plans").delete().eq("id", id)` after a
-confirm dialog. RLS already permits this (`Trial open delete`). Keeps
-parity with paper-set tile actions if those exist; if not, skip.
+- No DB or types changes
+- No changes to `/authentic/$id` or other routes
+- No changes to the header CTAs (already coloured correctly)
 
-### 4. Header tweak in `/authentic/$id`
+## Risk
 
-Add a "Back to dashboard" Link in the existing header so the round-trip
-is obvious. Currently the page has no breadcrumb back.
-
-## Technical details
-
-- Files changed: `src/routes/dashboard.tsx`, `src/routes/authentic.$id.tsx`
-  (one-line breadcrumb).
-- No types changes (table already in `types.ts`).
-- No new dependencies.
-- Risk: very low; pure read + presentation work.
+Low — pure presentation refactor in one file.
