@@ -47,7 +47,7 @@ function Landing() {
             </div>
             <div className="mx-auto max-w-3xl text-center">
               <p className="mx-auto mt-8 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-                AI does the paddling. You set the course. origAImi takes over the heavy
+                AI does the paddling. You set the course. Origami takes over the heavy
                 lifting of assessment design — so educators can focus on what only they
                 can do.
               </p>
