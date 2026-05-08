@@ -45,9 +45,7 @@ function OurStory() {
                 The swan, and what's underneath.
               </h1>
               <p className="mt-4 text-muted-foreground">
-                A beautifully crafted exam paper looks elegant on the surface. What we
-                don't see is the relentless paddling underneath — the friction every
-                educator knows too well.
+                Origami
               </p>
             </div>
 
@@ -165,7 +163,7 @@ function OurStory() {
 
       <footer className="border-t border-border/60 py-8">
         <div className="mx-auto max-w-6xl px-4 text-center text-xs text-muted-foreground sm:px-6">
-          © {new Date().getFullYear()} origAImi · For Singapore educators
+          © {new Date().getFullYear()} origami · For Singapore educators
         </div>
       </footer>
     </div>
