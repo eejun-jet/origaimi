@@ -110,7 +110,7 @@ function Dashboard() {
             </Link>
             <Link to="/new">
               <Button className="gap-2">
-                <Plus className="h-4 w-4" /> Create new assessment
+                <FileEdit className="h-4 w-4" /> Create new assessment
               </Button>
             </Link>
           </div>
@@ -283,7 +283,7 @@ function EmptyState({ hasAny }: { hasAny: boolean }) {
           </div>
           <Link to="/new" className="mt-6 inline-block">
             <Button className="gap-2">
-              <Plus className="h-4 w-4" /> Create new assessment
+              <FileEdit className="h-4 w-4" /> Create new assessment
             </Button>
           </Link>
         </>
