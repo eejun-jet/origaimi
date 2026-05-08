@@ -346,8 +346,15 @@ function PaperSetView() {
     });
   }, [papers, flatQuestions]);
 
+  // A question is "untagged" for macro-review purposes when it has BOTH no
+  // learning_outcomes and no knowledge_outcomes — AO codes alone are not
+  // enough because some parse paths seed generic ["A1","A2"] without ever
+  // mapping LOs/KOs, which silently broke the macro reviewer.
+  const isUntagged = (q: ParsedQuestion) =>
+    (q.learning_outcomes ?? []).length === 0 && (q.knowledge_outcomes ?? []).length === 0;
+
   const untaggedCount = useMemo(
-    () => flatQuestions.filter((x) => !((x.q.ao_codes ?? []).length > 0 || (x.q.learning_outcomes ?? []).length > 0 || (x.q.knowledge_outcomes ?? []).length > 0)).length,
+    () => flatQuestions.filter((x) => isUntagged(x.q)).length,
     [flatQuestions],
   );
 
@@ -355,7 +362,7 @@ function PaperSetView() {
     return papers
       .map((p) => {
         const qs = flatQuestions.filter((x) => x.paperId === p.id);
-        const untagged = qs.filter((x) => !((x.q.ao_codes ?? []).length > 0 || (x.q.learning_outcomes ?? []).length > 0 || (x.q.knowledge_outcomes ?? []).length > 0)).length;
+        const untagged = qs.filter((x) => isUntagged(x.q)).length;
         return { paper: p, total: qs.length, untagged };
       })
       .filter((r) => r.untagged > 0);
