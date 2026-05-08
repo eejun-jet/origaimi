@@ -45,9 +45,7 @@ function OurStory() {
                 The swan, and what's underneath.
               </h1>
               <p className="mt-4 text-muted-foreground">
-                A beautifully crafted exam paper looks elegant on the surface. What we
-                don't see is the relentless paddling underneath — the friction every
-                educator knows too well.
+                Origami
               </p>
             </div>
 
