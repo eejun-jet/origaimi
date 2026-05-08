@@ -32,7 +32,7 @@ function Landing() {
       <main>
         {/* HERO */}
         <section className="relative overflow-hidden">
-          <div className="mx-auto max-w-6xl px-4 pb-20 pt-12 sm:px-6 sm:pt-16 py-[24px]">
+          <div className="mx-auto max-w-6xl px-4 pb-20 pt-12 sm:px-6 sm:pt-16 py-[12px]">
             <div className="mx-auto max-w-3xl text-center">
             </div>
             <h1 className="sr-only">origAImi — Unfold the Joy of Assessing</h1>
