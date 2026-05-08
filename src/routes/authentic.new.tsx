@@ -48,6 +48,8 @@ function NewAuthenticPlan() {
   const [constraints, setConstraints] = useState("");
   const [mix, setMix] = useState<string[]>(["balanced"]);
   const [saving, setSaving] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const [sowFileName, setSowFileName] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
