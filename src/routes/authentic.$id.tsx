@@ -325,9 +325,54 @@ function IdeaTile({ idea, onOpen, onSave, onReject }: { idea: Idea; onOpen: () =
   );
 }
 
-function IdeaDetail({ idea, onChanged }: { idea: Idea; onChanged: () => void | Promise<void> }) {
+function IdeaDetail({ idea, topics, onChanged }: { idea: Idea; topics: SyllabusTopic[]; onChanged: () => void | Promise<void> }) {
   const [instruction, setInstruction] = useState("");
   const [refining, setRefining] = useState(false);
+  const [selectedKOs, setSelectedKOs] = useState<string[]>(idea.knowledge_outcomes ?? []);
+  const [selectedLOs, setSelectedLOs] = useState<string[]>(idea.learning_outcomes ?? []);
+  const [savingAlign, setSavingAlign] = useState(false);
+
+  // Build KO list (unique strands/titles) and LO list (filtered by selected KOs).
+  const koOptions = useMemo(() => {
+    const set = new Map<string, SyllabusTopic[]>();
+    for (const t of topics) {
+      const key = (t.strand ?? t.title ?? "").trim();
+      if (!key) continue;
+      const arr = set.get(key) ?? [];
+      arr.push(t);
+      set.set(key, arr);
+    }
+    return Array.from(set.entries()).map(([ko, ts]) => ({ ko, topics: ts }));
+  }, [topics]);
+
+  const loOptions = useMemo(() => {
+    const allowed = selectedKOs.length ? new Set(selectedKOs) : null;
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const t of topics) {
+      const key = (t.strand ?? t.title ?? "").trim();
+      if (allowed && !allowed.has(key)) continue;
+      for (const lo of (t.learning_outcomes ?? [])) {
+        if (lo && !seen.has(lo)) { seen.add(lo); out.push(lo); }
+      }
+    }
+    return out;
+  }, [topics, selectedKOs]);
+
+  const toggle = (arr: string[], setArr: (v: string[]) => void, v: string) =>
+    setArr(arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
+
+  const saveAlignment = async () => {
+    setSavingAlign(true);
+    const { error } = await supabase
+      .from("authentic_ideas")
+      .update({ knowledge_outcomes: selectedKOs, learning_outcomes: selectedLOs })
+      .eq("id", idea.id);
+    setSavingAlign(false);
+    if (error) { toast.error(error.message); return; }
+    await onChanged();
+    toast.success("Alignment saved.");
+  };
 
   const refine = async () => {
     if (!instruction.trim()) return;
