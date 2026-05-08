@@ -183,6 +183,45 @@ function Dashboard() {
           </section>
         ) : null}
 
+        {waPlans.length > 0 ? (
+          <section className="mt-6 rounded-xl border border-border bg-card p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Lightbulb className="h-4 w-4 text-teal-600" />
+              <h2 className="text-sm font-medium">WA plans</h2>
+              <span className="text-xs text-muted-foreground">— authentic assessment ideas you've generated</span>
+            </div>
+            <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {waPlans.map((p) => (
+                <li key={p.id} className="group relative">
+                  <Link
+                    to="/authentic/$id"
+                    params={{ id: p.id }}
+                    className="block rounded-lg border border-border px-3 py-2 pr-9 hover:border-primary/40"
+                  >
+                    <div className="text-sm font-medium truncate">{p.title}</div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {[p.subject, p.level, p.unit_focus].filter(Boolean).join(" · ") || "—"}
+                    </div>
+                    <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <span>{p.ideas_total} idea{p.ideas_total === 1 ? "" : "s"}</span>
+                      {p.ideas_saved > 0 ? <span>· {p.ideas_saved} saved</span> : null}
+                      <span>· Updated {new Date(p.updated_at).toLocaleDateString()}</span>
+                    </div>
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteWaPlan(p); }}
+                    aria-label={`Delete ${p.title}`}
+                    className="absolute right-2 top-2 rounded-md p-1 text-muted-foreground opacity-0 transition hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 focus:opacity-100"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
         <div className="mt-6 flex flex-wrap gap-3">
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
