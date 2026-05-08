@@ -274,7 +274,7 @@ function AuthenticPlanPage() {
 
       <Sheet open={!!openIdea} onOpenChange={(o) => !o && setOpenIdeaId(null)}>
         <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
-          {openIdea ? <IdeaDetail idea={openIdea} onChanged={load} /> : null}
+          {openIdea ? <IdeaDetail idea={openIdea} topics={topics} onChanged={load} /> : null}
         </SheetContent>
       </Sheet>
     </div>
