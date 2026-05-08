@@ -310,7 +310,7 @@ Submit STRICTLY through the submit_paper_set_review tool.`;
 
     const userPayload = {
       set: { title: setRow.title, subject: setRow.subject, level: setRow.level, paper_count: papersUsed, mark_schemes_skipped: papersSkipped, total_questions: totalQuestions, total_marks: totalMarks },
-      ao_definitions: aoDefs,
+      ao_definitions: aoDefs.filter((a) => !childToParent.has(a.code)),
       ao_observed: aoStats,
       unrealised_candidates: {
         kos: unrealisedKOs.slice(0, 50),
