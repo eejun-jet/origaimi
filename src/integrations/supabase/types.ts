@@ -372,6 +372,7 @@ export type Database = {
           id: string
           level: string | null
           mix_preferences: string[]
+          notes: string | null
           sow_file_path: string | null
           sow_text: string | null
           status: string
@@ -391,6 +392,7 @@ export type Database = {
           id?: string
           level?: string | null
           mix_preferences?: string[]
+          notes?: string | null
           sow_file_path?: string | null
           sow_text?: string | null
           status?: string
@@ -410,6 +412,7 @@ export type Database = {
           id?: string
           level?: string | null
           mix_preferences?: string[]
+          notes?: string | null
           sow_file_path?: string | null
           sow_text?: string | null
           status?: string

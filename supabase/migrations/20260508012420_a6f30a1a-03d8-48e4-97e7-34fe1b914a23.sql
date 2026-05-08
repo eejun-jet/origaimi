@@ -1,0 +1,1 @@
+ALTER TABLE public.authentic_plans ADD COLUMN IF NOT EXISTS notes text;
