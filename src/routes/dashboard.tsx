@@ -104,7 +104,7 @@ function Dashboard() {
               </Button>
             </Link>
             <Link to="/authentic/new">
-              <Button variant="outline" className="gap-2 bg-green-800 text-white hover:bg-green-700 border-green-700">
+              <Button variant="outline" className="gap-2 bg-teal-600 text-white hover:bg-teal-500 border-teal-500">
                 <Lightbulb className="h-4 w-4" /> Generate WA idea
               </Button>
             </Link>
