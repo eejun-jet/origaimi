@@ -35,10 +35,23 @@ type PaperSet = {
   updated_at: string;
 };
 
+type WaPlan = {
+  id: string;
+  title: string;
+  subject: string | null;
+  level: string | null;
+  unit_focus: string | null;
+  status: string;
+  updated_at: string;
+};
+
+type WaPlanWithCounts = WaPlan & { ideas_total: number; ideas_saved: number };
+
 function Dashboard() {
   const { user } = useAuth();
   const [items, setItems] = useState<Assessment[]>([]);
   const [sets, setSets] = useState<PaperSet[]>([]);
+  const [waPlans, setWaPlans] = useState<WaPlanWithCounts[]>([]);
   const [fetching, setFetching] = useState(true);
   const [search, setSearch] = useState("");
   const [subjectFilter, setSubjectFilter] = useState<string>("all");
@@ -46,7 +59,7 @@ function Dashboard() {
 
   const load = async () => {
     setFetching(true);
-    const [{ data }, { data: setData }] = await Promise.all([
+    const [{ data }, { data: setData }, { data: planData }, { data: ideaData }] = await Promise.all([
       supabase
         .from("assessments")
         .select("id,title,subject,level,status,total_marks,duration_minutes,updated_at")
@@ -55,15 +68,45 @@ function Dashboard() {
         .from("paper_sets")
         .select("id,title,subject,level,updated_at")
         .order("updated_at", { ascending: false }),
+      supabase
+        .from("authentic_plans")
+        .select("id,title,subject,level,unit_focus,status,updated_at")
+        .order("updated_at", { ascending: false })
+        .limit(24),
+      supabase
+        .from("authentic_ideas")
+        .select("plan_id,status"),
     ]);
+    const counts = new Map<string, { total: number; saved: number }>();
+    for (const i of (ideaData as { plan_id: string; status: string }[]) ?? []) {
+      const c = counts.get(i.plan_id) ?? { total: 0, saved: 0 };
+      c.total++;
+      if (i.status === "saved") c.saved++;
+      counts.set(i.plan_id, c);
+    }
+    const plans: WaPlanWithCounts[] = ((planData as WaPlan[]) ?? []).map((p) => ({
+      ...p,
+      ideas_total: counts.get(p.id)?.total ?? 0,
+      ideas_saved: counts.get(p.id)?.saved ?? 0,
+    }));
     setItems((data as Assessment[]) ?? []);
     setSets((setData as PaperSet[]) ?? []);
+    setWaPlans(plans);
     setFetching(false);
   };
 
   useEffect(() => {
     load();
   }, [user]);
+
+  const handleDeleteWaPlan = async (p: WaPlanWithCounts) => {
+    if (!confirm(`Delete WA plan "${p.title}"? This will also remove all generated ideas.`)) return;
+    await supabase.from("authentic_ideas").delete().eq("plan_id", p.id);
+    const { error } = await supabase.from("authentic_plans").delete().eq("id", p.id);
+    if (error) { toast.error(`Delete failed: ${error.message}`); return; }
+    setWaPlans((prev) => prev.filter((x) => x.id !== p.id));
+    toast.success("WA plan deleted");
+  };
 
   const handleDelete = async (a: Assessment) => {
     if (!confirm(`Delete "${a.title}"? This will also remove its questions and version history.`)) return;
