@@ -1,96 +1,74 @@
-# Fix WA "Refine idea → Apply" silently reverting
+# Surface saved WA plans on the dashboard
 
-## What's actually happening
+## Background
 
-Clicking **Apply** calls `refine-authentic-idea`. The function uses an AI tool
-schema (`submit_idea`) with the same shape that previously broke
-`generate-authentic-ideas`: deep nested rubric (`array<{criterion, levels:
-array<{label, descriptor}>}>` with `required` and `additionalProperties:
-false` everywhere). On the AI gateway this can return a 400 *"specified
-schema produces a constraint that has too many states for serving"*, which
-the function turns into a generic 502 *"Refine failed"*. The client toast
-fires but the UI doesn't change → it looks like a revert.
-
-A second, separate problem: the schema has **no field** for the things the
-teacher is actually asking for — a student worksheet/scaffold and a session
-timeline. The DB row already has a `milestones jsonb` column that nothing
-in the refine flow writes to, and there is no `worksheet` field at all.
-Even when the schema *does* accept the call, the model has nowhere to put
-the requested content, so it can only stuff it into `student_brief` or
-`teacher_notes` — easy to miss.
+Every Authentic Assessment (WA) plan is already persisted in `authentic_plans`,
+and ideas in `authentic_ideas`. The detail route `/authentic/$id` works
+fine — there's just no list anywhere, so once you navigate away the plan
+is "lost" unless you remember the URL. The dashboard already lists Paper
+sets and Assessments; we add a third section for WA plans alongside them.
 
 ## Fix
 
-Edit `supabase/functions/refine-authentic-idea/index.ts` and the idea
-detail UI in `src/routes/authentic.$id.tsx`. No DB migration needed —
-`milestones` already exists; we add a `worksheet` field by reusing
-`teacher_notes` + a structured `milestones` array.
+Edit `src/routes/dashboard.tsx` only. No DB migration. No edge function
+changes.
 
-### 1. Simplify the tool schema (same fix as generate-authentic-ideas)
+### 1. Load plans
 
-- Drop `additionalProperties: false` everywhere.
-- Flatten rubric levels to `levels: { type: "array", items: { type: "string" } }`
-  (a list of "Level — descriptor" strings). The UI already handles this
-  shape after the earlier `Rubric` flattening change.
-- Reduce `required` to just `title`, `brief`.
-- Remove deep nesting on milestones (use `array<{label, duration_minutes,
-  description}>`).
+In the dashboard's existing data load, fetch:
 
-### 2. Add fields that match the teacher's request
+```
+supabase
+  .from("authentic_plans")
+  .select("id, title, subject, level, unit_focus, duration_weeks, status, updated_at")
+  .order("updated_at", { ascending: false })
+  .limit(24);
+```
 
-Add to `submit_idea`:
-- `milestones`: array of `{ label, duration_minutes, description }` — for
-  the 3×1-hour timeline.
-- `student_worksheet`: long string — the scaffold/preparation questions
-  the teacher asked for (markdown, free-form). Persisted into the existing
-  `teacher_notes` column under a clear `## Student worksheet` heading
-  appended to whatever else the model puts there, OR (preferred) into a
-  new `student_brief` section. We keep DB writes to existing columns only.
+For each plan, also fetch a count of ideas (single grouped query):
 
-Mapping on save:
-- `milestones` → `authentic_ideas.milestones` (already a jsonb column).
-- `student_worksheet` → appended to `student_brief` under a `## Worksheet
-  / Scaffold` heading so it shows in the existing student-facing panel.
-- Everything else maps as today.
+```
+supabase
+  .from("authentic_ideas")
+  .select("plan_id, status", { count: "exact", head: false });
+```
 
-### 3. JSON-mode fallback
+Aggregate in JS to `{ plan_id → {total, saved} }`. Avoids per-plan round
+trips.
 
-If the tool call returns no arguments OR the gateway responds 400/502, retry
-once with `response_format: { type: "json_object" }` and a system message
-that asks for a JSON object matching the same field names. Same pattern we
-used in `generate-authentic-ideas`.
+### 2. Render a "WA plans" section
 
-### 4. Surface real errors, don't silently revert
+Mirror the existing "Paper sets" card visually, with a Lightbulb icon to
+match the "Generate WA idea" CTA. Each tile shows:
 
-In the edge function: bubble the upstream gateway error body (truncated to
-~300 chars) in the JSON error response instead of a flat
-"Refine failed". In `authentic.$id.tsx` `refine()`:
-- Read `data?.error` from the function response and show it in the toast.
-- On error, **do NOT clear the instruction textarea** so the teacher can
-  retry/edit without retyping their whole brief. (Today, the field is
-  cleared on error too because `setInstruction("")` is called even when
-  the catch fires for some error paths — verify and gate behind success.)
+- Plan title
+- Subject · Level · unit focus (if set)
+- Idea count: `N ideas · M saved`
+- Status pill (`draft` / `published` / etc., reusing existing pill styles)
+- Updated relative timestamp
 
-### 5. Render new fields in the detail drawer
+Click navigates to `/authentic/$id`.
 
-In `IdeaDetail`:
-- New "Timeline" section listing `milestones` (label, duration, description)
-  if present.
-- The worksheet content arrives inside `student_brief`, so it renders in
-  the existing student brief block — no UI change needed there beyond
-  ensuring markdown line breaks render (use `whitespace-pre-wrap`).
+Empty state: small muted line "No saved WA plans yet — click Generate WA
+idea to start one." Only shown when the user has zero plans (matches the
+pattern used for Paper sets).
+
+### 3. Quick delete (optional, low risk)
+
+Add a small trash icon on hover that calls
+`supabase.from("authentic_plans").delete().eq("id", id)` after a
+confirm dialog. RLS already permits this (`Trial open delete`). Keeps
+parity with paper-set tile actions if those exist; if not, skip.
+
+### 4. Header tweak in `/authentic/$id`
+
+Add a "Back to dashboard" Link in the existing header so the round-trip
+is obvious. Currently the page has no breadcrumb back.
 
 ## Technical details
 
-- Files changed: `supabase/functions/refine-authentic-idea/index.ts`,
-  `src/routes/authentic.$id.tsx`.
-- Functions to redeploy: `refine-authentic-idea`.
-- DB: no migration. `milestones` column already exists on
-  `authentic_ideas`.
-- Risk: low. Schema simplification has been validated for the same model
-  in `generate-authentic-ideas`. JSON fallback covers the edge case.
-
-## What this does NOT change
-
-- Idea generation, KO/LO alignment picker, or any other WA flow.
-- The `Rubric` type or rubric persistence.
+- Files changed: `src/routes/dashboard.tsx`, `src/routes/authentic.$id.tsx`
+  (one-line breadcrumb).
+- No types changes (table already in `types.ts`).
+- No new dependencies.
+- Risk: very low; pure read + presentation work.
