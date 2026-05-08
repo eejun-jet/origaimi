@@ -81,18 +81,45 @@ function AuthenticPlanPage() {
   const [filter, setFilter] = useState<string>("all");
   const [savedOnly, setSavedOnly] = useState(false);
   const [openIdeaId, setOpenIdeaId] = useState<string | null>(null);
+  const [topics, setTopics] = useState<SyllabusTopic[]>([]);
+  const [docs, setDocs] = useState<SyllabusDoc[]>([]);
 
   const load = async () => {
     const [{ data: p }, { data: i }] = await Promise.all([
       supabase.from("authentic_plans").select("*").eq("id", id).single(),
       supabase.from("authentic_ideas").select("*").eq("plan_id", id).order("position"),
     ]);
-    setPlan((p as Plan) ?? null);
+    setPlan((p as unknown as Plan) ?? null);
     setIdeas(((i as unknown) as Idea[]) ?? []);
     setLoading(false);
   };
 
   useEffect(() => { load(); }, [id]);
+
+  // Load syllabus topics for the picker
+  useEffect(() => {
+    if (!plan?.syllabus_doc_id) { setTopics([]); return; }
+    (async () => {
+      const { data } = await supabase
+        .from("syllabus_topics")
+        .select("id,strand,sub_strand,title,learning_outcomes")
+        .eq("source_doc_id", plan.syllabus_doc_id)
+        .order("position")
+        .limit(300);
+      setTopics(((data as unknown) as SyllabusTopic[]) ?? []);
+    })();
+  }, [plan?.syllabus_doc_id]);
+
+  // Load syllabus docs list (for picker when none set)
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from("syllabus_documents")
+        .select("id,title,subject,level,syllabus_code")
+        .order("title");
+      setDocs(((data as unknown) as SyllabusDoc[]) ?? []);
+    })();
+  }, []);
 
   // Auto-generate when the plan is freshly created.
   useEffect(() => {
