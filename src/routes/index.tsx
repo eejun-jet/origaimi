@@ -34,10 +34,6 @@ function Landing() {
         <section className="relative overflow-hidden">
           <div className="mx-auto max-w-6xl px-4 pb-20 pt-12 sm:px-6 sm:pt-16">
             <div className="mx-auto max-w-3xl text-center">
-              <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground">
-                <Sparkles className="h-3.5 w-3.5 text-primary" />
-                Human-in-the-loop AI for Singapore educators
-              </div>
             </div>
             <h1 className="sr-only">origAImi — Unfold the Joy of Assessing</h1>
             <div className="mx-auto mt-8 max-w-3xl overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
