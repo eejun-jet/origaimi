@@ -307,9 +307,11 @@ function IdeaTile({ idea, onOpen, onSave, onReject }: { idea: Idea; onOpen: () =
         {idea.duration_minutes ? <span className="inline-flex items-center gap-1"><Clock className="h-3 w-3" />{idea.duration_minutes} min</span> : null}
         {idea.group_size ? <span className="inline-flex items-center gap-1"><Users className="h-3 w-3" />{idea.group_size}</span> : null}
       </div>
-      {idea.ao_codes.length ? (
+      {idea.ao_codes.length || idea.knowledge_outcomes.length || idea.learning_outcomes.length ? (
         <div className="mt-2 flex flex-wrap gap-1">
           {idea.ao_codes.map((a) => <Badge key={a} variant="secondary" className="text-[10px]">{a}</Badge>)}
+          {idea.knowledge_outcomes.length ? <Badge variant="outline" className="text-[10px]">{idea.knowledge_outcomes.length} KO</Badge> : null}
+          {idea.learning_outcomes.length ? <Badge variant="outline" className="text-[10px]">{idea.learning_outcomes.length} LO</Badge> : null}
         </div>
       ) : null}
       <div className="mt-4 flex justify-between gap-2 border-t border-border pt-3">
