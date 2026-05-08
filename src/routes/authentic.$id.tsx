@@ -207,6 +207,38 @@ function AuthenticPlanPage() {
           </Button>
         </div>
 
+        {plan.status === "failed" && plan.notes ? (
+          <div className="mt-4 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm">
+            <div className="font-medium text-destructive">Generation failed</div>
+            <p className="mt-1 text-xs text-muted-foreground">{plan.notes}</p>
+            <Button size="sm" variant="outline" className="mt-2" onClick={runGenerate} disabled={generating}>Retry</Button>
+          </div>
+        ) : null}
+
+        {!plan.syllabus_doc_id ? (
+          <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+            <div className="font-medium">Pick a syllabus to enable KO/LO alignment</div>
+            <p className="mt-1 text-xs text-muted-foreground">Teachers can then tag each idea with the actual KOs and LOs.</p>
+            <select
+              className="mt-2 rounded-md border border-border bg-background px-2 py-1 text-xs"
+              defaultValue=""
+              onChange={async (e) => {
+                const v = e.target.value;
+                if (!v) return;
+                await supabase.from("authentic_plans").update({ syllabus_doc_id: v }).eq("id", id);
+                load();
+              }}
+            >
+              <option value="">— choose syllabus —</option>
+              {docs
+                .filter((d) => (!plan.subject || d.subject === plan.subject) && (!plan.level || d.level === plan.level))
+                .map((d) => (
+                  <option key={d.id} value={d.id}>{`${d.syllabus_code ?? ""} ${d.title}`.trim()}</option>
+                ))}
+            </select>
+          </div>
+        ) : null}
+
         <div className="mt-4 flex flex-wrap gap-2">
           <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>All ({ideas.filter((i) => i.status !== "rejected").length})</FilterChip>
           {Object.keys(MODE_LABEL).map((m) => (
