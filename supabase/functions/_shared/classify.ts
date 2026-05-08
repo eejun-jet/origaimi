@@ -283,21 +283,30 @@ function keywordFallback(
   q: ClassifyQuestionInput,
   catalogue: CatalogueEntry[],
 ): ClassifyResult | null {
-  const qTok = new Set(tokens(questionText(q)));
-  if (qTok.size === 0) return null;
-  let best: { t: CatalogueEntry; score: number } | null = null;
-  for (const t of catalogue) {
-    const text = [t.title, t.learning_outcomes.join(" "), t.knowledge_outcomes.join(" ")].join(" ");
-    let score = 0;
-    for (const tok of tokens(text)) if (qTok.has(tok)) score++;
-    if (!best || score > best.score) best = { t, score };
+  const rawTok = new Set(tokens(questionText(q)));
+  if (rawTok.size === 0) return null;
+  const qTok = expandTokens(rawTok);
+  const scored = catalogue
+    .map((t) => ({ t, score: scoreEntry(t, qTok) }))
+    .sort((a, b) => b.score - a.score);
+  const minScore = rawTok.size <= 5 ? 1 : 2;
+  const top = scored.filter((s) => s.score >= minScore).slice(0, 2);
+  if (top.length === 0) return null;
+  // Union the top 1-2 catalogue entries' tags so cross-topic Qs aren't
+  // forced into a single topic by the deterministic fallback.
+  const los = new Set<string>();
+  const kos = new Set<string>();
+  const aos = new Set<string>();
+  for (const s of top) {
+    for (const lo of s.t.learning_outcomes.slice(0, 3)) los.add(lo);
+    for (const ko of s.t.knowledge_outcomes.slice(0, 3)) kos.add(ko);
+    for (const ao of s.t.ao_codes.slice(0, 2)) aos.add(ao);
   }
-  if (!best || best.score < 2) return null;
   return {
-    topic_code: best.t.topic_code,
-    learning_outcomes: best.t.learning_outcomes.slice(0, 3),
-    knowledge_outcomes: best.t.knowledge_outcomes.slice(0, 3),
-    ao_codes: best.t.ao_codes.slice(0, 2),
+    topic_code: top[0].t.topic_code,
+    learning_outcomes: Array.from(los),
+    knowledge_outcomes: Array.from(kos),
+    ao_codes: Array.from(aos),
     bloom_level: null,
   };
 }
