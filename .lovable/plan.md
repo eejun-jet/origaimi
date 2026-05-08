@@ -1,107 +1,55 @@
-## What we're adding
+## What's wrong (root cause)
 
-A new mode alongside the existing "written paper" builder: an **Authentic Assessment Studio**. The teacher uploads (or pastes) a *Scheme of Work* — i.e. what they're teaching this term/unit — and origAImi proposes a balanced **portfolio** of assessment ideas beyond formal exams:
+1. **Tile colours** — In `src/routes/paper-set.$id.tsx` (`CoverageExplorer`) tiles are tinted by coverage status only (emerald / amber / muted). There is no per-discipline border colour. KOs from Physics, Chemistry, Biology all look identical inside their grouped section.
 
-- **Mini-tests / quizzes** (10–20 min checks for understanding)
-- **Performance tasks** in authentic contexts (lab investigation, fieldwork write-up, design challenge, data analysis brief)
-- **Project work** (multi-lesson, often group, with milestones + rubric)
-- **Oral / presentation** tasks (pitch, viva, debate, gallery walk)
-- **Written authentic** tasks (letter to MP, op-ed, source-based memo)
-- **Self / peer assessment** moments
+2. **No status chip on tiles** — Each tile shows the discipline badge + a coverage bar, but no "Untested / Under-tested / Over-tested" chip like the Assessment Coach's KO/LO Explorer (`assessment.$id.tsx` uses `STATUS_META` with chips). Filter chips at the top use the same buckets but each tile doesn't surface the verdict.
 
-Each idea comes with: title, mode, duration, group size, AO/KO/LO it evidences, materials needed, a teacher-facing rubric stub, and a one-paragraph student brief. Teacher can save selected ideas into a new **Assessment Plan** for the unit.
+3. **0 LOs picked up by macro review** — Inspected the actual data for the user's "test" set (two real Sec 4 Combined Science papers):
+   - Every question has `ao_codes=["A1","A2"]` (looks like a stub from initial parse, not real AO1/AO2/AO3), `topic_code="PHY.K"` etc. that don't match the syllabus topic_codes `1.1, 1.2, …`, and **`learning_outcomes=[]`, `knowledge_outcomes=[]` for every question in both papers**.
+   - The macro review aggregates LOs/KOs from `questions_json`, so with 0 LOs/KOs tagged, "unrealised" is everything and "covered" is nothing — the panel is correct given the input but the input is empty.
+   - The fix already exists: the "Reclassify all papers" button in the header runs `_shared/classify.ts` which batches questions against the matched syllabus and writes real LOs/KOs/AOs. The user just hasn't run it, and the macro review doesn't auto-trigger it. The amber "questions have no syllabus tags yet" warning only fires when **no AO/KO/LO** is present — but here the seed `["A1","A2"]` AO codes pass the check, so the warning is suppressed even though LOs are empty.
 
-## Where it lives
+## Plan
 
-New top-level route `/authentic` (entry from dashboard, beside "New paper" and "New paper set"):
-- `src/routes/authentic.new.tsx` — upload SoW + pick subject/level/syllabus, configure portfolio shape
-- `src/routes/authentic.$id.tsx` — generated portfolio: tiles of ideas, filter by mode/AO/KO, save / regenerate / refine, export DOCX
-- Optional later: `src/routes/authentic.index.tsx` listing saved plans
+### 1. Per-discipline border colours on KO tiles
+In `CoverageExplorer` (`src/routes/paper-set.$id.tsx`), introduce a `disciplineTone(disc)` helper that returns a left-border colour class:
+- Physics → `border-l-4 border-l-blue-500`
+- Chemistry → `border-l-4 border-l-emerald-500`
+- Biology → `border-l-4 border-l-rose-500`
+- Practical → `border-l-4 border-l-amber-500`
+- General/other → `border-l-4 border-l-slate-400`
 
-Reuses existing patterns: `BuilderUploadCard`, `PlainSelect`, `AppHeader`, syllabus picker (`loadSyllabusLibrary`, `loadDocTopics`, `loadDocAssessmentObjectives`).
+Compose it with the existing coverage tint (`tone`) so the card keeps the soft fill but gains a coloured spine. Apply the same accent to the discipline section header.
 
-## Data model (one migration)
+### 2. Add Untested / Under-tested / Over-tested chip to each tile
+Reuse the same `classify(g)` already in `CoverageExplorer` and add an "over" case using the Assessment Coach rule (covered ratio > 80% AND set-wide avgCov < 70% AND delta ≥ 30pp). Render a small chip in the top-right of each tile (replacing or alongside the discipline `Badge`):
 
-Two new tables, public RLS open like the rest of the project:
-
-```text
-authentic_plans
-  id uuid pk, user_id uuid, title text, subject text, level text,
-  syllabus_doc_id uuid, sow_text text, sow_file_path text,
-  unit_focus text, duration_weeks int, class_size int,
-  goals text, constraints text,
-  created_at, updated_at
-
-authentic_ideas
-  id uuid pk, plan_id uuid, position int,
-  mode text  -- mini_test | performance_task | project | oral | written_authentic | self_peer
-  title text, brief text, duration_minutes int, group_size text,
-  ao_codes text[], knowledge_outcomes text[], learning_outcomes text[],
-  materials text[], rubric jsonb,    -- [{criterion, levels:[{label,descriptor}]}]
-  teacher_notes text, status text default 'suggested',  -- suggested|saved|rejected
-  created_at, updated_at
+```
+Untested      → red    (bg-destructive/15 text-destructive border-destructive/30)
+Under-tested  → amber  (bg-amber-500/15 text-amber-700 border-amber-500/30)
+Covered       → emerald
+Over-tested   → purple (bg-purple-500/15 text-purple-700 border-purple-500/30)
 ```
 
-Storage bucket: reuse `references` for SoW uploads.
+Also extend the filter row to include "Over-tested" so users can isolate it, mirroring the KO/LO Explorer.
 
-## Generation pipeline
+### 3. Make macro review actually see LOs
 
-New edge / server function `generate-authentic-ideas`:
+Two complementary fixes:
 
-Inputs: `{ plan_id }`. Loads plan + syllabus context (AOs from `syllabus_assessment_objectives`, KOs/LOs from `syllabus_topics` filtered to the unit), parses SoW (PDF/DOCX via existing `parse-syllabus`-style pdf parsing, or accept pasted text first to ship faster).
+**a. Tighten the "needs reclassify" detector.** Change the warning + the edge-function gate from "no AO/KO/LO at all" to **"≥50% of questions have empty LOs *and* empty KOs"** (ignore AO codes — many seed/parse paths fill those in). This means the user's test set would correctly surface the amber warning and the macro review would refuse with a `needs_reclassify: true` (which the UI already renders with a "Reclassify now" action).
 
-Calls Lovable AI (`google/gemini-2.5-pro`) with a structured tool-call schema returning `{ ideas: [...] }`. System prompt is a Singapore-MOE assessment-design coach: emphasise validity (does the task evidence the stated AO/LO?), authenticity (Singapore-relevant context), feasibility (time, class size, materials), and balance across the six modes. Returns 8–12 ideas covering different modes and outcomes.
+Files:
+- `src/routes/paper-set.$id.tsx` — update `untaggedCount` / `untaggedByPaper` predicates.
+- `supabase/functions/paper-set-review/index.ts` — change `unclassifiedQuestions` counter to use the same LO-empty + KO-empty rule.
 
-The function writes ideas into `authentic_ideas`. Client streams the generation status and renders tiles as they save.
+**b. One-click "Run macro review" auto-reclassifies first.** In `runReview`, if the precheck shows the LO/KO tagging gap, run `reclassifyAll()` automatically (with a toast: "Tagging questions before review…"), then call `paper-set-review`. This removes the two-step dance and matches the user's expectation that uploading real papers + clicking "Run macro review" should just work.
 
-A second function `refine-authentic-idea` accepts `{ idea_id, instruction }` (e.g. "make this group of 4", "lower the difficulty", "add a digital tool", "shorten to one lesson") and rewrites the single idea in place.
+### 4. Sanity: discipline lookup uses titles too
+The Combined Science syllabus topics use `section` like "Physics", "Chemistry" — the existing `buildDisciplineLookup` already covers this, so once LOs are populated the per-tile discipline (and therefore the new border colour) will be correct.
 
-## UX flow
+## Files to edit
+- `src/routes/paper-set.$id.tsx` — tile borders, status chip, "Over-tested" filter, tightened tagging-gap detector, auto-reclassify-then-review flow.
+- `supabase/functions/paper-set-review/index.ts` — same tagging-gap rule on the server side.
 
-1. **Upload step** (`/authentic/new`): subject + level + syllabus picker (reuse existing); choose unit focus (free text or KO/LO multi-select from the syllabus); upload SoW PDF/DOCX OR paste SoW text; sliders for *duration weeks*, *class size*; portfolio mix preference (chips: "balanced", "more authentic", "more formative", "no group work", etc.); optional constraints box ("no out-of-school trips", "must include ICT").
-
-2. **Generation** → creates plan row, navigates to `/authentic/$id`, kicks off `generate-authentic-ideas`. Skeleton tiles fill in as ideas arrive.
-
-3. **Portfolio view** (`/authentic/$id`):
-   - Header: unit title, AO coverage bar (tag-driven), mode mix donut.
-   - Filter chips: All / Mini-test / Performance / Project / Oral / Written / Self-peer; AO filter; "Saved only".
-   - Tile per idea: mode pill, title, 1-line brief, duration · group size · AO/KO chips, "View detail" / "Save" / "Regenerate" / "Reject".
-   - Detail drawer: full student brief, materials, rubric table, teacher notes, edit button → opens refine prompt.
-   - Bottom action: **Export plan** (DOCX of all saved ideas, reuse `export-docx` patterns) and **Add to Paper Set** (for ideas that became mini-tests, hand off to existing `paper-set.new`).
-
-4. **Iteration**: "Regenerate with this twist" textarea at top of portfolio re-runs generation honouring previously saved ideas (locked) and replacing only un-saved ones.
-
-## Coach integration
-
-Reuse `coach-intent` philosophy: silent-by-default deterministic checks before generation —
-- AO weighting too narrow (e.g. 100% recall),
-- only one mode chosen,
-- duration vs class size mismatch (e.g. 40 students × 30-min oral in 1 lesson),
-- "no group work" + "presentation" conflict.
-Surface as the same amber chips already used in the paper builder.
-
-## Out of scope (this round)
-
-- Full LMS-style student submission / grading — we stop at idea + rubric.
-- AI auto-marking of student work.
-- Sharing plans between teachers (later, piggy-backs on existing comments table pattern).
-
-## Files to add / touch
-
-- DB migration: two tables above.
-- `supabase/functions/generate-authentic-ideas/index.ts`
-- `supabase/functions/refine-authentic-idea/index.ts`
-- `src/lib/authentic.ts` — types + client helpers (`createPlan`, `listIdeas`, `saveIdea`, etc.)
-- `src/lib/authentic-coach.ts` — deterministic pre-generation checks (mirrors `intent-coach.ts`).
-- `src/routes/authentic.new.tsx`
-- `src/routes/authentic.$id.tsx`
-- `src/components/AuthenticIdeaTile.tsx`, `AuthenticIdeaDetailDrawer.tsx`, `AuthenticRubricTable.tsx`
-- `src/lib/export-authentic-docx.ts` (reuse helpers from `export-docx.ts`)
-- `src/routes/dashboard.tsx` — add "New authentic assessment plan" CTA.
-- `src/routes/index.tsx` — short marketing blurb so the homepage reflects the broader scope.
-
-## Result
-
-The teacher uploads "Sec 3 Chemistry — Term 2 SoW (Acids, Bases & Salts)", hits generate, and gets 10 tiles ranging from a 15-min titration mini-quiz, to a "design a low-cost antacid" performance task with rubric, to a 3-week group project producing a public-information video on water hardness in Singapore — each tagged to AO1/AO2/AO3 and the right LOs from 5086. They tick the four they like, export as DOCX, and the mini-quiz hands off to the existing paper-set flow for AI generation of the actual quiz.
-
-Approve and I'll implement in two passes: (1) DB + new/$id routes + generation function with pasted-text SoW; (2) PDF/DOCX SoW parsing + refine flow + DOCX export.
+No DB migrations, no new dependencies.
