@@ -427,6 +427,18 @@ function PaperSetView() {
   const runReview = async () => {
     setRunning(true);
     try {
+      // If most questions are missing LO/KO tags, reclassify first so the
+      // macro reviewer has signal to aggregate. The previous flow returned a
+      // toast and asked the user to click "Reclassify" — which they often
+      // missed, leaving them staring at "0 LOs picked up".
+      const ratio = totalQuestions > 0 ? untaggedCount / totalQuestions : 0;
+      if (ratio >= 0.5 && papers.length > 0) {
+        toast.message("Tagging questions before review…", {
+          description: `${untaggedCount}/${totalQuestions} questions need LO/KO tags`,
+        });
+        await reclassifyAll();
+      }
+
       const { data, error } = await supabase.functions.invoke("paper-set-review", {
         body: { set_id: id },
       });
