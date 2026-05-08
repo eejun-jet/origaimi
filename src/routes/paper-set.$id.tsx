@@ -636,8 +636,8 @@ function CoverageExplorer({
   totalLOs: number;
   selectedKO: string | null;
   onSelectKO: (k: string | null) => void;
-  filter: "all" | "covered" | "under" | "untested";
-  onFilterChange: (f: "all" | "covered" | "under" | "untested") => void;
+  filter: "all" | "covered" | "under" | "untested" | "over";
+  onFilterChange: (f: "all" | "covered" | "under" | "untested" | "over") => void;
 }) {
   if (groups.length === 0) {
     return (
