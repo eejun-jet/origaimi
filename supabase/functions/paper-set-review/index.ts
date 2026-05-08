@@ -252,9 +252,36 @@ Deno.serve(async (req) => {
       ? `Scope filter active: only ${Array.from(inScope).filter((d) => d !== "General").join(", ")} are in scope.`
       : "";
 
-    const aoStats = Array.from(new Set([...aoDefs.map((a) => a.code), ...aoMarks.keys()])).map((code) => {
+    // Roll sub-AOs up to their parent before drift comparison. Some
+    // syllabi (e.g. Combined Sci 5086/87/88) store both top-level AOs
+    // (A1/A2/A3 with declared weighting) AND finer sub-codes (A4/A5,
+    // B1–B7, C1–C6) sharing the same `title` as their parent but no
+    // weighting. Question taggers usually pick the sub-codes, so without
+    // rollup the drift comparison is apples-to-oranges and reports
+    // catastrophic-looking gaps on real school papers.
+    const parents = aoDefs.filter((a) => typeof a.weighting_percent === "number" && a.weighting_percent !== null);
+    const childToParent = new Map<string, string>();
+    if (parents.length > 0) {
+      for (const a of aoDefs) {
+        if (a.weighting_percent != null) continue;
+        const parent = parents.find((p) => (p.title ?? "").trim() === (a.title ?? "").trim() && (a.title ?? "").trim().length > 0);
+        if (parent) childToParent.set(a.code, parent.code);
+      }
+    }
+    const rolledMarks = new Map<string, number>();
+    for (const [code, m] of aoMarks.entries()) {
+      const target = childToParent.get(code) ?? code;
+      rolledMarks.set(target, (rolledMarks.get(target) ?? 0) + m);
+    }
+    // Drop child codes from the comparison set entirely — they've been
+    // rolled into their parent.
+    const visibleCodes = Array.from(new Set([
+      ...aoDefs.filter((a) => !childToParent.has(a.code)).map((a) => a.code),
+      ...Array.from(rolledMarks.keys()),
+    ]));
+    const aoStats = visibleCodes.map((code) => {
       const def = aoDefs.find((a) => a.code === code);
-      const observed = totalMarks > 0 ? ((aoMarks.get(code) ?? 0) / totalMarks) * 100 : 0;
+      const observed = totalMarks > 0 ? ((rolledMarks.get(code) ?? 0) / totalMarks) * 100 : 0;
       return {
         code,
         observed_pct: Number(observed.toFixed(1)),
