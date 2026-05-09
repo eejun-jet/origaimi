@@ -16,9 +16,13 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import {
   computeIntentSignals,
+  computeAlignmentSummary,
+  computeStyleSummary,
   snapshotForAI,
+  type AlignmentRow,
   type BuilderSnapshot,
   type IntentSignal,
+  type StyleSummary,
 } from "@/lib/intent-coach";
 
 type AIObservation = {
