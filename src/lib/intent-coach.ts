@@ -7,6 +7,7 @@
 
 import type { Section } from "./sections";
 import type { AssessmentObjective } from "./syllabus-data";
+import { bucketOf, bucketTargets, rollupCounts } from "./ao-rollup";
 
 export type IntentSignal = {
   id: string; // stable id so the user can dismiss it
