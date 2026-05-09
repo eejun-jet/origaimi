@@ -118,6 +118,7 @@ export function parseMarkingXlsx(buffer: ArrayBuffer): ParsedImport {
     classes: colIndex("classes"),
     remarks: colIndex("remarks"),
     total: colIndex("total"),
+    assessment: colIndex("assessment"),
   };
 
   // Per-class numeric columns sit between "Classes" and "Total"
@@ -146,6 +147,7 @@ export function parseMarkingXlsx(buffer: ArrayBuffer): ParsedImport {
     const markerCell = idx.marker >= 0 ? row[idx.marker] : "";
     const classesCell = idx.classes >= 0 ? row[idx.classes] : "";
     const remarks = idx.remarks >= 0 ? String(row[idx.remarks] ?? "").trim() : "";
+    const assessmentCell = idx.assessment >= 0 ? String(row[idx.assessment] ?? "").trim() : "";
 
     const startsNewPaper = !!level && !!subject;
     if (startsNewPaper) {
@@ -155,6 +157,7 @@ export function parseMarkingXlsx(buffer: ArrayBuffer): ParsedImport {
         level,
         stream: parseStream(level),
         duration_minutes: duration,
+        assessment_type: assessmentCell || null,
         remarks: remarks || null,
         deployments: [],
       };
