@@ -276,10 +276,6 @@ function OversightPage() {
               <SelectItem value="marking_done">Marking done</SelectItem>
               <SelectItem value="moderated">Moderated</SelectItem>
             </SelectContent>
-          </Select>
-          <Button variant="outline" size="sm" asChild className="ml-auto">
-            <Link to="/oversight/points">Dashboard leaderboard →</Link>
-          </Button>
         </div>
 
         {/* Deployment table */}
