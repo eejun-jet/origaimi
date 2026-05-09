@@ -1252,22 +1252,33 @@ function CoverageStrips({ blueprint, aos }: { blueprint: Blueprint; aos: Assessm
   }
 
   const hasAOs = aos.length > 0;
-  const publishedAOs = Array.from(new Set(aos.map((a) => a.code)));
-  const missingAOs = hasAOs ? publishedAOs.filter((c) => !aoMarks[c] || aoMarks[c] === 0) : [];
+  // Roll sub-codes (A1, A2, …, B1, …) up to their letter bucket (A, B, …)
+  // so the coverage view matches the syllabus-level AO weighting model.
+  const aoDefsForRollup = aos.map((a) => ({ code: a.code, weighting_percent: a.weightingPercent ?? null }));
+  const bucketTargetMap = bucketTargets(aoDefsForRollup);
+  const bucketActualMarks = rollupCounts(aoMarks);
+  const buckets = Array.from(
+    new Set([
+      ...bucketsFromDefs(aoDefsForRollup),
+      ...Array.from(bucketActualMarks.keys()),
+    ]),
+  ).filter((b) => b !== "Unmapped").sort();
+  const showTargets = bucketTargetMap.size >= 2; // hide single-bucket "100%" targets
+  const missingBuckets = hasAOs ? buckets.filter((b) => (bucketActualMarks.get(b) ?? 0) === 0 && bucketTargetMap.has(b)) : [];
 
   const warnings: string[] = [];
-  if (hasAOs && totalMarks > 0) {
-    for (const code of publishedAOs) {
-      const published = aos.find((a) => a.code === code)?.weightingPercent;
-      if (published == null) continue;
-      const actualPct = ((aoMarks[code] ?? 0) / totalMarks) * 100;
-      const diff = Math.abs(actualPct - published);
+  if (hasAOs && totalMarks > 0 && showTargets) {
+    for (const bucket of buckets) {
+      const target = bucketTargetMap.get(bucket);
+      if (target == null) continue;
+      const actualPct = ((bucketActualMarks.get(bucket) ?? 0) / totalMarks) * 100;
+      const diff = Math.abs(actualPct - target);
       if (diff > 15) {
-        warnings.push(`${code}: ${actualPct.toFixed(0)}% vs published ${published}% (off by ${diff.toFixed(0)}%)`);
+        warnings.push(`${bucket}: ${actualPct.toFixed(0)}% vs target ${target}% (off by ${diff.toFixed(0)}%)`);
       }
     }
   }
-  if (missingAOs.length > 0) warnings.push(`Not addressed: ${missingAOs.join(", ")}`);
+  if (missingBuckets.length > 0) warnings.push(`Not addressed: ${missingBuckets.join(", ")}`);
 
   if (totalMarks === 0) return null;
 
@@ -1278,21 +1289,21 @@ function CoverageStrips({ blueprint, aos }: { blueprint: Blueprint; aos: Assessm
           <h3 className="text-sm font-medium">Assessment Objective coverage</h3>
           {!hasAOs && <span className="text-xs text-muted-foreground">No AOs published for this syllabus</span>}
         </div>
-        <Bar segments={Object.entries(aoMarks).map(([code, m]) => ({
+        <Bar segments={Array.from(bucketActualMarks.entries()).map(([code, m]) => ({
           label: code,
           value: m,
           color: AO_COLORS[code] ?? "bg-chart-5",
         }))} total={totalMarks} />
         {hasAOs && (
           <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-            {aos.map((a) => {
-              const actualPct = totalMarks > 0 ? ((aoMarks[a.code] ?? 0) / totalMarks) * 100 : 0;
+            {buckets.map((bucket) => {
+              const actualPct = totalMarks > 0 ? ((bucketActualMarks.get(bucket) ?? 0) / totalMarks) * 100 : 0;
+              const target = bucketTargetMap.get(bucket);
               return (
-                <div key={a.id} className="flex items-baseline gap-2">
-                  <span className="font-mono font-medium text-foreground">{a.code}</span>
-                  {a.title && <span className="truncate">{a.title}</span>}
+                <div key={bucket} className="flex items-baseline gap-2">
+                  <span className="font-mono font-medium text-foreground">{bucket}</span>
                   <span className="ml-auto shrink-0 tabular-nums">
-                    {actualPct.toFixed(0)}%{a.weightingPercent != null ? ` / target ${a.weightingPercent}%` : ""}
+                    {actualPct.toFixed(0)}%{showTargets && target != null ? ` / target ${target}%` : ""}
                   </span>
                 </div>
               );
