@@ -604,39 +604,38 @@ function OversightPage() {
           </CardContent>
         </Card>
 
-        {/* Setters */}
+        {/* Setting load */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2"><Users className="h-4 w-4" /> Papers set per setter</CardTitle>
+            <CardTitle className="text-base flex items-center gap-2"><Users className="h-4 w-4" /> Setting load (points)</CardTitle>
           </CardHeader>
           <CardContent>
-            {perSetter.length === 0 ? (
-              <div className="text-sm text-muted-foreground">No setters loaded yet.</div>
+            {settingLoad.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No setting points yet.</div>
             ) : (
               <TooltipProvider delayDuration={100}>
                 <div className="space-y-3">
                   {(() => {
-                    const max = perSetter.reduce((a, t) => Math.max(a, t.scripts), 0);
-                    return perSetter.map((t) => (
+                    const max = settingLoad[0]?.points ?? 0;
+                    return settingLoad.map((t) => (
                       <Tooltip key={t.name}>
                         <TooltipTrigger asChild>
                           <div className="grid grid-cols-12 items-center gap-3 text-sm cursor-default">
                             <div className="col-span-3 font-medium truncate">{t.name}</div>
                             <div className="col-span-6">
                               <div className="h-3 w-full overflow-hidden rounded bg-muted">
-                                <div className="h-full bg-amber-500" style={{ width: `${max > 0 ? Math.round((t.scripts / max) * 100) : 0}%` }} />
+                                <div className="h-full bg-violet-500" style={{ width: `${max > 0 ? Math.round((t.points / max) * 100) : 0}%` }} />
                               </div>
                             </div>
-                            <div className="col-span-3 text-right tabular-nums text-muted-foreground">
-                              {t.scripts} script{t.scripts === 1 ? "" : "s"}
-                            </div>
+                            <div className="col-span-3 text-right tabular-nums text-muted-foreground">{t.points.toFixed(1)} pts</div>
                           </div>
                         </TooltipTrigger>
                         <TooltipContent side="top" align="start" className="max-w-sm space-y-1">
                           <div className="font-medium">{t.name}</div>
-                          <div>Papers set: <span className="tabular-nums">{t.papers}</span> · Scripts (downstream): <span className="tabular-nums">{t.scripts}</span></div>
-                          <div>Levels: {t.levels.length ? t.levels.join(", ") : "—"}</div>
+                          <div>Points: <span className="tabular-nums">{t.points.toFixed(1)}</span> · Papers set: <span className="tabular-nums">{t.papers}</span></div>
                           <div>Subjects: {t.subjects.length ? t.subjects.join(", ") : "—"}</div>
+                          <div>Levels: {t.levels.length ? t.levels.join(", ") : "—"}</div>
+                          <div>Posting groups: {t.postingGroups.length ? t.postingGroups.join(", ") : "—"}</div>
                           <div>Classes: {t.classLabels.length ? t.classLabels.join(", ") : "—"}</div>
                           <div>Paper titles: {t.paperTitles.length ? t.paperTitles.join("; ") : "—"}</div>
                         </TooltipContent>
