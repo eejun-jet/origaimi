@@ -118,9 +118,10 @@ function OversightPage() {
     [papers],
   );
 
-  // Apply year + assessment filters at the paper level
+  // Apply paper-level filters (subject + year + assessment) to gate every chart/table downstream
   const paperPasses = (p: Paper | undefined) => {
     if (!p) return false;
+    if (subjectFilter !== "all" && (p.subject ?? "") !== subjectFilter) return false;
     if (yearFilter !== "all" && String(p.year ?? "") !== yearFilter) return false;
     if (assessmentFilter !== "all" && (p.assessment_type ?? "") !== assessmentFilter) return false;
     return true;
@@ -129,26 +130,25 @@ function OversightPage() {
   const visibleDeployments = useMemo(
     () => deployments.filter((d) => paperPasses(paperById.get(d.paper_id))),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [deployments, paperById, yearFilter, assessmentFilter],
+    [deployments, paperById, subjectFilter, yearFilter, assessmentFilter],
   );
 
-  const markerDeployments = useMemo(() => visibleDeployments.filter((d) => d.role === "marker"), [visibleDeployments]);
-  const setterDeployments = useMemo(() => visibleDeployments.filter((d) => d.role === "setter"), [visibleDeployments]);
-
-  const filtered = useMemo(() => {
-    return markerDeployments.filter((d) => {
-      const p = paperById.get(d.paper_id);
-      if (!p) return false;
+  const markerDeployments = useMemo(() => {
+    return visibleDeployments.filter((d) => {
+      if (d.role !== "marker") return false;
       if (statusFilter !== "all" && d.status !== statusFilter) return false;
-      if (subjectFilter !== "all" && p.subject !== subjectFilter) return false;
       if (search) {
+        const p = paperById.get(d.paper_id);
         const q = search.toLowerCase();
-        const hay = `${p.title} ${p.subject ?? ""} ${p.level ?? ""} ${d.teacher_name ?? ""} ${d.class_label ?? ""}`.toLowerCase();
+        const hay = `${p?.title ?? ""} ${p?.subject ?? ""} ${p?.level ?? ""} ${d.teacher_name ?? ""} ${d.class_label ?? ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [markerDeployments, paperById, statusFilter, subjectFilter, search]);
+  }, [visibleDeployments, paperById, statusFilter, search]);
+  const setterDeployments = useMemo(() => visibleDeployments.filter((d) => d.role === "setter"), [visibleDeployments]);
+
+  const filtered = markerDeployments;
 
   // KPIs
   const totalAssigned = markerDeployments.reduce((a, d) => a + d.script_count, 0);
