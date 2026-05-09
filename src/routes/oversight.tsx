@@ -328,9 +328,9 @@ function OversightPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              <FileCheck2 className="h-4 w-4" /> Points leaderboard
+              <FileCheck2 className="h-4 w-4" /> Dashboard leaderboard
               <span className="text-xs font-normal text-muted-foreground ml-2">
-                Setting · Marking · Moderation across the year
+                Contributions across the year
               </span>
             </CardTitle>
           </CardHeader>
