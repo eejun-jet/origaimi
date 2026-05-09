@@ -129,7 +129,8 @@ export async function recomputePointsForPapers(
     .in("id", paperIds);
   if (!focal) return;
 
-  const keys = focal.map((p: any) => ({
+  type Key = { department: string | null; subject: string | null; year: number | null };
+  const keys: Key[] = focal.map((p: any) => ({
     department: p.department ?? null,
     subject: p.subject ?? null,
     year: p.year ?? null,
@@ -138,8 +139,8 @@ export async function recomputePointsForPapers(
   // Pull every paper sharing any (dept, subject, year) key — small N in practice
   let siblings: any[] = [];
   if (keys.length > 0) {
-    const subjects = Array.from(new Set(keys.map((k) => k.subject).filter(Boolean)));
-    const years = Array.from(new Set(keys.map((k) => k.year).filter((x) => x != null)));
+    const subjects = Array.from(new Set(keys.map((k: Key) => k.subject).filter(Boolean)));
+    const years = Array.from(new Set(keys.map((k: Key) => k.year).filter((x: number | null) => x != null)));
     if (subjects.length > 0) {
       const { data } = await supabase
         .from("marking_papers")
