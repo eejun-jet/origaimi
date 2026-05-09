@@ -189,7 +189,7 @@ function OversightPage() {
               Setters, markers, scripts and progress {isSl ? "across the school" : "in your department"}.
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              New here? Download the blank template, fill in your setters/markers, then import.
+              New here? Download the blank template, fill in your setters/markers, then import to see your dashboard data.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
