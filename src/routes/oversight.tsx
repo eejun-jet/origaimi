@@ -29,6 +29,7 @@ type Paper = {
   variant_of: string | null;
   points_setting: number | null;
   year: number | null;
+  import_id: string | null;
 };
 type Deployment = {
   id: string;
@@ -43,6 +44,17 @@ type Deployment = {
   status: "assigned" | "in_progress" | "marking_done" | "moderated";
   due_at: string | null;
   points: number | null;
+};
+type ImportRow = {
+  id: string;
+  filename: string | null;
+  department: string | null;
+  semester: string | null;
+  year: number | null;
+  rows_parsed: number;
+  papers_created: number;
+  deployments_created: number;
+  created_at: string;
 };
 
 function OversightPage() {
