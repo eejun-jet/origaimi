@@ -93,24 +93,52 @@ Deno.serve(async (req) => {
         );
 
         if (syllabusDocId) {
-          const { data: sd } = await supabase
-            .from("syllabus_documents")
-            .select("aims, assessment_rationale, pedagogical_notes, command_word_glossary")
-            .eq("id", syllabusDocId)
-            .maybeSingle();
-          if (sd && (sd.aims || sd.assessment_rationale || sd.pedagogical_notes)) {
-            const cw = Array.isArray(sd.command_word_glossary)
-              ? (sd.command_word_glossary as Array<{ word: string; definition: string }>)
-                  .slice(0, 8)
-                  .map((g) => `${g.word}: ${g.definition}`)
-                  .join("; ")
-              : "";
+          const [sdRes, aoRes, exRes] = await Promise.all([
+            supabase
+              .from("syllabus_documents")
+              .select("aims, assessment_rationale, pedagogical_notes, command_word_glossary")
+              .eq("id", syllabusDocId)
+              .maybeSingle(),
+            supabase
+              .from("syllabus_assessment_objectives")
+              .select("code, title, weighting_percent")
+              .eq("source_doc_id", syllabusDocId)
+              .order("position", { ascending: true }),
+            supabase
+              .from("question_bank_items")
+              .select("command_word, marks, stem, ao_codes")
+              .eq("syllabus_doc_id", syllabusDocId)
+              .order("created_at", { ascending: false })
+              .limit(5),
+          ]);
+
+          const sd = sdRes.data as {
+            aims?: string | null; assessment_rationale?: string | null;
+            pedagogical_notes?: string | null;
+            command_word_glossary?: Array<{ word: string; definition: string }> | null;
+          } | null;
+          const aos = (aoRes.data ?? []) as Array<{ code: string; title: string | null; weighting_percent: number | null }>;
+          const exemplars = ((exRes.data ?? []) as Array<{ command_word: string | null; marks: number | null; stem: string | null; ao_codes: string[] | null }>)
+            .filter((q) => q.stem && q.stem.length > 30)
+            .map((q, i) => `  ${i + 1}. [${q.command_word ?? "—"} · ${q.marks ?? "?"}m] ${(q.stem ?? "").slice(0, 200).replace(/\s+/g, " ").trim()}`)
+            .join("\n");
+
+          const cw = Array.isArray(sd?.command_word_glossary)
+            ? sd!.command_word_glossary!.slice(0, 10).map((g) => `${g.word}: ${g.definition}`).join("; ")
+            : "";
+          const aoTable = aos.length > 0
+            ? aos.map((a) => `  - ${a.code}${a.title ? ` (${a.title})` : ""}: target ~${a.weighting_percent ?? "—"}%`).join("\n")
+            : "";
+
+          if (sd || aoTable || exemplars) {
             syllabusContext = [
-              "\nSYLLABUS CONTEXT (use only to ground tone and intent):",
-              sd.aims ? `Aims: ${sd.aims}` : "",
-              sd.assessment_rationale ? `Assessment rationale: ${sd.assessment_rationale}` : "",
-              sd.pedagogical_notes ? `Pedagogical notes: ${sd.pedagogical_notes}` : "",
+              "\nSYLLABUS CONTEXT (ground alignment, pitch, and style — do not invent codes):",
+              sd?.aims ? `Aims: ${sd.aims}` : "",
+              sd?.assessment_rationale ? `Assessment rationale: ${sd.assessment_rationale}` : "",
+              sd?.pedagogical_notes ? `Pedagogical notes: ${sd.pedagogical_notes}` : "",
+              aoTable ? `AO weighting targets:\n${aoTable}` : "",
               cw ? `Command words: ${cw}` : "",
+              exemplars ? `\nPAST-PAPER EXEMPLARS:\n${exemplars}` : "",
             ].filter(Boolean).join("\n");
           }
         }
