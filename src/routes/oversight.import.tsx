@@ -175,7 +175,7 @@ function ImportPage() {
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Import setters / markers list</h1>
             <p className="text-sm text-muted-foreground">
-              Upload your department spreadsheet, or start from a clean template.
+              Upload your department spreadsheet to populate the dashboard, or start from a clean template.
               We'll detect Assessment, Level, Subject, Setter, Marker, Classes and per-class script counts automatically.
             </p>
           </div>
