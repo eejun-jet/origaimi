@@ -184,7 +184,7 @@ function OversightPage() {
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 space-y-6">
          <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Marking oversight</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Marking dashboard</h1>
             <p className="text-sm text-muted-foreground">
               Setters, markers, scripts and progress {isSl ? "across the school" : "in your department"}.
             </p>
