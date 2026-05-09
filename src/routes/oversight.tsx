@@ -182,16 +182,30 @@ function OversightPage() {
     <div className="min-h-screen bg-background">
       <AppHeader />
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 space-y-6">
-        <div className="flex items-end justify-between gap-4">
+         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Marking oversight</h1>
             <p className="text-sm text-muted-foreground">
               Setters, markers, scripts and progress {isSl ? "across the school" : "in your department"}.
             </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              New here? Download the blank template, fill in your setters/markers, then import.
+            </p>
           </div>
-          <Button asChild>
-            <Link to="/oversight/import"><Upload className="mr-2 h-4 w-4" />Import deployment sheet</Link>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild variant="outline">
+              <a href="/templates/setters-markers-template.xlsx" download>
+                <Download className="mr-2 h-4 w-4" />Download blank template
+              </a>
+            </Button>
+            <Button asChild>
+              <Link to="/oversight/import">
+                <span className="inline-flex items-center">
+                  <Upload className="mr-2 h-4 w-4" />Import deployment sheet
+                </span>
+              </Link>
+            </Button>
+          </div>
         </div>
 
         {/* KPI strip */}
