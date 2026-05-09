@@ -20,7 +20,8 @@ export type ParsedPaper = {
   level: string;
   stream: string | null; // Exp / NA / NT / null
   duration_minutes: number | null;
-  assessment_type: string | null; // WA1, MYE, EoY, … (column or form default)
+  assessment_type: string | null; // WA1, WA2, WA3, Exam, MYE, EoY, … (column or form default)
+  term: string | null; // Term 1..4 (from "T1"…"T4" column)
   remarks: string | null;
   deployments: ParsedDeployment[];
 };
