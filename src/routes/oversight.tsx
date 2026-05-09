@@ -222,14 +222,15 @@ function OversightPage() {
       .sort((a, b) => b.assigned - a.assigned);
   }, [markerDeployments, paperById]);
 
-  const perSetter = useMemo(() => {
+  const settingLoad = useMemo(() => {
     type Entry = {
       name: string;
-      papers: Set<string>;
+      points: number;
+      paperIds: Set<string>;
       paperTitles: Set<string>;
-      scripts: number;
-      levels: Set<string>;
       subjects: Set<string>;
+      levels: Set<string>;
+      postingGroups: Set<string>;
       classLabels: Set<string>;
     };
     const m = new Map<string, Entry>();
@@ -237,16 +238,19 @@ function OversightPage() {
       const key = d.teacher_name ?? "Unassigned";
       const p = paperById.get(d.paper_id);
       const e = m.get(key) ?? {
-        name: key, papers: new Set<string>(), paperTitles: new Set<string>(),
-        scripts: 0, levels: new Set<string>(), subjects: new Set<string>(), classLabels: new Set<string>(),
+        name: key, points: 0,
+        paperIds: new Set<string>(), paperTitles: new Set<string>(),
+        subjects: new Set<string>(), levels: new Set<string>(),
+        postingGroups: new Set<string>(), classLabels: new Set<string>(),
       };
-      e.papers.add(d.paper_id);
+      e.points += Number(d.points) || 0;
+      e.paperIds.add(d.paper_id);
       if (p?.title) e.paperTitles.add(p.title);
-      if (p?.level) e.levels.add(p.level);
       if (p?.subject) e.subjects.add(p.subject);
-      const markersOnPaper = markerDeployments.filter((md) => md.paper_id === d.paper_id);
-      for (const md of markersOnPaper) {
-        e.scripts += md.script_count;
+      if (p?.level) e.levels.add(p.level);
+      if (p?.stream) e.postingGroups.add(p.stream);
+      for (const md of markerDeployments) {
+        if (md.paper_id !== d.paper_id) continue;
         if (md.class_label) e.classLabels.add(md.class_label);
       }
       m.set(key, e);
@@ -254,14 +258,16 @@ function OversightPage() {
     return Array.from(m.values())
       .map((e) => ({
         name: e.name,
-        papers: e.papers.size,
-        scripts: e.scripts,
+        points: e.points,
+        papers: e.paperIds.size,
         paperTitles: Array.from(e.paperTitles).sort(),
-        levels: Array.from(e.levels).sort(),
         subjects: Array.from(e.subjects).sort(),
+        levels: Array.from(e.levels).sort(),
+        postingGroups: Array.from(e.postingGroups).sort(),
         classLabels: Array.from(e.classLabels).sort(),
       }))
-      .sort((a, b) => b.scripts - a.scripts);
+      .filter((e) => e.points > 0)
+      .sort((a, b) => b.points - a.points);
   }, [setterDeployments, markerDeployments, paperById]);
 
   // Points by teacher and role (deployment-by-points)

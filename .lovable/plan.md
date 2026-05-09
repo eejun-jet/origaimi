@@ -1,32 +1,25 @@
-Edits in `src/routes/oversight.tsx`:
 
-**1. Remove marking points**
-- Delete the entire "Marking load (points)" card (lines 599–626).
-- Keep the existing `leaderboard.marking` field harmless or remove the `marking` aggregation since nothing else consumes it on this page (the dedicated `/oversight/points` route still has its own logic). Simpler: leave the rollup but stop rendering it.
+Edits in `src/routes/oversight.tsx` only — presentation changes.
 
-**2. "Scripts assigned per marker" → horizontal bar chart with hover details**
-- Replace the existing Table with a stacked-row bar chart (same visual style already used by the Setting load card).
-- Enrich `perMarker` so each entry also carries the breakdown needed on hover:
-  - `classes` (count, already present)
-  - `classLabels: string[]` — each class label assigned
-  - `levels: string[]` — distinct levels
-  - `subjects: string[]` — distinct subjects
-  - `papers: string[]` — distinct paper titles
-- Each row: marker name (left), bar sized by `assigned / max(assigned)` (middle), `N scripts` (right).
-- Wrap each row in shadcn `Tooltip` (`@/components/ui/tooltip`). Tooltip shows: total scripts, classes (count + labels), levels, subjects, papers, and marked/flagged counters.
+**1. Remove "Papers set per setter" card**
+- Delete the entire card block (lines 601–644), including its TooltipProvider/Tooltip rows.
+- Remove the now-unused `perSetter` useMemo (lines 225–265) since no other consumer remains on this page.
 
-**3. "Papers set per setter" → horizontal bar chart with hover details**
-- Replace the existing Table with the same bar-chart pattern.
-- Drop the "Scripts (downstream)" column entirely.
-- Bar value = total scripts associated with papers the setter set (already computed as `t.scripts`; reuse but don't show the number explicitly as a column — show it on the bar's right side as `N scripts`).
-- Enrich `perSetter` with: `paperTitles: string[]`, `levels: string[]`, `subjects: string[]`, `classLabels: string[]` (from `markerDeployments` filtered to that setter's papers).
-- Tooltip shows: papers set (count + titles), levels, subjects, classes covered downstream.
+**2. Enhance "Setting load (points)" → horizontal bar chart with hover details**
+- Replace the existing simple rendering (lines 646–673) with a new per-setter rollup that combines setting points (bar value) with rich metadata (hover content).
+- Build a new `settingLoad` useMemo derived from `setterDeployments` + `paperById` + `markerDeployments`:
+  - `name` — teacher name (or "Unassigned")
+  - `points` — sum of `points` on that teacher's setter deployments
+  - `papers` — count of distinct paper IDs they set
+  - `paperTitles: string[]` — distinct paper titles
+  - `subjects: string[]` — distinct subjects (from each paper)
+  - `levels: string[]` — distinct levels (from each paper)
+  - `postingGroups: string[]` — distinct values from `paper.stream` (G3/G2/G1 etc.); fall back to filtering empties
+  - `classLabels: string[]` — distinct downstream class labels by joining each set paper to its `markerDeployments`
+- Sort descending by `points`, filter `points > 0`.
+- Render as the existing bar-chart pattern (violet bar, points on the right) wrapped in `TooltipProvider` + `Tooltip`/`TooltipTrigger asChild`/`TooltipContent`.
+- Tooltip shows: points, papers (count + titles), subjects, levels, posting groups, classes.
 
-**4. Remove "Full leaderboard →" link**
-- In the "Setting load (points)" card header, drop the right-aligned `<Button asChild variant="ghost">…/oversight/points</Button>` and revert the header to a plain `CardHeader` with just the title.
-- Keep the Setting load bar chart unchanged otherwise.
-
-**Technical notes**
-- Tooltip component: `import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";` Wrap each chart's container in a single `TooltipProvider` and each row in `<Tooltip><TooltipTrigger asChild>…row…</TooltipTrigger><TooltipContent>…details…</TooltipContent></Tooltip>`.
-- Bar styling reuses existing classes: `h-3 w-full overflow-hidden rounded bg-muted` outer, `h-full bg-emerald-500` (marker) / `bg-amber-500` (setter) inner — distinct from violet (setting) so cards remain visually differentiated.
-- No DB / schema / business-logic changes; purely presentation.
+**3. No changes**
+- Keep the "Marker deployments" table, "Scripts by level", "Scripts assigned per marker" bar chart, "Uploaded imports" card, KPI strip, and filters as-is.
+- No DB / schema / business-logic changes.
