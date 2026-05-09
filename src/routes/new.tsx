@@ -25,6 +25,7 @@ import {
   difficultyMixTotal, DEFAULT_DIFFICULTY_MIX,
   SBQ_SKILLS, MAX_SBQ_SKILLS, getSectionSkills, isHumanitiesSubject, type SbqSkill,
 } from "@/lib/sections";
+import { bucketOf, bucketTargets, bucketsFromDefs, rollupCounts } from "@/lib/ao-rollup";
 import { ChevronLeft, ChevronRight, Sparkles, Loader2, BookOpen, Upload, Plus, Trash2, ChevronUp, ChevronDown } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
