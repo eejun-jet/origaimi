@@ -58,11 +58,20 @@ const allOneType = (sections: Section[]) => {
   return sections.every((s) => s.question_type === t);
 };
 
+// Mark-weighted AO frequency, rolled up to letter-prefix buckets.
+// AO targets in the syllabus are mark-based, so we weight each section by
+// its `marks` (falling back to `num_questions` when marks is 0). Granular
+// codes (A1, A2, …, B1, …) are collapsed into their bucket (A, B, …).
 const aoFrequency = (sections: Section[]) => {
   const counts = new Map<string, number>();
   for (const s of sections) {
-    for (const code of s.ao_codes ?? []) {
-      counts.set(code, (counts.get(code) ?? 0) + (s.num_questions || 1));
+    const codes = s.ao_codes ?? [];
+    if (codes.length === 0) continue;
+    const weight = (s.marks && s.marks > 0) ? s.marks : (s.num_questions || 1);
+    const per = weight / codes.length;
+    for (const code of codes) {
+      const b = bucketOf(code);
+      counts.set(b, (counts.get(b) ?? 0) + per);
     }
   }
   return counts;
