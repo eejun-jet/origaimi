@@ -24,6 +24,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { BLOOMS } from "@/lib/syllabus";
 import { toSectioned, sectionAtPosition, getSbqSkill, KNOWLEDGE_OUTCOMES, isHumanitiesSubject, isScienceSubject, type Section } from "@/lib/sections";
 import { expandQuestionTags } from "@/lib/coverage-infer";
+import { bucketOf, bucketTargets, bucketsFromDefs } from "@/lib/ao-rollup";
 import {
   inferInScopeDisciplines,
   buildDisciplineLookup,
