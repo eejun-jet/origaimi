@@ -25,11 +25,15 @@ type Paper = {
   stream: string | null;
   department: string | null;
   remarks: string | null;
+  assessment_type: string | null;
+  variant_of: string | null;
+  points_setting: number | null;
+  year: number | null;
 };
 type Deployment = {
   id: string;
   paper_id: string;
-  role: "setter" | "marker";
+  role: "setter" | "marker" | "moderator";
   teacher_name: string | null;
   teacher_id: string | null;
   class_label: string | null;
@@ -38,6 +42,7 @@ type Deployment = {
   flagged_count: number;
   status: "assigned" | "in_progress" | "marking_done" | "moderated";
   due_at: string | null;
+  points: number | null;
 };
 
 function OversightPage() {
@@ -48,6 +53,8 @@ function OversightPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [subjectFilter, setSubjectFilter] = useState<string>("all");
+  const [yearFilter, setYearFilter] = useState<string>("all");
+  const [assessmentFilter, setAssessmentFilter] = useState<string>("all");
 
   const load = async () => {
     setLoading(true);
@@ -72,9 +79,31 @@ function OversightPage() {
     () => Array.from(new Set(papers.map((p) => p.subject).filter((x): x is string => !!x))).sort(),
     [papers],
   );
+  const years = useMemo(
+    () => Array.from(new Set(papers.map((p) => p.year).filter((x): x is number => x != null))).sort((a, b) => b - a),
+    [papers],
+  );
+  const assessments = useMemo(
+    () => Array.from(new Set(papers.map((p) => p.assessment_type).filter((x): x is string => !!x))).sort(),
+    [papers],
+  );
 
-  const markerDeployments = useMemo(() => deployments.filter((d) => d.role === "marker"), [deployments]);
-  const setterDeployments = useMemo(() => deployments.filter((d) => d.role === "setter"), [deployments]);
+  // Apply year + assessment filters at the paper level
+  const paperPasses = (p: Paper | undefined) => {
+    if (!p) return false;
+    if (yearFilter !== "all" && String(p.year ?? "") !== yearFilter) return false;
+    if (assessmentFilter !== "all" && (p.assessment_type ?? "") !== assessmentFilter) return false;
+    return true;
+  };
+
+  const visibleDeployments = useMemo(
+    () => deployments.filter((d) => paperPasses(paperById.get(d.paper_id))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [deployments, paperById, yearFilter, assessmentFilter],
+  );
+
+  const markerDeployments = useMemo(() => visibleDeployments.filter((d) => d.role === "marker"), [visibleDeployments]);
+  const setterDeployments = useMemo(() => visibleDeployments.filter((d) => d.role === "setter"), [visibleDeployments]);
 
   const filtered = useMemo(() => {
     return markerDeployments.filter((d) => {
@@ -99,8 +128,9 @@ function OversightPage() {
   const overdue = markerDeployments.filter(
     (d) => d.due_at && new Date(d.due_at) < new Date() && d.status !== "marking_done" && d.status !== "moderated",
   ).length;
+  const totalPoints = visibleDeployments.reduce((a, d) => a + (Number(d.points) || 0), 0);
 
-  // Per-teacher rollup
+  // Per-teacher rollup (marker scripts)
   const perTeacher = useMemo(() => {
     const m = new Map<string, { name: string; assigned: number; marked: number; flagged: number; deployments: number }>();
     for (const d of markerDeployments) {
@@ -114,6 +144,23 @@ function OversightPage() {
     }
     return Array.from(m.values()).sort((a, b) => b.assigned - a.assigned);
   }, [markerDeployments]);
+
+  // Per-teacher points leaderboard (setting / marking / moderation)
+  const leaderboard = useMemo(() => {
+    const m = new Map<string, { name: string; setting: number; marking: number; moderation: number; total: number }>();
+    for (const d of visibleDeployments) {
+      const key = d.teacher_name ?? "Unassigned";
+      const e = m.get(key) ?? { name: key, setting: 0, marking: 0, moderation: 0, total: 0 };
+      const pts = Number(d.points) || 0;
+      if (d.role === "setter") e.setting += pts;
+      else if (d.role === "marker") e.marking += pts;
+      else if (d.role === "moderator") e.moderation += pts;
+      e.total += pts;
+      m.set(key, e);
+    }
+    return Array.from(m.values()).sort((a, b) => b.total - a.total);
+  }, [visibleDeployments]);
+  const maxLeaderTotal = Math.max(1, ...leaderboard.map((t) => t.total));
 
   if (!canSeeOversight) {
     return (
@@ -148,12 +195,13 @@ function OversightPage() {
         </div>
 
         {/* KPI strip */}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
           <Kpi label="Papers" value={papers.length} />
           <Kpi label="Markers deployed" value={new Set(markerDeployments.map((d) => d.teacher_name ?? "")).size} />
           <Kpi label="Scripts assigned" value={totalAssigned} />
           <Kpi label="% complete" value={`${pctComplete}%`} sub={`${totalMarked}/${totalAssigned}`} />
           <Kpi label="Overdue / Flagged" value={`${overdue} / ${totalFlagged}`} tone={overdue > 0 || totalFlagged > 0 ? "warn" : undefined} />
+          <Kpi label="Points awarded" value={totalPoints.toFixed(1)} sub="set + mark + mod" />
         </div>
 
         {/* Filters */}
@@ -171,8 +219,22 @@ function OversightPage() {
               {subjects.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
             </SelectContent>
           </Select>
+          <Select value={yearFilter} onValueChange={setYearFilter}>
+            <SelectTrigger className="w-32"><SelectValue placeholder="Year" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All years</SelectItem>
+              {years.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={assessmentFilter} onValueChange={setAssessmentFilter}>
+            <SelectTrigger className="w-40"><SelectValue placeholder="Assessment" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All assessments</SelectItem>
+              {assessments.map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+            </SelectContent>
+          </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-44"><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectTrigger className="w-40"><SelectValue placeholder="Status" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All statuses</SelectItem>
               <SelectItem value="assigned">Assigned</SelectItem>
@@ -181,6 +243,9 @@ function OversightPage() {
               <SelectItem value="moderated">Moderated</SelectItem>
             </SelectContent>
           </Select>
+          <Button variant="outline" size="sm" asChild className="ml-auto">
+            <Link to="/oversight/points">Points leaderboard →</Link>
+          </Button>
         </div>
 
         {/* Deployment table */}
@@ -240,6 +305,52 @@ function OversightPage() {
                   })}
                 </TableBody>
               </Table>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Points leaderboard */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <FileCheck2 className="h-4 w-4" /> Points leaderboard
+              <span className="text-xs font-normal text-muted-foreground ml-2">
+                Setting · Marking · Moderation across the year
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {leaderboard.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No points awarded yet — import a deployment sheet to get started.</div>
+            ) : (
+              <div className="space-y-2">
+                {leaderboard.map((t) => {
+                  const pctSet = (t.setting / maxLeaderTotal) * 100;
+                  const pctMark = (t.marking / maxLeaderTotal) * 100;
+                  const pctMod = (t.moderation / maxLeaderTotal) * 100;
+                  return (
+                    <div key={t.name} className="grid grid-cols-12 items-center gap-3 text-sm">
+                      <div className="col-span-3 font-medium truncate">{t.name}</div>
+                      <div className="col-span-6 flex h-3 overflow-hidden rounded-full bg-muted">
+                        <div className="bg-primary" style={{ width: `${pctSet}%` }} title={`Setting ${t.setting.toFixed(1)}`} />
+                        <div className="bg-emerald-500" style={{ width: `${pctMark}%` }} title={`Marking ${t.marking.toFixed(1)}`} />
+                        <div className="bg-violet-500" style={{ width: `${pctMod}%` }} title={`Moderation ${t.moderation.toFixed(1)}`} />
+                      </div>
+                      <div className="col-span-3 text-right tabular-nums">
+                        <span className="font-semibold">{t.total.toFixed(1)}</span>{" "}
+                        <span className="text-xs text-muted-foreground">
+                          ({t.setting.toFixed(1)} / {t.marking.toFixed(1)} / {t.moderation.toFixed(1)})
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+                <div className="pt-2 flex gap-3 text-xs text-muted-foreground">
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-primary inline-block" /> Setting</span>
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-emerald-500 inline-block" /> Marking</span>
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-violet-500 inline-block" /> Moderation</span>
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>

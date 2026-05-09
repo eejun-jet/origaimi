@@ -20,6 +20,7 @@ export type ParsedPaper = {
   level: string;
   stream: string | null; // Exp / NA / NT / null
   duration_minutes: number | null;
+  assessment_type: string | null; // WA1, MYE, EoY, … (column or form default)
   remarks: string | null;
   deployments: ParsedDeployment[];
 };
@@ -44,6 +45,8 @@ const HEADER_ALIASES: Record<string, string> = {
   class: "classes",
   total: "total",
   remarks: "remarks",
+  assessment: "assessment",
+  "assessment type": "assessment",
 };
 
 function normaliseHeader(s: string): string {
@@ -115,6 +118,7 @@ export function parseMarkingXlsx(buffer: ArrayBuffer): ParsedImport {
     classes: colIndex("classes"),
     remarks: colIndex("remarks"),
     total: colIndex("total"),
+    assessment: colIndex("assessment"),
   };
 
   // Per-class numeric columns sit between "Classes" and "Total"
@@ -143,6 +147,7 @@ export function parseMarkingXlsx(buffer: ArrayBuffer): ParsedImport {
     const markerCell = idx.marker >= 0 ? row[idx.marker] : "";
     const classesCell = idx.classes >= 0 ? row[idx.classes] : "";
     const remarks = idx.remarks >= 0 ? String(row[idx.remarks] ?? "").trim() : "";
+    const assessmentCell = idx.assessment >= 0 ? String(row[idx.assessment] ?? "").trim() : "";
 
     const startsNewPaper = !!level && !!subject;
     if (startsNewPaper) {
@@ -152,6 +157,7 @@ export function parseMarkingXlsx(buffer: ArrayBuffer): ParsedImport {
         level,
         stream: parseStream(level),
         duration_minutes: duration,
+        assessment_type: assessmentCell || null,
         remarks: remarks || null,
         deployments: [],
       };
@@ -173,6 +179,8 @@ export function parseMarkingXlsx(buffer: ArrayBuffer): ParsedImport {
     const markers = splitNames(markerCell);
     const classes = splitClasses(classesCell);
     if (markers.length === 0 && classes.length === 0) continue;
+    if (!current) continue;
+    const paper = current;
 
     // Read per-class counts for this row (positional)
     const counts = perClassCols.map((c) => Number(row[c] ?? 0)).map((n) => (Number.isFinite(n) ? n : 0));
@@ -181,10 +189,10 @@ export function parseMarkingXlsx(buffer: ArrayBuffer): ParsedImport {
     for (const name of markers) {
       nameSet.add(name);
       if (classCounts.length === 0) {
-        current.deployments.push({ role: "marker", teacher_name: name, class_label: null, script_count: 0 });
+        paper.deployments.push({ role: "marker", teacher_name: name, class_label: null, script_count: 0 });
       } else {
         for (const { cls, count } of classCounts) {
-          current.deployments.push({ role: "marker", teacher_name: name, class_label: cls, script_count: count });
+          paper.deployments.push({ role: "marker", teacher_name: name, class_label: cls, script_count: count });
         }
       }
     }

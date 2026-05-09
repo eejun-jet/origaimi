@@ -434,6 +434,7 @@ export type Database = {
           id: string
           marked_count: number
           paper_id: string
+          points: number
           role: string
           script_count: number
           status: string
@@ -449,6 +450,7 @@ export type Database = {
           id?: string
           marked_count?: number
           paper_id: string
+          points?: number
           role: string
           script_count?: number
           status?: string
@@ -464,6 +466,7 @@ export type Database = {
           id?: string
           marked_count?: number
           paper_id?: string
+          points?: number
           role?: string
           script_count?: number
           status?: string
@@ -529,11 +532,13 @@ export type Database = {
       marking_papers: {
         Row: {
           assessment_id: string | null
+          assessment_type: string | null
           created_at: string
           department: string | null
           duration_minutes: number | null
           id: string
           level: string | null
+          points_setting: number | null
           remarks: string | null
           school: string | null
           semester: string | null
@@ -541,15 +546,18 @@ export type Database = {
           subject: string | null
           title: string
           updated_at: string
+          variant_of: string | null
           year: number | null
         }
         Insert: {
           assessment_id?: string | null
+          assessment_type?: string | null
           created_at?: string
           department?: string | null
           duration_minutes?: number | null
           id?: string
           level?: string | null
+          points_setting?: number | null
           remarks?: string | null
           school?: string | null
           semester?: string | null
@@ -557,15 +565,18 @@ export type Database = {
           subject?: string | null
           title: string
           updated_at?: string
+          variant_of?: string | null
           year?: number | null
         }
         Update: {
           assessment_id?: string | null
+          assessment_type?: string | null
           created_at?: string
           department?: string | null
           duration_minutes?: number | null
           id?: string
           level?: string | null
+          points_setting?: number | null
           remarks?: string | null
           school?: string | null
           semester?: string | null
@@ -573,9 +584,18 @@ export type Database = {
           subject?: string | null
           title?: string
           updated_at?: string
+          variant_of?: string | null
           year?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "marking_papers_variant_of_fkey"
+            columns: ["variant_of"]
+            isOneToOne: false
+            referencedRelation: "marking_papers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       marking_scripts: {
         Row: {
@@ -1399,7 +1419,19 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      teacher_points_year: {
+        Row: {
+          department: string | null
+          marking_points: number | null
+          moderation_points: number | null
+          setting_points: number | null
+          teacher_key: string | null
+          teacher_name: string | null
+          total_points: number | null
+          year: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       has_role: {
