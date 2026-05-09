@@ -214,6 +214,13 @@ function ImportPage() {
             <p className="text-xs text-muted-foreground">
               Used for any rows that don't have an Assessment column value. Drives points awarded across the year.
             </p>
+            <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
+              <p className="font-medium text-foreground">Template shape</p>
+              <p>• Roster at the top of the sheet — rename Andy / Barry / … to your real teachers; Setter and Marker dropdowns pull from there.</p>
+              <p>• Rows are grouped by Term (T1–T4) using banner rows the importer ignores.</p>
+              <p>• Assessment dropdown: WA1 / WA2 / WA3 / Exam. Stream dropdown: G3 / G2 / G1 (or combos).</p>
+              <p>• G1 papers score 1 point for setting, same as a G2 variant of a G3 paper.</p>
+            </div>
 
             <label className="flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-border bg-muted/40 p-8 text-sm text-muted-foreground hover:bg-muted">
               <FileSpreadsheet className="h-5 w-5" />
