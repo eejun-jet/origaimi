@@ -306,6 +306,11 @@ function OversightPage() {
                 <Upload className="mr-2 h-4 w-4" />Import deployment sheet
               </Link>
             </Button>
+            {imports.length > 0 && (
+              <Button variant="destructive" onClick={deleteAllDeploymentData}>
+                Clear current deployment
+              </Button>
+            )}
           </div>
         </div>
 
@@ -559,47 +564,64 @@ function OversightPage() {
           </CardContent>
         </Card>
 
-        {/* Deployment by points */}
+        {/* Setting load */}
         <Card>
           <CardHeader className="flex-row items-center justify-between">
-            <CardTitle className="text-base">Deployment by points</CardTitle>
+            <CardTitle className="text-base">Setting load (points)</CardTitle>
             <Button asChild variant="ghost" size="sm">
               <Link to="/oversight/points">Full leaderboard →</Link>
             </Button>
           </CardHeader>
           <CardContent>
-            {leaderboard.length === 0 ? (
-              <div className="text-sm text-muted-foreground">No points yet — points are computed during import.</div>
-            ) : (
-              <div className="space-y-3">
-                {leaderboard.map((t) => {
-                  const w = (n: number) => (maxLeaderTotal > 0 ? Math.round((n / maxLeaderTotal) * 100) : 0);
-                  return (
+            {(() => {
+              const rows = leaderboard.filter((t) => t.setting > 0).sort((a, b) => b.setting - a.setting);
+              const max = rows[0]?.setting ?? 0;
+              if (rows.length === 0) return <div className="text-sm text-muted-foreground">No setting points yet.</div>;
+              return (
+                <div className="space-y-3">
+                  {rows.map((t) => (
                     <div key={t.name} className="grid grid-cols-12 items-center gap-3 text-sm">
                       <div className="col-span-3 font-medium truncate">{t.name}</div>
                       <div className="col-span-6">
-                        <div className="flex h-3 w-full overflow-hidden rounded bg-muted">
-                          <div className="bg-violet-500" style={{ width: `${w(t.setting)}%` }} title={`Setting ${t.setting.toFixed(1)}`} />
-                          <div className="bg-blue-500" style={{ width: `${w(t.marking)}%` }} title={`Marking ${t.marking.toFixed(1)}`} />
-                          <div className="bg-emerald-500" style={{ width: `${w(t.moderation)}%` }} title={`Moderation ${t.moderation.toFixed(1)}`} />
+                        <div className="h-3 w-full overflow-hidden rounded bg-muted">
+                          <div className="h-full bg-violet-500" style={{ width: `${max > 0 ? Math.round((t.setting / max) * 100) : 0}%` }} />
                         </div>
                       </div>
-                      <div className="col-span-3 text-right tabular-nums text-muted-foreground">
-                        {t.total.toFixed(1)} pts
-                        <span className="ml-2 text-[11px]">
-                          (S {t.setting.toFixed(1)} · M {t.marking.toFixed(1)} · Mod {t.moderation.toFixed(1)})
-                        </span>
-                      </div>
+                      <div className="col-span-3 text-right tabular-nums text-muted-foreground">{t.setting.toFixed(1)} pts</div>
                     </div>
-                  );
-                })}
-                <div className="flex items-center gap-3 pt-2 text-[11px] text-muted-foreground">
-                  <span className="inline-flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-violet-500" /> Setting</span>
-                  <span className="inline-flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-blue-500" /> Marking</span>
-                  <span className="inline-flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-emerald-500" /> Moderation</span>
+                  ))}
                 </div>
-              </div>
-            )}
+              );
+            })()}
+          </CardContent>
+        </Card>
+
+        {/* Marking load */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Marking load (points)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {(() => {
+              const rows = leaderboard.filter((t) => t.marking > 0).sort((a, b) => b.marking - a.marking);
+              const max = rows[0]?.marking ?? 0;
+              if (rows.length === 0) return <div className="text-sm text-muted-foreground">No marking points yet.</div>;
+              return (
+                <div className="space-y-3">
+                  {rows.map((t) => (
+                    <div key={t.name} className="grid grid-cols-12 items-center gap-3 text-sm">
+                      <div className="col-span-3 font-medium truncate">{t.name}</div>
+                      <div className="col-span-6">
+                        <div className="h-3 w-full overflow-hidden rounded bg-muted">
+                          <div className="h-full bg-blue-500" style={{ width: `${max > 0 ? Math.round((t.marking / max) * 100) : 0}%` }} />
+                        </div>
+                      </div>
+                      <div className="col-span-3 text-right tabular-nums text-muted-foreground">{t.marking.toFixed(1)} pts</div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </CardContent>
         </Card>
 
