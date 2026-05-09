@@ -11,7 +11,15 @@ import type { AssessmentObjective } from "./syllabus-data";
 export type IntentSignal = {
   id: string; // stable id so the user can dismiss it
   severity: "info" | "warn";
-  category: "intent" | "ao_balance" | "cognitive_demand" | "coverage" | "context" | "instructions";
+  category:
+    | "intent"
+    | "ao_balance"
+    | "cognitive_demand"
+    | "coverage"
+    | "context"
+    | "instructions"
+    | "pitch"
+    | "style";
   note: string; // one-liner, plain teacher language
   // Optional one-line text the panel can append to Special Instructions.
   applyToInstructions?: string;
