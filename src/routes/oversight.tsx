@@ -324,7 +324,7 @@ function OversightPage() {
           </CardContent>
         </Card>
 
-        {/* Points leaderboard */}
+        {/* Dashboard leaderboard */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
