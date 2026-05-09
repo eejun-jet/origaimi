@@ -1,60 +1,32 @@
-## Goal
+Edits in `src/routes/oversight.tsx`:
 
-Restore the points/leaderboard view, make per-teacher load show **scripts assigned per teacher regardless of marking status**, and let you clean up old uploads so each new import doesn't pile on top of previous ones.
+**1. Remove marking points**
+- Delete the entire "Marking load (points)" card (lines 599–626).
+- Keep the existing `leaderboard.marking` field harmless or remove the `marking` aggregation since nothing else consumes it on this page (the dedicated `/oversight/points` route still has its own logic). Simpler: leave the rollup but stop rendering it.
 
-## Changes
+**2. "Scripts assigned per marker" → horizontal bar chart with hover details**
+- Replace the existing Table with a stacked-row bar chart (same visual style already used by the Setting load card).
+- Enrich `perMarker` so each entry also carries the breakdown needed on hover:
+  - `classes` (count, already present)
+  - `classLabels: string[]` — each class label assigned
+  - `levels: string[]` — distinct levels
+  - `subjects: string[]` — distinct subjects
+  - `papers: string[]` — distinct paper titles
+- Each row: marker name (left), bar sized by `assigned / max(assigned)` (middle), `N scripts` (right).
+- Wrap each row in shadcn `Tooltip` (`@/components/ui/tooltip`). Tooltip shows: total scripts, classes (count + labels), levels, subjects, papers, and marked/flagged counters.
 
-### 1. `src/routes/oversight.tsx` — Per-teacher load → "Scripts assigned per teacher"
+**3. "Papers set per setter" → horizontal bar chart with hover details**
+- Replace the existing Table with the same bar-chart pattern.
+- Drop the "Scripts (downstream)" column entirely.
+- Bar value = total scripts associated with papers the setter set (already computed as `t.scripts`; reuse but don't show the number explicitly as a column — show it on the bar's right side as `N scripts`).
+- Enrich `perSetter` with: `paperTitles: string[]`, `levels: string[]`, `subjects: string[]`, `classLabels: string[]` (from `markerDeployments` filtered to that setter's papers).
+- Tooltip shows: papers set (count + titles), levels, subjects, classes covered downstream.
 
-Replace the current per-teacher section so the headline number is **scripts assigned** (not progress %). Sorted by assigned desc.
+**4. Remove "Full leaderboard →" link**
+- In the "Setting load (points)" card header, drop the right-aligned `<Button asChild variant="ghost">…/oversight/points</Button>` and revert the header to a plain `CardHeader` with just the title.
+- Keep the Setting load bar chart unchanged otherwise.
 
-- Columns: Teacher · Papers/classes · Scripts assigned · Marked · Flagged
-- Show all teachers from marker deployments, regardless of status (already the case — the rollup uses `markerDeployments` without status filtering).
-- Make it a real table, not a progress-bar list, since assigned count is the primary signal.
-
-### 2. `src/routes/oversight.tsx` — Bring back the points/deployment-by-points card
-
-Restore (and keep) a "Deployment by points" card showing setting + marking + moderation points per teacher (from `deployments.points` summed by `role`). This is the part you want emphasized.
-
-- One row per teacher with three sub-bars/columns: Setting / Marking / Moderation points + total.
-- Sorted by total points desc.
-- Add the "Dashboard leaderboard →" link back next to the filter row, pointing at `/oversight/points`.
-- Restore `totalPoints` KPI in the strip (back to 6 columns).
-
-### 3. `src/routes/oversight.tsx` — Manage uploaded imports (delete earlier templates)
-
-Add a new "Imports" card listing rows from `marking_imports` (filename, year/semester, papers/deployments created, created_at) with a **Delete** button per row.
-
-Delete behavior — cascade in this order so nothing is orphaned:
-
-1. Find all `marking_papers` linked to this import (we'll add `import_id` so we can scope the cascade — see DB change below).
-2. Delete `marking_scripts` whose `deployment_id` belongs to those papers' deployments.
-3. Delete `marking_deployments` for those papers.
-4. Delete the `marking_papers` rows.
-5. Delete the `marking_imports` row.
-
-Also add a "Delete ALL deployment data" button (with confirm) that wipes scripts → deployments → papers → imports for the current user/department, for a clean slate.
-
-### 4. DB change — link papers/deployments back to their import
-
-Currently `marking_papers` has no `import_id`, so we can't cleanly remove "just the rows from upload X." Add:
-
-- `marking_papers.import_id uuid null` (FK-style, nullable for legacy rows)
-- Index on `marking_papers.import_id`
-
-And update `src/routes/oversight.import.tsx` `commit()` to:
-
-- Insert the `marking_imports` row first, get its id.
-- Stamp `import_id` on every `marking_papers` row inserted in this run.
-- Existing `marking_imports` summary update at the end stays.
-
-Legacy rows without `import_id` will still appear on the dashboard; the per-import delete only removes rows tagged with that id. The "Delete ALL" button handles legacy cleanup.
-
-## Out of scope
-
-- The `/oversight/points` route and importer points logic stay as-is.
-- No changes to RLS — tables already have permissive trial policies.
-
-## Open question
-
-Do you want the per-teacher table to show **only markers** , and a separate per-teacher table to show **only setters**. (teachers who set the papers dont neccessarily mark it, and vice versa) 
+**Technical notes**
+- Tooltip component: `import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";` Wrap each chart's container in a single `TooltipProvider` and each row in `<Tooltip><TooltipTrigger asChild>…row…</TooltipTrigger><TooltipContent>…details…</TooltipContent></Tooltip>`.
+- Bar styling reuses existing classes: `h-3 w-full overflow-hidden rounded bg-muted` outer, `h-full bg-emerald-500` (marker) / `bg-amber-500` (setter) inner — distinct from violet (setting) so cards remain visually differentiated.
+- No DB / schema / business-logic changes; purely presentation.
