@@ -253,10 +253,7 @@ function OversightPage() {
   const deleteAllDeploymentData = async () => {
     if (!confirm("Delete ALL imported deployment data (papers, deployments, scripts, imports)? This cannot be undone.")) return;
     if (!confirm("Are you sure? This wipes every import and starts fresh.")) return;
-    const { data: allDeps } = await supabase.from("marking_deployments").select("id");
-    const depIds = (allDeps ?? []).map((d: { id: string }) => d.id);
-    if (depIds.length > 0) await supabase.from("marking_scripts").delete().in("id", depIds.length ? [] : []); // no-op safety
-    // delete scripts referencing any deployment
+    // delete scripts referencing any deployment, then deployments, then papers, then imports
     await supabase.from("marking_scripts").delete().not("deployment_id", "is", null);
     await supabase.from("marking_deployments").delete().not("id", "is", null);
     await supabase.from("marking_papers").delete().not("id", "is", null);
