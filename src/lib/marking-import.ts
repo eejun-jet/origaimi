@@ -94,7 +94,7 @@ export function parseMarkingXlsx(buffer: ArrayBuffer): ParsedImport {
   // Find the header row (contains "Level" and "Subject")
   let headerIdx = -1;
   for (let i = 0; i < Math.min(rows.length, 30); i++) {
-    const cells = rows[i].map(normaliseHeader);
+    const cells = rows[i].map((c) => normaliseHeader(String(c ?? "")));
     if (cells.includes("level") && cells.includes("subject")) {
       headerIdx = i;
       break;
@@ -104,7 +104,7 @@ export function parseMarkingXlsx(buffer: ArrayBuffer): ParsedImport {
     return { papers: [], warnings: ["Could not find a header row containing 'Level' and 'Subject'."], uniqueNames: [] };
   }
 
-  const header = rows[headerIdx].map(normaliseHeader);
+  const header = rows[headerIdx].map((c) => normaliseHeader(String(c ?? "")));
   const colIndex = (key: string) => header.findIndex((h) => HEADER_ALIASES[h] === key);
   const idx = {
     level: colIndex("level"),
