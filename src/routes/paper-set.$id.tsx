@@ -609,7 +609,7 @@ function PaperSetView() {
             onFilterChange={setCoverageFilter}
           />
         ) : tab === "ao" ? (
-          <AOPanel aoDefs={aoDefs} aoMarkShare={aoMarkShare} totalMarks={totalMarks} />
+          <AOPanel aoDefs={aoDefs} aoMarkShare={aoMarkShare} aoSubMarkShare={aoSubMarkShare} totalMarks={totalMarks} />
         ) : tab === "papers" ? (
           <PerPaperPanel rows={perPaper} aoDefs={aoDefs} />
         ) : (
