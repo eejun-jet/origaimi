@@ -147,10 +147,13 @@ function ImportPage() {
       <div className="min-h-screen bg-background">
         <AppHeader />
         <main className="mx-auto max-w-3xl px-6 py-12">
-          <Card>
-            <CardHeader><CardTitle>Import marking deployment</CardTitle></CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              Only HODs, SLs and admins can import deployments.
+         <Card>
+            <CardHeader><CardTitle>You need HOD or School Leader access to import</CardTitle></CardHeader>
+            <CardContent className="space-y-4 text-sm text-muted-foreground">
+              <p>Only HODs, School Leaders and admins can import marking deployments. Ask your HOD to upload the sheet on your behalf.</p>
+              <Button asChild variant="outline">
+                <Link to="/oversight"><ArrowLeft className="mr-2 h-4 w-4" />Back to Oversight</Link>
+              </Button>
             </CardContent>
           </Card>
         </main>
