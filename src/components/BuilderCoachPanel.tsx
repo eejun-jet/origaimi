@@ -62,6 +62,8 @@ export function BuilderCoachPanel({
   const [aiReview, setAiReview] = useState<AIReview | null>(null);
 
   const localSignals = useMemo(() => computeIntentSignals(snapshot), [snapshot]);
+  const alignment = useMemo(() => computeAlignmentSummary(snapshot), [snapshot]);
+  const styleSummary = useMemo(() => computeStyleSummary(snapshot), [snapshot]);
   const visibleLocal = localSignals.filter((s) => !dismissed.has(s.id));
   const aiObservations = aiReview?.observations ?? [];
   const aiSuggestions = aiReview?.suggestions ?? [];
