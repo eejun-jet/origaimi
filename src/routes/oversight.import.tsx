@@ -114,7 +114,7 @@ function ImportPage() {
 
       // Auto-link G2↔G3 variants and compute setting / marking points
       try {
-        await recomputePointsForPapers(supabase as unknown as { from: (t: string) => unknown } as any, newPaperIds);
+        await recomputePointsForPapers(supabase as unknown as { from: (t: string) => any }, newPaperIds);
       } catch (e) {
         console.error("Points recompute failed", e);
       }
