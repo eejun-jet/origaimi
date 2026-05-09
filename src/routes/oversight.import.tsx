@@ -152,7 +152,7 @@ function ImportPage() {
             <CardContent className="space-y-4 text-sm text-muted-foreground">
               <p>Only HODs, School Leaders and admins can import marking deployments. Ask your HOD to upload the sheet on your behalf.</p>
               <Button asChild variant="outline">
-                <Link to="/oversight"><ArrowLeft className="mr-2 h-4 w-4" />Back to Oversight</Link>
+                <Link to="/oversight"><ArrowLeft className="mr-2 h-4 w-4" />Back to Dashboard</Link>
               </Button>
             </CardContent>
           </Card>
