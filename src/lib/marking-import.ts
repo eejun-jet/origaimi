@@ -48,6 +48,8 @@ const HEADER_ALIASES: Record<string, string> = {
   remarks: "remarks",
   assessment: "assessment",
   "assessment type": "assessment",
+  term: "term",
+  stream: "stream",
 };
 
 function normaliseHeader(s: string): string {
