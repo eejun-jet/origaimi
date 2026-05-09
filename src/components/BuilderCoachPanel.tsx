@@ -600,30 +600,41 @@ function AlignmentStrip({ rows }: { rows: AlignmentRow[] }) {
           const planned = r.plannedPercent;
           const delta = target !== null ? planned - target : 0;
           const off = target !== null && Math.abs(delta) >= 20;
+          const subs = r.subCodes ?? [];
           return (
-            <div key={r.code} className="flex items-center gap-2 text-[10px]">
-              <span className="w-10 shrink-0 font-medium">{r.code}</span>
-              <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                {target !== null && (
+            <div key={r.code} className="space-y-0.5">
+              <div className="flex items-center gap-2 text-[10px]">
+                <span className="w-10 shrink-0 font-medium">{r.code}</span>
+                <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                  {target !== null && (
+                    <div
+                      className="absolute inset-y-0 left-0 bg-muted-foreground/30"
+                      style={{ width: `${Math.min(target, 100)}%` }}
+                      aria-hidden
+                    />
+                  )}
                   <div
-                    className="absolute inset-y-0 left-0 bg-muted-foreground/30"
-                    style={{ width: `${Math.min(target, 100)}%` }}
+                    className={`absolute inset-y-0 left-0 ${off ? "bg-warm" : "bg-primary"}`}
+                    style={{ width: `${Math.min(planned, 100)}%`, mixBlendMode: "multiply" }}
                     aria-hidden
                   />
-                )}
-                <div
-                  className={`absolute inset-y-0 left-0 ${off ? "bg-warm" : "bg-primary"}`}
-                  style={{ width: `${Math.min(planned, 100)}%`, mixBlendMode: "multiply" }}
-                  aria-hidden
-                />
+                </div>
+                <span className={`w-20 shrink-0 text-right tabular-nums ${off ? "text-warm" : "text-muted-foreground"}`}>
+                  {planned}%{target !== null ? ` / ${target}%` : ""}
+                </span>
               </div>
-              <span className={`w-20 shrink-0 text-right tabular-nums ${off ? "text-warm" : "text-muted-foreground"}`}>
-                {planned}%{target !== null ? ` / ${target}%` : ""}
-              </span>
+              {subs.length > 0 && (
+                <p className="pl-12 text-[9px] text-muted-foreground/80">
+                  rolled up from {subs.map((s) => `${s.code} ${s.percent}%`).join(", ")}
+                </p>
+              )}
             </div>
           );
         })}
       </div>
+      <p className="mt-2 pl-1 text-[9px] italic text-muted-foreground/70">
+        Sub-codes (A1–A5, B1–B7, …) are rolled up to their letter bucket to match the syllabus AO weighting.
+      </p>
     </div>
   );
 }
