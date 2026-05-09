@@ -309,6 +309,52 @@ function OversightPage() {
           </CardContent>
         </Card>
 
+        {/* Points leaderboard */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <FileCheck2 className="h-4 w-4" /> Points leaderboard
+              <span className="text-xs font-normal text-muted-foreground ml-2">
+                Setting · Marking · Moderation across the year
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {leaderboard.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No points awarded yet — import a deployment sheet to get started.</div>
+            ) : (
+              <div className="space-y-2">
+                {leaderboard.map((t) => {
+                  const pctSet = (t.setting / maxLeaderTotal) * 100;
+                  const pctMark = (t.marking / maxLeaderTotal) * 100;
+                  const pctMod = (t.moderation / maxLeaderTotal) * 100;
+                  return (
+                    <div key={t.name} className="grid grid-cols-12 items-center gap-3 text-sm">
+                      <div className="col-span-3 font-medium truncate">{t.name}</div>
+                      <div className="col-span-6 flex h-3 overflow-hidden rounded-full bg-muted">
+                        <div className="bg-primary" style={{ width: `${pctSet}%` }} title={`Setting ${t.setting.toFixed(1)}`} />
+                        <div className="bg-emerald-500" style={{ width: `${pctMark}%` }} title={`Marking ${t.marking.toFixed(1)}`} />
+                        <div className="bg-violet-500" style={{ width: `${pctMod}%` }} title={`Moderation ${t.moderation.toFixed(1)}`} />
+                      </div>
+                      <div className="col-span-3 text-right tabular-nums">
+                        <span className="font-semibold">{t.total.toFixed(1)}</span>{" "}
+                        <span className="text-xs text-muted-foreground">
+                          ({t.setting.toFixed(1)} / {t.marking.toFixed(1)} / {t.moderation.toFixed(1)})
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+                <div className="pt-2 flex gap-3 text-xs text-muted-foreground">
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-primary inline-block" /> Setting</span>
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-emerald-500 inline-block" /> Marking</span>
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-violet-500 inline-block" /> Moderation</span>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Per-teacher */}
         <Card>
           <CardHeader>
