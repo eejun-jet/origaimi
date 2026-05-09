@@ -69,6 +69,7 @@ function ImportPage() {
 
       let papersCreated = 0;
       let deploymentsCreated = 0;
+      const newPaperIds: string[] = [];
 
       for (const p of parsed.papers) {
         const { data: paperRow, error: pErr } = await supabase
@@ -79,6 +80,7 @@ function ImportPage() {
             level: p.level,
             stream: p.stream,
             duration_minutes: p.duration_minutes,
+            assessment_type: p.assessment_type ?? defaultAssessment ?? null,
             department: department || null,
             remarks: p.remarks,
             semester: semester || null,
@@ -91,6 +93,7 @@ function ImportPage() {
           continue;
         }
         papersCreated += 1;
+        newPaperIds.push(paperRow.id);
 
         const rows = p.deployments.map((d) => ({
           paper_id: paperRow.id,
@@ -107,6 +110,13 @@ function ImportPage() {
           if (dErr) console.error("Deployment insert failed", dErr);
           else deploymentsCreated += count ?? rows.length;
         }
+      }
+
+      // Auto-link G2↔G3 variants and compute setting / marking points
+      try {
+        await recomputePointsForPapers(supabase as unknown as { from: (t: string) => unknown } as any, newPaperIds);
+      } catch (e) {
+        console.error("Points recompute failed", e);
       }
 
       await supabase.from("marking_imports").insert({
