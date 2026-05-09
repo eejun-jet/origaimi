@@ -3181,7 +3181,7 @@ function CoveragePanel({
 
   // Find evidence questions for a target (per-paper rollup)
   const evidenceFor = (t: CoverageTarget): Question[] => {
-    if (t.kind === "ao") return questions.filter((q) => (q.ao_codes ?? []).includes(t.code));
+    if (t.kind === "ao") return questions.filter((q) => (q.ao_codes ?? []).some((c) => bucketOf(c) === t.code));
     if (t.kind === "ko") return questions.filter((q) => (q.knowledge_outcomes ?? []).includes(t.name));
     return questions.filter((q) => (q.learning_outcomes ?? []).includes(t.text));
   };
