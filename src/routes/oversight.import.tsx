@@ -9,9 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Upload, FileSpreadsheet, AlertCircle, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Upload, FileSpreadsheet, AlertCircle, CheckCircle2, Download } from "lucide-react";
 import { toast } from "sonner";
 import { parseMarkingXlsx, type ParsedImport } from "@/lib/marking-import";
+import { recomputePointsForPapers } from "@/lib/marking-points";
 import { useRoles } from "@/lib/roles";
 
 export const Route = createFileRoute("/oversight/import")({
