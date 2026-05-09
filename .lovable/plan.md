@@ -1,25 +1,22 @@
-## Plan
+## Goal
 
-1. **Fix the dashboard parent route rendering**
-   - Keep `/oversight` as the dashboard page.
-   - When the URL is `/oversight/import` or `/oversight/points`, render the nested child route instead of the dashboard shell.
-   - This prevents the parent dashboard route from hiding the import/points child pages.
+Strip points/scoring from the dashboard. Replace it with a tabulated count of scripts being marked, broken down by level (and keep the existing progress detail). No moderation points anywhere.
 
-2. **Make the dashboard data load fail visibly instead of silently**
-   - Update the dashboard `load()` function to capture read errors from `marking_papers` and `marking_deployments`.
-   - Show a clear message if the data request fails, rather than showing an empty dashboard.
-   - Keep the existing empty-state message only for the true “no imported rows” case.
+## Changes — `src/routes/oversight.tsx`
 
-3. **Refresh dashboard data reliably after import**
-   - After import completes and navigates back to `/oversight`, ensure the dashboard performs a fresh read from the backend.
-   - Add a lightweight cache-busting/remount approach if needed so the dashboard doesn’t show stale in-memory state.
+1. **Remove points from KPI strip**
+   - Drop the "Dashboard score" KPI tile (the `totalPoints` one).
+   - Keep: Papers, Markers deployed, Scripts assigned, % complete, Overdue / Flagged.
 
-4. **Verify with current backend data**
-   - The database already contains imported data: 60 papers, 182 deployments, and 1 import record.
-   - After the code change, the dashboard should show those rows immediately instead of appearing blank.
+2. **Remove the Dashboard leaderboard card** (the setting/marking/moderation points bars and the legend below it). Also remove the "Dashboard leaderboard →" button in the filter row that links to `/oversight/points`.
 
-## Technical details
+3. **Add a new "Scripts by level" card** above (or replacing) the leaderboard, showing a small table:
+   - Columns: Level · Papers · Scripts assigned · Marked · % complete
+   - Rows: one per distinct `level` from the visible marker deployments' papers, sorted by level, plus a Total row.
+   - Uses the same year/assessment/subject filters already in scope.
 
-- Primary files to update: `src/routes/oversight.tsx` and, only if needed, `src/routes/oversight.import.tsx`.
-- No database migration is needed because the rows are already inserted successfully.
-- The likely issue is frontend rendering/state visibility, not the XLSX parser or insert flow.
+4. **Drop unused state/derivations**: remove `totalPoints`, `leaderboard`, `maxLeaderTotal` and the `points` field usage. Keep `points`/`points_setting` in the row types as nullable but don't render them.
+
+## Out of scope
+
+- The `/oversight/points` route, DB schema, importer, and template are untouched — points still exist server-side, just no longer surfaced on the dashboard. (If you'd like me to also delete the `/oversight/points` page and the importer's points handling, say the word.)

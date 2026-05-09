@@ -142,7 +142,23 @@ function OversightPage() {
   const overdue = markerDeployments.filter(
     (d) => d.due_at && new Date(d.due_at) < new Date() && d.status !== "marking_done" && d.status !== "moderated",
   ).length;
-  const totalPoints = visibleDeployments.reduce((a, d) => a + (Number(d.points) || 0), 0);
+  // Scripts breakdown by level
+  const byLevel = useMemo(() => {
+    const m = new Map<string, { level: string; papers: Set<string>; assigned: number; marked: number; flagged: number }>();
+    for (const d of markerDeployments) {
+      const p = paperById.get(d.paper_id);
+      const level = p?.level ?? "—";
+      const e = m.get(level) ?? { level, papers: new Set<string>(), assigned: 0, marked: 0, flagged: 0 };
+      e.papers.add(d.paper_id);
+      e.assigned += d.script_count;
+      e.marked += d.marked_count;
+      e.flagged += d.flagged_count;
+      m.set(level, e);
+    }
+    return Array.from(m.values())
+      .map((e) => ({ level: e.level, papers: e.papers.size, assigned: e.assigned, marked: e.marked, flagged: e.flagged }))
+      .sort((a, b) => a.level.localeCompare(b.level));
+  }, [markerDeployments, paperById]);
 
   // Per-teacher rollup (marker scripts)
   const perTeacher = useMemo(() => {
@@ -158,23 +174,6 @@ function OversightPage() {
     }
     return Array.from(m.values()).sort((a, b) => b.assigned - a.assigned);
   }, [markerDeployments]);
-
-  // Per-teacher points leaderboard (setting / marking / moderation)
-  const leaderboard = useMemo(() => {
-    const m = new Map<string, { name: string; setting: number; marking: number; moderation: number; total: number }>();
-    for (const d of visibleDeployments) {
-      const key = d.teacher_name ?? "Unassigned";
-      const e = m.get(key) ?? { name: key, setting: 0, marking: 0, moderation: 0, total: 0 };
-      const pts = Number(d.points) || 0;
-      if (d.role === "setter") e.setting += pts;
-      else if (d.role === "marker") e.marking += pts;
-      else if (d.role === "moderator") e.moderation += pts;
-      e.total += pts;
-      m.set(key, e);
-    }
-    return Array.from(m.values()).sort((a, b) => b.total - a.total);
-  }, [visibleDeployments]);
-  const maxLeaderTotal = Math.max(1, ...leaderboard.map((t) => t.total));
 
   if (isNestedRoute) {
     return <Outlet />;
@@ -231,13 +230,12 @@ function OversightPage() {
         )}
 
         {/* KPI strip */}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
           <Kpi label="Papers" value={papers.length} />
           <Kpi label="Markers deployed" value={new Set(markerDeployments.map((d) => d.teacher_name ?? "")).size} />
           <Kpi label="Scripts assigned" value={totalAssigned} />
           <Kpi label="% complete" value={`${pctComplete}%`} sub={`${totalMarked}/${totalAssigned}`} />
           <Kpi label="Overdue / Flagged" value={`${overdue} / ${totalFlagged}`} tone={overdue > 0 || totalFlagged > 0 ? "warn" : undefined} />
-          <Kpi label="Dashboard score" value={totalPoints.toFixed(1)} sub="set + mark + mod" />
         </div>
 
         {/* Filters */}
@@ -279,9 +277,6 @@ function OversightPage() {
               <SelectItem value="moderated">Moderated</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm" asChild className="ml-auto">
-            <Link to="/oversight/points">Dashboard leaderboard →</Link>
-          </Button>
         </div>
 
         {/* Deployment table */}
@@ -346,48 +341,61 @@ function OversightPage() {
           </CardContent>
         </Card>
 
-        {/* Dashboard leaderboard */}
+        {/* Scripts by level */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              <FileCheck2 className="h-4 w-4" /> Dashboard leaderboard
-              <span className="text-xs font-normal text-muted-foreground ml-2">
-                Contributions across the year
-              </span>
+              <FileCheck2 className="h-4 w-4" /> Scripts by level
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            {leaderboard.length === 0 ? (
-              <div className="text-sm text-muted-foreground">No data yet — import a deployment sheet to populate the dashboard.</div>
+          <CardContent className="p-0">
+            {byLevel.length === 0 ? (
+              <div className="p-6 text-sm text-muted-foreground">No data yet — import a deployment sheet to populate the dashboard.</div>
             ) : (
-              <div className="space-y-2">
-                {leaderboard.map((t) => {
-                  const pctSet = (t.setting / maxLeaderTotal) * 100;
-                  const pctMark = (t.marking / maxLeaderTotal) * 100;
-                  const pctMod = (t.moderation / maxLeaderTotal) * 100;
-                  return (
-                    <div key={t.name} className="grid grid-cols-12 items-center gap-3 text-sm">
-                      <div className="col-span-3 font-medium truncate">{t.name}</div>
-                      <div className="col-span-6 flex h-3 overflow-hidden rounded-full bg-muted">
-                        <div className="bg-primary" style={{ width: `${pctSet}%` }} title={`Setting ${t.setting.toFixed(1)}`} />
-                        <div className="bg-emerald-500" style={{ width: `${pctMark}%` }} title={`Marking ${t.marking.toFixed(1)}`} />
-                        <div className="bg-violet-500" style={{ width: `${pctMod}%` }} title={`Moderation ${t.moderation.toFixed(1)}`} />
-                      </div>
-                      <div className="col-span-3 text-right tabular-nums">
-                        <span className="font-semibold">{t.total.toFixed(1)}</span>{" "}
-                        <span className="text-xs text-muted-foreground">
-                          ({t.setting.toFixed(1)} / {t.marking.toFixed(1)} / {t.moderation.toFixed(1)})
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-                <div className="pt-2 flex gap-3 text-xs text-muted-foreground">
-                  <span className="inline-flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-primary inline-block" /> Setting</span>
-                  <span className="inline-flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-emerald-500 inline-block" /> Marking</span>
-                  <span className="inline-flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-violet-500 inline-block" /> Moderation</span>
-                </div>
-              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Level</TableHead>
+                    <TableHead className="text-right">Papers</TableHead>
+                    <TableHead className="text-right">Scripts assigned</TableHead>
+                    <TableHead className="text-right">Marked</TableHead>
+                    <TableHead className="text-right">Flagged</TableHead>
+                    <TableHead className="text-right">% complete</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {byLevel.map((r) => {
+                    const pct = r.assigned > 0 ? Math.round((r.marked / r.assigned) * 100) : 0;
+                    return (
+                      <TableRow key={r.level}>
+                        <TableCell className="font-medium">{r.level}</TableCell>
+                        <TableCell className="text-right tabular-nums">{r.papers}</TableCell>
+                        <TableCell className="text-right tabular-nums">{r.assigned}</TableCell>
+                        <TableCell className="text-right tabular-nums">{r.marked}</TableCell>
+                        <TableCell className="text-right tabular-nums">{r.flagged}</TableCell>
+                        <TableCell className="text-right tabular-nums">{pct}%</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  {(() => {
+                    const tot = byLevel.reduce(
+                      (a, r) => ({ papers: a.papers + r.papers, assigned: a.assigned + r.assigned, marked: a.marked + r.marked, flagged: a.flagged + r.flagged }),
+                      { papers: 0, assigned: 0, marked: 0, flagged: 0 },
+                    );
+                    const pct = tot.assigned > 0 ? Math.round((tot.marked / tot.assigned) * 100) : 0;
+                    return (
+                      <TableRow className="font-semibold">
+                        <TableCell>Total</TableCell>
+                        <TableCell className="text-right tabular-nums">{tot.papers}</TableCell>
+                        <TableCell className="text-right tabular-nums">{tot.assigned}</TableCell>
+                        <TableCell className="text-right tabular-nums">{tot.marked}</TableCell>
+                        <TableCell className="text-right tabular-nums">{tot.flagged}</TableCell>
+                        <TableCell className="text-right tabular-nums">{pct}%</TableCell>
+                      </TableRow>
+                    );
+                  })()}
+                </TableBody>
+              </Table>
             )}
           </CardContent>
         </Card>
