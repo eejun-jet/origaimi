@@ -933,12 +933,6 @@ function AOPanel({
           const declared = targets.get(bucket) ?? null;
           const delta = declared != null ? observed - declared : null;
           const danger = delta != null && Math.abs(delta) > 8;
-          // Sub-codes that contributed to this bucket.
-          const subs = Array.from(aoSubMarkShare.entries())
-            .filter(([code]) => bucketOf(code) === bucket && code !== bucket)
-            .map(([code, m]) => ({ code, percent: totalMarks > 0 ? (m / totalMarks) * 100 : 0 }))
-            .filter((s) => s.percent > 0)
-            .sort((a, b) => a.code.localeCompare(b.code));
           return (
             <div key={bucket} className="space-y-1">
               <div className="grid grid-cols-[80px_minmax(0,1fr)_auto] items-center gap-3 text-sm">
@@ -965,11 +959,6 @@ function AOPanel({
                   ) : null}
                 </div>
               </div>
-              {subs.length > 0 ? (
-                <p className="pl-[92px] text-xs text-muted-foreground">
-                  rolled up from {subs.map((s) => `${s.code} ${s.percent.toFixed(0)}%`).join(", ")}
-                </p>
-              ) : null}
             </div>
           );
         })}
