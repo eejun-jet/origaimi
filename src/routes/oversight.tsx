@@ -14,7 +14,7 @@ import { useRoles } from "@/lib/roles";
 
 export const Route = createFileRoute("/oversight")({
   component: OversightPage,
-  head: () => ({ meta: [{ title: "Oversight · origAImi" }] }),
+  head: () => ({ meta: [{ title: "Dashboard · origAImi" }] }),
 });
 
 type Paper = {
