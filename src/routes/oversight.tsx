@@ -552,38 +552,47 @@ function OversightPage() {
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2"><Users className="h-4 w-4" /> Scripts assigned per marker</CardTitle>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent>
             {perMarker.length === 0 ? (
-              <div className="p-6 text-sm text-muted-foreground">No markers loaded yet.</div>
+              <div className="text-sm text-muted-foreground">No markers loaded yet.</div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Marker</TableHead>
-                    <TableHead className="text-right">Classes</TableHead>
-                    <TableHead className="text-right">Scripts assigned</TableHead>
-                    <TableHead className="text-right">Marked</TableHead>
-                    <TableHead className="text-right">Flagged</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {perMarker.map((t) => (
-                    <TableRow key={t.name}>
-                      <TableCell className="font-medium">{t.name}</TableCell>
-                      <TableCell className="text-right tabular-nums">{t.classes}</TableCell>
-                      <TableCell className="text-right tabular-nums">{t.assigned}</TableCell>
-                      <TableCell className="text-right tabular-nums">{t.marked}</TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {t.flagged > 0 ? (
-                          <span className="inline-flex items-center gap-1 text-amber-600">
-                            <AlertTriangle className="h-3 w-3" /> {t.flagged}
-                          </span>
-                        ) : 0}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <TooltipProvider delayDuration={100}>
+                <div className="space-y-3">
+                  {(() => {
+                    const max = perMarker[0]?.assigned ?? 0;
+                    return perMarker.map((t) => (
+                      <Tooltip key={t.name}>
+                        <TooltipTrigger asChild>
+                          <div className="grid grid-cols-12 items-center gap-3 text-sm cursor-default">
+                            <div className="col-span-3 font-medium truncate">{t.name}</div>
+                            <div className="col-span-6">
+                              <div className="h-3 w-full overflow-hidden rounded bg-muted">
+                                <div className="h-full bg-emerald-500" style={{ width: `${max > 0 ? Math.round((t.assigned / max) * 100) : 0}%` }} />
+                              </div>
+                            </div>
+                            <div className="col-span-3 text-right tabular-nums text-muted-foreground">
+                              {t.assigned} script{t.assigned === 1 ? "" : "s"}
+                              {t.flagged > 0 && (
+                                <span className="ml-2 inline-flex items-center gap-1 text-amber-600">
+                                  <AlertTriangle className="h-3 w-3" />{t.flagged}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" align="start" className="max-w-sm space-y-1">
+                          <div className="font-medium">{t.name}</div>
+                          <div>Scripts assigned: <span className="tabular-nums">{t.assigned}</span> · Marked: <span className="tabular-nums">{t.marked}</span>{t.flagged > 0 ? <> · Flagged: <span className="tabular-nums">{t.flagged}</span></> : null}</div>
+                          <div>Classes ({t.classes}): {t.classLabels.length ? t.classLabels.join(", ") : "—"}</div>
+                          <div>Levels: {t.levels.length ? t.levels.join(", ") : "—"}</div>
+                          <div>Subjects: {t.subjects.length ? t.subjects.join(", ") : "—"}</div>
+                          <div>Papers: {t.papers.length ? t.papers.join("; ") : "—"}</div>
+                        </TooltipContent>
+                      </Tooltip>
+                    ));
+                  })()}
+                </div>
+              </TooltipProvider>
             )}
           </CardContent>
         </Card>
@@ -593,39 +602,50 @@ function OversightPage() {
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2"><Users className="h-4 w-4" /> Papers set per setter</CardTitle>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent>
             {perSetter.length === 0 ? (
-              <div className="p-6 text-sm text-muted-foreground">No setters loaded yet.</div>
+              <div className="text-sm text-muted-foreground">No setters loaded yet.</div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Setter</TableHead>
-                    <TableHead className="text-right">Papers set</TableHead>
-                    <TableHead className="text-right">Scripts (downstream)</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {perSetter.map((t) => (
-                    <TableRow key={t.name}>
-                      <TableCell className="font-medium">{t.name}</TableCell>
-                      <TableCell className="text-right tabular-nums">{t.papers}</TableCell>
-                      <TableCell className="text-right tabular-nums">{t.scripts}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <TooltipProvider delayDuration={100}>
+                <div className="space-y-3">
+                  {(() => {
+                    const max = perSetter.reduce((a, t) => Math.max(a, t.scripts), 0);
+                    return perSetter.map((t) => (
+                      <Tooltip key={t.name}>
+                        <TooltipTrigger asChild>
+                          <div className="grid grid-cols-12 items-center gap-3 text-sm cursor-default">
+                            <div className="col-span-3 font-medium truncate">{t.name}</div>
+                            <div className="col-span-6">
+                              <div className="h-3 w-full overflow-hidden rounded bg-muted">
+                                <div className="h-full bg-amber-500" style={{ width: `${max > 0 ? Math.round((t.scripts / max) * 100) : 0}%` }} />
+                              </div>
+                            </div>
+                            <div className="col-span-3 text-right tabular-nums text-muted-foreground">
+                              {t.scripts} script{t.scripts === 1 ? "" : "s"}
+                            </div>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" align="start" className="max-w-sm space-y-1">
+                          <div className="font-medium">{t.name}</div>
+                          <div>Papers set: <span className="tabular-nums">{t.papers}</span> · Scripts (downstream): <span className="tabular-nums">{t.scripts}</span></div>
+                          <div>Levels: {t.levels.length ? t.levels.join(", ") : "—"}</div>
+                          <div>Subjects: {t.subjects.length ? t.subjects.join(", ") : "—"}</div>
+                          <div>Classes: {t.classLabels.length ? t.classLabels.join(", ") : "—"}</div>
+                          <div>Paper titles: {t.paperTitles.length ? t.paperTitles.join("; ") : "—"}</div>
+                        </TooltipContent>
+                      </Tooltip>
+                    ));
+                  })()}
+                </div>
+              </TooltipProvider>
             )}
           </CardContent>
         </Card>
 
         {/* Setting load */}
         <Card>
-          <CardHeader className="flex-row items-center justify-between">
+          <CardHeader>
             <CardTitle className="text-base">Setting load (points)</CardTitle>
-            <Button asChild variant="ghost" size="sm">
-              <Link to="/oversight/points">Full leaderboard →</Link>
-            </Button>
           </CardHeader>
           <CardContent>
             {(() => {
@@ -643,35 +663,6 @@ function OversightPage() {
                         </div>
                       </div>
                       <div className="col-span-3 text-right tabular-nums text-muted-foreground">{t.setting.toFixed(1)} pts</div>
-                    </div>
-                  ))}
-                </div>
-              );
-            })()}
-          </CardContent>
-        </Card>
-
-        {/* Marking load */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Marking load (points)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {(() => {
-              const rows = leaderboard.filter((t) => t.marking > 0).sort((a, b) => b.marking - a.marking);
-              const max = rows[0]?.marking ?? 0;
-              if (rows.length === 0) return <div className="text-sm text-muted-foreground">No marking points yet.</div>;
-              return (
-                <div className="space-y-3">
-                  {rows.map((t) => (
-                    <div key={t.name} className="grid grid-cols-12 items-center gap-3 text-sm">
-                      <div className="col-span-3 font-medium truncate">{t.name}</div>
-                      <div className="col-span-6">
-                        <div className="h-3 w-full overflow-hidden rounded bg-muted">
-                          <div className="h-full bg-blue-500" style={{ width: `${max > 0 ? Math.round((t.marking / max) * 100) : 0}%` }} />
-                        </div>
-                      </div>
-                      <div className="col-span-3 text-right tabular-nums text-muted-foreground">{t.marking.toFixed(1)} pts</div>
                     </div>
                   ))}
                 </div>
