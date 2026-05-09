@@ -128,8 +128,9 @@ function OversightPage() {
   const overdue = markerDeployments.filter(
     (d) => d.due_at && new Date(d.due_at) < new Date() && d.status !== "marking_done" && d.status !== "moderated",
   ).length;
+  const totalPoints = visibleDeployments.reduce((a, d) => a + (Number(d.points) || 0), 0);
 
-  // Per-teacher rollup
+  // Per-teacher rollup (marker scripts)
   const perTeacher = useMemo(() => {
     const m = new Map<string, { name: string; assigned: number; marked: number; flagged: number; deployments: number }>();
     for (const d of markerDeployments) {
@@ -143,6 +144,23 @@ function OversightPage() {
     }
     return Array.from(m.values()).sort((a, b) => b.assigned - a.assigned);
   }, [markerDeployments]);
+
+  // Per-teacher points leaderboard (setting / marking / moderation)
+  const leaderboard = useMemo(() => {
+    const m = new Map<string, { name: string; setting: number; marking: number; moderation: number; total: number }>();
+    for (const d of visibleDeployments) {
+      const key = d.teacher_name ?? "Unassigned";
+      const e = m.get(key) ?? { name: key, setting: 0, marking: 0, moderation: 0, total: 0 };
+      const pts = Number(d.points) || 0;
+      if (d.role === "setter") e.setting += pts;
+      else if (d.role === "marker") e.marking += pts;
+      else if (d.role === "moderator") e.moderation += pts;
+      e.total += pts;
+      m.set(key, e);
+    }
+    return Array.from(m.values()).sort((a, b) => b.total - a.total);
+  }, [visibleDeployments]);
+  const maxLeaderTotal = Math.max(1, ...leaderboard.map((t) => t.total));
 
   if (!canSeeOversight) {
     return (
