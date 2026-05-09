@@ -177,36 +177,91 @@ function OversightPage() {
 
   // Per-teacher rollups — markers and setters separately (a setter doesn't necessarily mark, and vice versa)
   const perMarker = useMemo(() => {
-    const m = new Map<string, { name: string; assigned: number; marked: number; flagged: number; classes: number }>();
+    type Entry = {
+      name: string;
+      assigned: number;
+      marked: number;
+      flagged: number;
+      classes: number;
+      classLabels: string[];
+      levels: Set<string>;
+      subjects: Set<string>;
+      papers: Set<string>;
+    };
+    const m = new Map<string, Entry>();
     for (const d of markerDeployments) {
       const key = d.teacher_name ?? "Unassigned";
-      const e = m.get(key) ?? { name: key, assigned: 0, marked: 0, flagged: 0, classes: 0 };
+      const p = paperById.get(d.paper_id);
+      const e = m.get(key) ?? {
+        name: key, assigned: 0, marked: 0, flagged: 0, classes: 0,
+        classLabels: [], levels: new Set<string>(), subjects: new Set<string>(), papers: new Set<string>(),
+      };
       e.assigned += d.script_count;
       e.marked += d.marked_count;
       e.flagged += d.flagged_count;
       e.classes += 1;
-      m.set(key, e);
-    }
-    return Array.from(m.values()).sort((a, b) => b.assigned - a.assigned);
-  }, [markerDeployments]);
-
-  const perSetter = useMemo(() => {
-    const m = new Map<string, { name: string; papers: Set<string>; scripts: number }>();
-    for (const d of setterDeployments) {
-      const key = d.teacher_name ?? "Unassigned";
-      const e = m.get(key) ?? { name: key, papers: new Set<string>(), scripts: 0 };
-      e.papers.add(d.paper_id);
-      // attach scripts by summing marker deployments on that paper, so setters see "scripts they set"
-      const markersOnPaper = markerDeployments
-        .filter((md) => md.paper_id === d.paper_id)
-        .reduce((a, md) => a + md.script_count, 0);
-      e.scripts += markersOnPaper;
+      if (d.class_label) e.classLabels.push(d.class_label);
+      if (p?.level) e.levels.add(p.level);
+      if (p?.subject) e.subjects.add(p.subject);
+      if (p?.title) e.papers.add(p.title);
       m.set(key, e);
     }
     return Array.from(m.values())
-      .map((e) => ({ name: e.name, papers: e.papers.size, scripts: e.scripts }))
-      .sort((a, b) => b.papers - a.papers);
-  }, [setterDeployments, markerDeployments]);
+      .map((e) => ({
+        name: e.name,
+        assigned: e.assigned,
+        marked: e.marked,
+        flagged: e.flagged,
+        classes: e.classes,
+        classLabels: e.classLabels,
+        levels: Array.from(e.levels).sort(),
+        subjects: Array.from(e.subjects).sort(),
+        papers: Array.from(e.papers).sort(),
+      }))
+      .sort((a, b) => b.assigned - a.assigned);
+  }, [markerDeployments, paperById]);
+
+  const perSetter = useMemo(() => {
+    type Entry = {
+      name: string;
+      papers: Set<string>;
+      paperTitles: Set<string>;
+      scripts: number;
+      levels: Set<string>;
+      subjects: Set<string>;
+      classLabels: Set<string>;
+    };
+    const m = new Map<string, Entry>();
+    for (const d of setterDeployments) {
+      const key = d.teacher_name ?? "Unassigned";
+      const p = paperById.get(d.paper_id);
+      const e = m.get(key) ?? {
+        name: key, papers: new Set<string>(), paperTitles: new Set<string>(),
+        scripts: 0, levels: new Set<string>(), subjects: new Set<string>(), classLabels: new Set<string>(),
+      };
+      e.papers.add(d.paper_id);
+      if (p?.title) e.paperTitles.add(p.title);
+      if (p?.level) e.levels.add(p.level);
+      if (p?.subject) e.subjects.add(p.subject);
+      const markersOnPaper = markerDeployments.filter((md) => md.paper_id === d.paper_id);
+      for (const md of markersOnPaper) {
+        e.scripts += md.script_count;
+        if (md.class_label) e.classLabels.add(md.class_label);
+      }
+      m.set(key, e);
+    }
+    return Array.from(m.values())
+      .map((e) => ({
+        name: e.name,
+        papers: e.papers.size,
+        scripts: e.scripts,
+        paperTitles: Array.from(e.paperTitles).sort(),
+        levels: Array.from(e.levels).sort(),
+        subjects: Array.from(e.subjects).sort(),
+        classLabels: Array.from(e.classLabels).sort(),
+      }))
+      .sort((a, b) => b.scripts - a.scripts);
+  }, [setterDeployments, markerDeployments, paperById]);
 
   // Points by teacher and role (deployment-by-points)
   const totalPoints = useMemo(
