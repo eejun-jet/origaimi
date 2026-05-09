@@ -83,7 +83,7 @@ function ImportPage() {
             assessment_type: p.assessment_type ?? defaultAssessment ?? null,
             department: department || null,
             remarks: p.remarks,
-            semester: semester || null,
+            semester: p.term || semester || null,
             year: year ? parseInt(year, 10) : null,
           })
           .select("id")
