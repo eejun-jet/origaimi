@@ -389,7 +389,6 @@ function OversightPage() {
           <Kpi label="Scripts assigned" value={totalAssigned} />
           <Kpi label="% complete" value={`${pctComplete}%`} sub={`${totalMarked}/${totalAssigned}`} />
           <Kpi label="Overdue / Flagged" value={`${overdue} / ${totalFlagged}`} tone={overdue > 0 || totalFlagged > 0 ? "warn" : undefined} />
-          <Kpi label="Total points" value={totalPoints.toFixed(1)} />
         </div>
 
         {/* Filters */}
