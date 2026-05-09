@@ -168,18 +168,25 @@ function ImportPage() {
           <Link to="/oversight"><ArrowLeft className="mr-1 h-4 w-4" /> Back to oversight</Link>
         </Button>
 
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Import setters / markers list</h1>
-          <p className="text-sm text-muted-foreground">
-            Upload your existing department spreadsheet (e.g. <em>2019_Setters-Markers_List_Humanities.xlsx</em>).
-            We'll detect Level, Subject, Setter, Marker, Classes and per-class script counts automatically.
-          </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Import setters / markers list</h1>
+            <p className="text-sm text-muted-foreground">
+              Upload your department spreadsheet, or start from a clean template.
+              We'll detect Assessment, Level, Subject, Setter, Marker, Classes and per-class script counts automatically.
+            </p>
+          </div>
+          <Button variant="outline" size="sm" asChild>
+            <a href="/templates/setters-markers-template.xlsx" download>
+              <Download className="mr-2 h-4 w-4" />Download blank template
+            </a>
+          </Button>
         </div>
 
         <Card>
           <CardHeader><CardTitle className="text-base">1 · Upload</CardTitle></CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-3 md:grid-cols-4">
               <div className="space-y-1">
                 <Label>Department</Label>
                 <Input value={department} onChange={(e) => setDepartment(e.target.value)} placeholder="Humanities" />
@@ -192,7 +199,18 @@ function ImportPage() {
                 <Label>Year</Label>
                 <Input type="number" value={year} onChange={(e) => setYear(e.target.value)} />
               </div>
+              <div className="space-y-1">
+                <Label>Default assessment</Label>
+                <Input
+                  value={defaultAssessment}
+                  onChange={(e) => setDefaultAssessment(e.target.value)}
+                  placeholder="EoY / MYE / WA1 …"
+                />
+              </div>
             </div>
+            <p className="text-xs text-muted-foreground">
+              Used for any rows that don't have an Assessment column value. Drives points awarded across the year.
+            </p>
 
             <label className="flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-border bg-muted/40 p-8 text-sm text-muted-foreground hover:bg-muted">
               <FileSpreadsheet className="h-5 w-5" />
