@@ -200,9 +200,7 @@ function OversightPage() {
             </Button>
             <Button asChild>
               <Link to="/oversight/import">
-                <span className="inline-flex items-center">
-                  <Upload className="mr-2 h-4 w-4" />Import deployment sheet
-                </span>
+                <Upload className="mr-2 h-4 w-4" />Import deployment sheet
               </Link>
             </Button>
           </div>
