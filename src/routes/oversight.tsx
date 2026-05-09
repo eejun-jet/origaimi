@@ -306,6 +306,11 @@ function OversightPage() {
                 <Upload className="mr-2 h-4 w-4" />Import deployment sheet
               </Link>
             </Button>
+            {imports.length > 0 && (
+              <Button variant="destructive" onClick={deleteAllDeploymentData}>
+                Clear current deployment
+              </Button>
+            )}
           </div>
         </div>
 
