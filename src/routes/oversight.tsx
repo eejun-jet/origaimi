@@ -195,12 +195,13 @@ function OversightPage() {
         </div>
 
         {/* KPI strip */}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
           <Kpi label="Papers" value={papers.length} />
           <Kpi label="Markers deployed" value={new Set(markerDeployments.map((d) => d.teacher_name ?? "")).size} />
           <Kpi label="Scripts assigned" value={totalAssigned} />
           <Kpi label="% complete" value={`${pctComplete}%`} sub={`${totalMarked}/${totalAssigned}`} />
           <Kpi label="Overdue / Flagged" value={`${overdue} / ${totalFlagged}`} tone={overdue > 0 || totalFlagged > 0 ? "warn" : undefined} />
+          <Kpi label="Points awarded" value={totalPoints.toFixed(1)} sub="set + mark + mod" />
         </div>
 
         {/* Filters */}
@@ -218,8 +219,22 @@ function OversightPage() {
               {subjects.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
             </SelectContent>
           </Select>
+          <Select value={yearFilter} onValueChange={setYearFilter}>
+            <SelectTrigger className="w-32"><SelectValue placeholder="Year" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All years</SelectItem>
+              {years.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={assessmentFilter} onValueChange={setAssessmentFilter}>
+            <SelectTrigger className="w-40"><SelectValue placeholder="Assessment" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All assessments</SelectItem>
+              {assessments.map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+            </SelectContent>
+          </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-44"><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectTrigger className="w-40"><SelectValue placeholder="Status" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All statuses</SelectItem>
               <SelectItem value="assigned">Assigned</SelectItem>
@@ -228,6 +243,9 @@ function OversightPage() {
               <SelectItem value="moderated">Moderated</SelectItem>
             </SelectContent>
           </Select>
+          <Button variant="outline" size="sm" asChild className="ml-auto">
+            <Link to="/oversight/points">Points leaderboard →</Link>
+          </Button>
         </div>
 
         {/* Deployment table */}
