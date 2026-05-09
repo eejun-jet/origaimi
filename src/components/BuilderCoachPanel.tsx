@@ -141,6 +141,9 @@ export function BuilderCoachPanel({
             Optional, sparse nudges. Apply, dismiss, or ignore — your call.
           </p>
 
+          <AlignmentStrip rows={alignment} />
+          <StyleStrip summary={styleSummary} />
+
           <div className="mt-3 space-y-2">
             {totalCards === 0 && !aiReview && (
               <p className="text-xs italic text-muted-foreground">No notes — looking good.</p>
