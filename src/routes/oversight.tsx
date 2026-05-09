@@ -25,11 +25,15 @@ type Paper = {
   stream: string | null;
   department: string | null;
   remarks: string | null;
+  assessment_type: string | null;
+  variant_of: string | null;
+  points_setting: number | null;
+  year: number | null;
 };
 type Deployment = {
   id: string;
   paper_id: string;
-  role: "setter" | "marker";
+  role: "setter" | "marker" | "moderator";
   teacher_name: string | null;
   teacher_id: string | null;
   class_label: string | null;
@@ -38,6 +42,7 @@ type Deployment = {
   flagged_count: number;
   status: "assigned" | "in_progress" | "marking_done" | "moderated";
   due_at: string | null;
+  points: number | null;
 };
 
 function OversightPage() {
