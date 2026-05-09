@@ -600,7 +600,6 @@ function AlignmentStrip({ rows }: { rows: AlignmentRow[] }) {
           const planned = r.plannedPercent;
           const delta = target !== null ? planned - target : 0;
           const off = target !== null && Math.abs(delta) >= 20;
-          const subs = r.subCodes ?? [];
           return (
             <div key={r.code} className="space-y-0.5">
               <div className="flex items-center gap-2 text-[10px]">
@@ -623,18 +622,10 @@ function AlignmentStrip({ rows }: { rows: AlignmentRow[] }) {
                   {planned}%{target !== null ? ` / ${target}%` : ""}
                 </span>
               </div>
-              {subs.length > 0 && (
-                <p className="pl-12 text-[9px] text-muted-foreground/80">
-                  rolled up from {subs.map((s) => `${s.code} ${s.percent}%`).join(", ")}
-                </p>
-              )}
             </div>
           );
         })}
       </div>
-      <p className="mt-2 pl-1 text-[9px] italic text-muted-foreground/70">
-        Sub-codes (A1–A5, B1–B7, …) are rolled up to their letter bucket to match the syllabus AO weighting.
-      </p>
     </div>
   );
 }
