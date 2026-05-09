@@ -354,6 +354,9 @@ function PaperSetView() {
         const per = x.effectiveMarks / codes.length;
         for (const c of codes) aoMap.set(c, (aoMap.get(c) ?? 0) + per);
       }
+      // Roll sub-codes up to letter buckets so per-paper columns line up
+      // with the canonical AO buckets (A, B, …).
+      const aoBucketMap = rollupCounts(aoMap);
       const kosTouched = new Set(
         qs.flatMap((x) => (x.q.knowledge_outcomes ?? []).filter(Boolean)),
       );
