@@ -2030,9 +2030,7 @@ function AOGroupedSelector({
                         <div className="flex items-baseline gap-2">
                           <span className="font-mono font-medium">{ao.code}</span>
                           {ao.title && <span className="text-foreground">{ao.title}</span>}
-                          {ao.weightingPercent != null && (
-                            <span className="ml-auto text-xs text-muted-foreground">[{ao.weightingPercent}%]</span>
-                          )}
+                        </div>
                         </div>
                         {ao.description && (
                           <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">{ao.description}</p>
