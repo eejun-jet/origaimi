@@ -168,7 +168,7 @@ function OversightPage() {
         <AppHeader />
         <main className="mx-auto max-w-3xl px-6 py-12">
           <Card>
-            <CardHeader><CardTitle>Oversight</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Dashboard</CardTitle></CardHeader>
             <CardContent className="text-sm text-muted-foreground">
               This area is for HODs and School Leaders. Ask an admin to grant your account a role to view it.
             </CardContent>
