@@ -53,6 +53,8 @@ function OversightPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [subjectFilter, setSubjectFilter] = useState<string>("all");
+  const [yearFilter, setYearFilter] = useState<string>("all");
+  const [assessmentFilter, setAssessmentFilter] = useState<string>("all");
 
   const load = async () => {
     setLoading(true);
@@ -77,9 +79,31 @@ function OversightPage() {
     () => Array.from(new Set(papers.map((p) => p.subject).filter((x): x is string => !!x))).sort(),
     [papers],
   );
+  const years = useMemo(
+    () => Array.from(new Set(papers.map((p) => p.year).filter((x): x is number => x != null))).sort((a, b) => b - a),
+    [papers],
+  );
+  const assessments = useMemo(
+    () => Array.from(new Set(papers.map((p) => p.assessment_type).filter((x): x is string => !!x))).sort(),
+    [papers],
+  );
 
-  const markerDeployments = useMemo(() => deployments.filter((d) => d.role === "marker"), [deployments]);
-  const setterDeployments = useMemo(() => deployments.filter((d) => d.role === "setter"), [deployments]);
+  // Apply year + assessment filters at the paper level
+  const paperPasses = (p: Paper | undefined) => {
+    if (!p) return false;
+    if (yearFilter !== "all" && String(p.year ?? "") !== yearFilter) return false;
+    if (assessmentFilter !== "all" && (p.assessment_type ?? "") !== assessmentFilter) return false;
+    return true;
+  };
+
+  const visibleDeployments = useMemo(
+    () => deployments.filter((d) => paperPasses(paperById.get(d.paper_id))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [deployments, paperById, yearFilter, assessmentFilter],
+  );
+
+  const markerDeployments = useMemo(() => visibleDeployments.filter((d) => d.role === "marker"), [visibleDeployments]);
+  const setterDeployments = useMemo(() => visibleDeployments.filter((d) => d.role === "setter"), [visibleDeployments]);
 
   const filtered = useMemo(() => {
     return markerDeployments.filter((d) => {
