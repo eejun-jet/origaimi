@@ -11,7 +11,7 @@ import {
   buildDisciplineLookup,
   normaliseDiscipline,
 } from "@/lib/discipline-scope";
-import { bucketOf, bucketTargets, bucketsFromDefs, rollupCounts } from "@/lib/ao-rollup";
+import { bucketTargets, bucketsFromDefs, rollupCounts } from "@/lib/ao-rollup";
 
 export const Route = createFileRoute("/paper-set/$id")({
   component: PaperSetView,
