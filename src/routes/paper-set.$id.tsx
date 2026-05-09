@@ -210,6 +210,20 @@ function PaperSetView() {
       const per = effectiveMarks / codes.length;
       for (const c of codes) aoTotals.set(c, (aoTotals.get(c) ?? 0) + per);
     }
+    // Roll granular sub-codes (A1, A2, B1, …) up to letter buckets (A, B, …).
+    return rollupCounts(aoTotals);
+  }, [flatQuestions]);
+
+  // Per-sub-code mark share — used to render the transparent "rolled up from
+  // A1 12%, A2 18%, …" caption beneath each bucket bar.
+  const aoSubMarkShare = useMemo(() => {
+    const aoTotals = new Map<string, number>();
+    for (const { q, effectiveMarks } of flatQuestions) {
+      const codes = (q.ao_codes ?? []).filter(Boolean);
+      if (codes.length === 0) continue;
+      const per = effectiveMarks / codes.length;
+      for (const c of codes) aoTotals.set(c, (aoTotals.get(c) ?? 0) + per);
+    }
     return aoTotals;
   }, [flatQuestions]);
 
