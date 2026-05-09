@@ -117,54 +117,44 @@ export function computeIntentSignals(snap: BuilderSnapshot): IntentSignal[] {
   const aoCounts = aoFrequency(sections);
   if (step >= 2 && aoCounts.size > 0) {
     const total = Array.from(aoCounts.values()).reduce((a, b) => a + b, 0);
-    const targets = new Map<string, number>();
-    for (const a of snap.paperAOs) {
-      if (typeof a.weightingPercent === "number" && a.weightingPercent > 0) {
-        targets.set(a.code, a.weightingPercent);
-      }
-    }
+    const targets = bucketTargets(
+      snap.paperAOs.map((a) => ({ code: a.code, weighting_percent: a.weightingPercent ?? null })),
+    );
 
     if (total > 0 && targets.size > 0) {
       // Compare planned vs target. Flag the worst offender if delta ≥ 20pp.
-      let worstCode: string | null = null;
+      let worstBucket: string | null = null;
       let worstDelta = 0;
-      for (const [code, target] of targets) {
-        const planned = ((aoCounts.get(code) ?? 0) / total) * 100;
+      for (const [bucket, target] of targets) {
+        const planned = ((aoCounts.get(bucket) ?? 0) / total) * 100;
         const delta = planned - target;
         if (Math.abs(delta) > Math.abs(worstDelta)) {
           worstDelta = delta;
-          worstCode = code;
+          worstBucket = bucket;
         }
       }
-      if (worstCode && Math.abs(worstDelta) >= 20) {
-        const ao = snap.paperAOs.find((a) => a.code === worstCode);
-        const label = ao?.title ? `${worstCode} (${ao.title})` : worstCode;
-        const target = targets.get(worstCode)!;
-        const planned = ((aoCounts.get(worstCode) ?? 0) / total) * 100;
+      if (worstBucket && Math.abs(worstDelta) >= 20) {
+        const target = targets.get(worstBucket)!;
+        const planned = ((aoCounts.get(worstBucket) ?? 0) / total) * 100;
         const direction = worstDelta > 0 ? "higher" : "lower";
         out.push({
-          id: `ao-target-${worstCode}`,
+          id: `ao-target-${worstBucket}`,
           severity: "warn",
           category: "ao_balance",
           note:
-            `Plan is ~${Math.round(planned)}% ${label} vs syllabus target ~${Math.round(target)}% — ${direction} than expected. Consider rebalancing one section.`,
+            `Plan is ~${Math.round(planned)}% AO ${worstBucket} vs syllabus target ~${Math.round(target)}% — ${direction} than expected. Consider rebalancing one section.`,
         });
       }
     } else {
-      // No target weightings — fall back to "one AO dominates".
+      // No target weightings — fall back to "one bucket dominates".
       const sorted = Array.from(aoCounts.entries()).sort((a, b) => b[1] - a[1]);
-      const [topCode, topCount] = sorted[0];
+      const [topBucket, topCount] = sorted[0];
       if (total > 0 && topCount / total >= 0.8) {
-        const ao = snap.paperAOs.find((a) => a.code === topCode);
-        const label = ao?.title ? `${topCode} (${ao.title})` : topCode;
-        const isAo1 = topCode.toUpperCase() === "AO1";
         out.push({
-          id: `ao-heavy-${topCode}`,
+          id: `ao-heavy-${topBucket}`,
           severity: "warn",
           category: "ao_balance",
-          note: isAo1
-            ? `Heavy on recall — ${label} dominates. Consider one application or reasoning item.`
-            : `One AO dominates — ${label}. A second AO would broaden the demand.`,
+          note: `One AO dominates — AO ${topBucket}. A second AO would broaden the demand.`,
         });
       }
     }
