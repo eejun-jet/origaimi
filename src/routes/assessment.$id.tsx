@@ -1984,18 +1984,23 @@ function computeCoverage(
   const koOf = (q: Question) => expandedById.get(q.id)?.knowledge_outcomes ?? q.knowledge_outcomes ?? [];
   const loOf = (q: Question) => expandedById.get(q.id)?.learning_outcomes ?? q.learning_outcomes ?? [];
 
-  // ── Paper-wide AO targets from syllabus weightings + actuals from questions
-  const aoCodeSet = new Set<string>();
-  aoDefs.forEach((d) => aoCodeSet.add(d.code));
-  sections.forEach((s) => (s.ao_codes ?? []).forEach((c) => aoCodeSet.add(c)));
-  questions.forEach((q) => aoOf(q).forEach((c) => aoCodeSet.add(c)));
+  // ── Paper-wide AO targets, rolled up to letter buckets (A, B, C …).
+  // Sub-codes (A1..A5, B1..B7, …) are aggregated into their bucket so the
+  // review reflects the syllabus-level AO weighting rather than splitting
+  // marks across what are really sub-objectives of one AO.
+  const targetsByBucket = bucketTargets(aoDefs);
+  const bucketSet = new Set<string>(bucketsFromDefs(aoDefs));
+  sections.forEach((s) => (s.ao_codes ?? []).forEach((c) => bucketSet.add(bucketOf(c))));
+  questions.forEach((q) => aoOf(q).forEach((c) => bucketSet.add(bucketOf(c))));
 
-  const paperAOs = Array.from(aoCodeSet).sort().map((code) => {
-    const def = aoDefs.find((d) => d.code === code) ?? null;
-    const weighting = def?.weighting_percent ?? null;
+  const paperAOs = Array.from(bucketSet).sort().map((bucket) => {
+    const weighting = targetsByBucket.get(bucket) ?? null;
     const target = weighting != null ? Math.round((weighting / 100) * totalMarks) : 0;
-    const actual = questions.reduce((sum, q) => sum + (aoOf(q).includes(code) ? q.marks : 0), 0);
-    return { code, title: def?.title ?? null, target, actual, weighting };
+    const actual = questions.reduce(
+      (sum, q) => sum + (aoOf(q).some((c) => bucketOf(c) === bucket) ? q.marks : 0),
+      0,
+    );
+    return { code: bucket, title: null as string | null, target, actual, weighting };
   });
 
   // Discipline scoping: drop KOs/LOs that belong only to out-of-scope disciplines
