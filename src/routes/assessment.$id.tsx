@@ -2065,8 +2065,9 @@ function computeCoverage(
   const bySection: Coverage["bySection"] = {};
   for (const s of sections) {
     const qs = questions.filter((q) => sectionByPos[q.position]?.id === s.id);
-    const aoCodes = new Set<string>([...(s.ao_codes ?? [])]);
-    qs.forEach((q) => aoOf(q).forEach((c) => aoCodes.add(c)));
+    const aoBuckets = new Set<string>();
+    (s.ao_codes ?? []).forEach((c) => aoBuckets.add(bucketOf(c)));
+    qs.forEach((q) => aoOf(q).forEach((c) => aoBuckets.add(bucketOf(c))));
     const kos = new Set<string>([...(s.knowledge_outcomes ?? [])]);
     qs.forEach((q) => koOf(q).forEach((c) => kos.add(c)));
     const los = new Set<string>([...(s.learning_outcomes ?? [])]);
@@ -2079,10 +2080,13 @@ function computeCoverage(
         target: s.marks,
         actual: qs.reduce((sum, q) => sum + q.marks, 0),
       },
-      aos: Array.from(aoCodes).sort().map((code) => ({
-        code,
-        title: aoDefs.find((d) => d.code === code)?.title ?? null,
-        actual: qs.reduce((sum, q) => sum + (aoOf(q).includes(code) ? q.marks : 0), 0),
+      aos: Array.from(aoBuckets).sort().map((bucket) => ({
+        code: bucket,
+        title: null as string | null,
+        actual: qs.reduce(
+          (sum, q) => sum + (aoOf(q).some((c) => bucketOf(c) === bucket) ? q.marks : 0),
+          0,
+        ),
       })),
       kos: Array.from(kos).map((name) => ({
         name,
