@@ -336,7 +336,7 @@ function OversightPage() {
           </CardHeader>
           <CardContent>
             {leaderboard.length === 0 ? (
-              <div className="text-sm text-muted-foreground">No points awarded yet — import a deployment sheet to get started.</div>
+              <div className="text-sm text-muted-foreground">No data yet — import a deployment sheet to populate the dashboard.</div>
             ) : (
               <div className="space-y-2">
                 {leaderboard.map((t) => {
