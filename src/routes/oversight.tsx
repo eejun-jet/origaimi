@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, useLocation } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
@@ -46,6 +46,8 @@ type Deployment = {
 };
 
 function OversightPage() {
+  const location = useLocation();
+  const isNestedRoute = location.pathname.replace(/\/$/, "") !== "/oversight";
   const { canSeeOversight, isSl } = useRoles();
   const [papers, setPapers] = useState<Paper[]>([]);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
@@ -161,6 +163,10 @@ function OversightPage() {
     return Array.from(m.values()).sort((a, b) => b.total - a.total);
   }, [visibleDeployments]);
   const maxLeaderTotal = Math.max(1, ...leaderboard.map((t) => t.total));
+
+  if (isNestedRoute) {
+    return <Outlet />;
+  }
 
   if (!canSeeOversight) {
     return (
