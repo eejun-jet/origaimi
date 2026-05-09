@@ -16,9 +16,13 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import {
   computeIntentSignals,
+  computeAlignmentSummary,
+  computeStyleSummary,
   snapshotForAI,
+  type AlignmentRow,
   type BuilderSnapshot,
   type IntentSignal,
+  type StyleSummary,
 } from "@/lib/intent-coach";
 
 type AIObservation = {
@@ -58,6 +62,8 @@ export function BuilderCoachPanel({
   const [aiReview, setAiReview] = useState<AIReview | null>(null);
 
   const localSignals = useMemo(() => computeIntentSignals(snapshot), [snapshot]);
+  const alignment = useMemo(() => computeAlignmentSummary(snapshot), [snapshot]);
+  const styleSummary = useMemo(() => computeStyleSummary(snapshot), [snapshot]);
   const visibleLocal = localSignals.filter((s) => !dismissed.has(s.id));
   const aiObservations = aiReview?.observations ?? [];
   const aiSuggestions = aiReview?.suggestions ?? [];
@@ -134,6 +140,9 @@ export function BuilderCoachPanel({
           <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
             Optional, sparse nudges. Apply, dismiss, or ignore — your call.
           </p>
+
+          <AlignmentStrip rows={alignment} />
+          <StyleStrip summary={styleSummary} />
 
           <div className="mt-3 space-y-2">
             {totalCards === 0 && !aiReview && (
@@ -233,14 +242,16 @@ export function BuilderCoachPanel({
 // ────────────────────────────────────────────────────────────────────────────
 
 const STARTER_PROMPTS_PRE = [
-  "Is the AO mix balanced for this paper?",
-  "Suggest a transfer context for one section.",
-  "How can I push this beyond recall?",
+  "Is the AO mix on target for this paper?",
+  "Is the pitch right for this level?",
+  "Make the question style more varied.",
+  "Suggest one Singapore transfer context.",
 ];
 const STARTER_PROMPTS_POST = [
   "Which question feels weakest, and why?",
-  "Suggest a harder variant of one question.",
+  "Is the draft pitched too easy for this level?",
   "Spot any AO/LO drift in the draft.",
+  "Suggest a harder variant of one question.",
 ];
 
 function CoachChat({
@@ -563,6 +574,80 @@ function SignalCard({
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Alignment + Style snapshots — read-only strips above the signals list.
+// ────────────────────────────────────────────────────────────────────────────
+
+function AlignmentStrip({ rows }: { rows: AlignmentRow[] }) {
+  if (rows.length === 0) return null;
+  const hasTargets = rows.some((r) => r.targetPercent !== null);
+  if (!hasTargets && rows.every((r) => r.plannedPercent === 0)) return null;
+
+  return (
+    <div className="mt-3 rounded-md border border-border bg-muted/30 p-2">
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          AO alignment {hasTargets ? "(plan vs syllabus target)" : "(plan)"}
+        </p>
+      </div>
+      <div className="mt-1.5 space-y-1.5">
+        {rows.map((r) => {
+          const target = r.targetPercent;
+          const planned = r.plannedPercent;
+          const delta = target !== null ? planned - target : 0;
+          const off = target !== null && Math.abs(delta) >= 20;
+          return (
+            <div key={r.code} className="flex items-center gap-2 text-[10px]">
+              <span className="w-10 shrink-0 font-medium">{r.code}</span>
+              <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                {target !== null && (
+                  <div
+                    className="absolute inset-y-0 left-0 bg-muted-foreground/30"
+                    style={{ width: `${Math.min(target, 100)}%` }}
+                    aria-hidden
+                  />
+                )}
+                <div
+                  className={`absolute inset-y-0 left-0 ${off ? "bg-warm" : "bg-primary"}`}
+                  style={{ width: `${Math.min(planned, 100)}%`, mixBlendMode: "multiply" }}
+                  aria-hidden
+                />
+              </div>
+              <span className={`w-20 shrink-0 text-right tabular-nums ${off ? "text-warm" : "text-muted-foreground"}`}>
+                {planned}%{target !== null ? ` / ${target}%` : ""}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function StyleStrip({ summary }: { summary: StyleSummary }) {
+  if (summary.totalQuestions === 0) return null;
+  const formatLabel = summary.uniqueFormats <= 1 ? "single format" : `${summary.uniqueFormats} formats`;
+  const bloomLabel = summary.uniqueBlooms <= 1 ? "single Bloom" : `${summary.uniqueBlooms} Bloom levels`;
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+      <span className="font-medium uppercase tracking-wide">Style</span>
+      <Badge variant="outline" className="h-4 px-1 text-[9px]">{summary.totalQuestions} Qs</Badge>
+      <Badge
+        variant="outline"
+        className={`h-4 px-1 text-[9px] ${summary.uniqueFormats <= 1 && summary.totalQuestions >= 3 ? "border-warm text-warm" : ""}`}
+      >
+        {formatLabel}
+      </Badge>
+      <Badge
+        variant="outline"
+        className={`h-4 px-1 text-[9px] ${summary.uniqueBlooms <= 1 && summary.totalQuestions >= 3 ? "border-warm text-warm" : ""}`}
+      >
+        {bloomLabel}
+      </Badge>
     </div>
   );
 }
