@@ -181,7 +181,7 @@ function ImportPage() {
           </div>
           <Button variant="outline" size="sm" asChild>
             <a href="/templates/setters-markers-template.xlsx" download>
-              <Download className="mr-2 h-4 w-4" />Download blank template
+              <Download className="mr-2 h-4 w-4" />Download template (with sample data)
             </a>
           </Button>
         </div>

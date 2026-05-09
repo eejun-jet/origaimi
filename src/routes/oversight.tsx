@@ -189,13 +189,13 @@ function OversightPage() {
               Setters, markers, scripts and progress {isSl ? "across the school" : "in your department"}.
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              New here? Download the blank template, fill in your setters/markers, then import to see your dashboard data.
+              New here? Download the sample template (15 mock rows per term), replace with your data, then import to see your dashboard data.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button asChild variant="outline">
               <a href="/templates/setters-markers-template.xlsx" download>
-                <Download className="mr-2 h-4 w-4" />Download blank template
+                <Download className="mr-2 h-4 w-4" />Download template (with sample data)
               </a>
             </Button>
             <Button asChild>
@@ -275,7 +275,7 @@ function OversightPage() {
              <div className="p-8 text-center text-sm text-muted-foreground">
                 No deployments yet.{" "}
                 <Link to="/oversight/import" className="underline">Import your setters/markers list</Link>{" "}
-                or <a href="/templates/setters-markers-template.xlsx" download className="underline">download the blank template</a> to get started.
+                or <a href="/templates/setters-markers-template.xlsx" download className="underline">download the sample template</a> to get started.
               </div>
             ) : (
               <Table>
