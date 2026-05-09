@@ -63,6 +63,7 @@ function OversightPage() {
   const { canSeeOversight, isSl } = useRoles();
   const [papers, setPapers] = useState<Paper[]>([]);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
+  const [imports, setImports] = useState<ImportRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -75,9 +76,10 @@ function OversightPage() {
   const load = async () => {
     setLoading(true);
     setLoadError(null);
-    const [pRes, dRes] = await Promise.all([
+    const [pRes, dRes, iRes] = await Promise.all([
       supabase.from("marking_papers").select("*").order("created_at", { ascending: false }).limit(2000),
       supabase.from("marking_deployments").select("*").limit(5000),
+      supabase.from("marking_imports").select("id,filename,department,semester,year,rows_parsed,papers_created,deployments_created,created_at").order("created_at", { ascending: false }).limit(200),
     ]);
     if (pRes.error || dRes.error) {
       const msg = pRes.error?.message ?? dRes.error?.message ?? "Failed to load dashboard data.";
@@ -86,6 +88,7 @@ function OversightPage() {
     }
     setPapers((pRes.data ?? []) as Paper[]);
     setDeployments((dRes.data ?? []) as Deployment[]);
+    setImports((iRes.data ?? []) as ImportRow[]);
     setLoading(false);
   };
 
