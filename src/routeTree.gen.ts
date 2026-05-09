@@ -19,6 +19,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PaperSetNewRouteImport } from './routes/paper-set.new'
 import { Route as PaperSetIdRouteImport } from './routes/paper-set.$id'
+import { Route as OversightPointsRouteImport } from './routes/oversight.points'
 import { Route as OversightImportRouteImport } from './routes/oversight.import'
 import { Route as AuthenticNewRouteImport } from './routes/authentic.new'
 import { Route as AuthenticIdRouteImport } from './routes/authentic.$id'
@@ -77,6 +78,11 @@ const PaperSetIdRoute = PaperSetIdRouteImport.update({
   path: '/paper-set/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OversightPointsRoute = OversightPointsRouteImport.update({
+  id: '/points',
+  path: '/points',
+  getParentRoute: () => OversightRoute,
+} as any)
 const OversightImportRoute = OversightImportRouteImport.update({
   id: '/import',
   path: '/import',
@@ -127,6 +133,7 @@ export interface FileRoutesByFullPath {
   '/authentic/$id': typeof AuthenticIdRoute
   '/authentic/new': typeof AuthenticNewRoute
   '/oversight/import': typeof OversightImportRoute
+  '/oversight/points': typeof OversightPointsRoute
   '/paper-set/$id': typeof PaperSetIdRoute
   '/paper-set/new': typeof PaperSetNewRoute
   '/admin/syllabus/$id': typeof AdminSyllabusIdRoute
@@ -146,6 +153,7 @@ export interface FileRoutesByTo {
   '/authentic/$id': typeof AuthenticIdRoute
   '/authentic/new': typeof AuthenticNewRoute
   '/oversight/import': typeof OversightImportRoute
+  '/oversight/points': typeof OversightPointsRoute
   '/paper-set/$id': typeof PaperSetIdRoute
   '/paper-set/new': typeof PaperSetNewRoute
   '/admin/syllabus/$id': typeof AdminSyllabusIdRoute
@@ -166,6 +174,7 @@ export interface FileRoutesById {
   '/authentic/$id': typeof AuthenticIdRoute
   '/authentic/new': typeof AuthenticNewRoute
   '/oversight/import': typeof OversightImportRoute
+  '/oversight/points': typeof OversightPointsRoute
   '/paper-set/$id': typeof PaperSetIdRoute
   '/paper-set/new': typeof PaperSetNewRoute
   '/admin/syllabus/$id': typeof AdminSyllabusIdRoute
@@ -187,6 +196,7 @@ export interface FileRouteTypes {
     | '/authentic/$id'
     | '/authentic/new'
     | '/oversight/import'
+    | '/oversight/points'
     | '/paper-set/$id'
     | '/paper-set/new'
     | '/admin/syllabus/$id'
@@ -206,6 +216,7 @@ export interface FileRouteTypes {
     | '/authentic/$id'
     | '/authentic/new'
     | '/oversight/import'
+    | '/oversight/points'
     | '/paper-set/$id'
     | '/paper-set/new'
     | '/admin/syllabus/$id'
@@ -225,6 +236,7 @@ export interface FileRouteTypes {
     | '/authentic/$id'
     | '/authentic/new'
     | '/oversight/import'
+    | '/oversight/points'
     | '/paper-set/$id'
     | '/paper-set/new'
     | '/admin/syllabus/$id'
@@ -323,6 +335,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PaperSetIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/oversight/points': {
+      id: '/oversight/points'
+      path: '/points'
+      fullPath: '/oversight/points'
+      preLoaderRoute: typeof OversightPointsRouteImport
+      parentRoute: typeof OversightRoute
+    }
     '/oversight/import': {
       id: '/oversight/import'
       path: '/import'
@@ -377,10 +396,12 @@ declare module '@tanstack/react-router' {
 
 interface OversightRouteChildren {
   OversightImportRoute: typeof OversightImportRoute
+  OversightPointsRoute: typeof OversightPointsRoute
 }
 
 const OversightRouteChildren: OversightRouteChildren = {
   OversightImportRoute: OversightImportRoute,
+  OversightPointsRoute: OversightPointsRoute,
 }
 
 const OversightRouteWithChildren = OversightRoute._addFileChildren(
@@ -408,3 +429,12 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}
