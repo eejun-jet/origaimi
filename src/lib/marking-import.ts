@@ -20,6 +20,7 @@ export type ParsedPaper = {
   level: string;
   stream: string | null; // Exp / NA / NT / null
   duration_minutes: number | null;
+  assessment_type: string | null; // WA1, MYE, EoY, … (column or form default)
   remarks: string | null;
   deployments: ParsedDeployment[];
 };
@@ -44,6 +45,8 @@ const HEADER_ALIASES: Record<string, string> = {
   class: "classes",
   total: "total",
   remarks: "remarks",
+  assessment: "assessment",
+  "assessment type": "assessment",
 };
 
 function normaliseHeader(s: string): string {
