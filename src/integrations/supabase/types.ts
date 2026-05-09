@@ -425,6 +425,205 @@ export type Database = {
         }
         Relationships: []
       }
+      marking_deployments: {
+        Row: {
+          class_label: string | null
+          created_at: string
+          due_at: string | null
+          flagged_count: number
+          id: string
+          marked_count: number
+          paper_id: string
+          role: string
+          script_count: number
+          status: string
+          teacher_id: string | null
+          teacher_name: string | null
+          updated_at: string
+        }
+        Insert: {
+          class_label?: string | null
+          created_at?: string
+          due_at?: string | null
+          flagged_count?: number
+          id?: string
+          marked_count?: number
+          paper_id: string
+          role: string
+          script_count?: number
+          status?: string
+          teacher_id?: string | null
+          teacher_name?: string | null
+          updated_at?: string
+        }
+        Update: {
+          class_label?: string | null
+          created_at?: string
+          due_at?: string | null
+          flagged_count?: number
+          id?: string
+          marked_count?: number
+          paper_id?: string
+          role?: string
+          script_count?: number
+          status?: string
+          teacher_id?: string | null
+          teacher_name?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marking_deployments_paper_id_fkey"
+            columns: ["paper_id"]
+            isOneToOne: false
+            referencedRelation: "marking_papers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      marking_imports: {
+        Row: {
+          created_at: string
+          department: string | null
+          deployments_created: number
+          errors: Json
+          filename: string | null
+          id: string
+          papers_created: number
+          rows_parsed: number
+          semester: string | null
+          unmatched_names: Json
+          user_id: string | null
+          year: number | null
+        }
+        Insert: {
+          created_at?: string
+          department?: string | null
+          deployments_created?: number
+          errors?: Json
+          filename?: string | null
+          id?: string
+          papers_created?: number
+          rows_parsed?: number
+          semester?: string | null
+          unmatched_names?: Json
+          user_id?: string | null
+          year?: number | null
+        }
+        Update: {
+          created_at?: string
+          department?: string | null
+          deployments_created?: number
+          errors?: Json
+          filename?: string | null
+          id?: string
+          papers_created?: number
+          rows_parsed?: number
+          semester?: string | null
+          unmatched_names?: Json
+          user_id?: string | null
+          year?: number | null
+        }
+        Relationships: []
+      }
+      marking_papers: {
+        Row: {
+          assessment_id: string | null
+          created_at: string
+          department: string | null
+          duration_minutes: number | null
+          id: string
+          level: string | null
+          remarks: string | null
+          school: string | null
+          semester: string | null
+          stream: string | null
+          subject: string | null
+          title: string
+          updated_at: string
+          year: number | null
+        }
+        Insert: {
+          assessment_id?: string | null
+          created_at?: string
+          department?: string | null
+          duration_minutes?: number | null
+          id?: string
+          level?: string | null
+          remarks?: string | null
+          school?: string | null
+          semester?: string | null
+          stream?: string | null
+          subject?: string | null
+          title: string
+          updated_at?: string
+          year?: number | null
+        }
+        Update: {
+          assessment_id?: string | null
+          created_at?: string
+          department?: string | null
+          duration_minutes?: number | null
+          id?: string
+          level?: string | null
+          remarks?: string | null
+          school?: string | null
+          semester?: string | null
+          stream?: string | null
+          subject?: string | null
+          title?: string
+          updated_at?: string
+          year?: number | null
+        }
+        Relationships: []
+      }
+      marking_scripts: {
+        Row: {
+          created_at: string
+          deployment_id: string
+          flag_reason: string | null
+          flagged: boolean
+          id: string
+          marked_at: string | null
+          marks_awarded: number | null
+          moderated_at: string | null
+          moderator_id: string | null
+          student_ref: string | null
+        }
+        Insert: {
+          created_at?: string
+          deployment_id: string
+          flag_reason?: string | null
+          flagged?: boolean
+          id?: string
+          marked_at?: string | null
+          marks_awarded?: number | null
+          moderated_at?: string | null
+          moderator_id?: string | null
+          student_ref?: string | null
+        }
+        Update: {
+          created_at?: string
+          deployment_id?: string
+          flag_reason?: string | null
+          flagged?: boolean
+          id?: string
+          marked_at?: string | null
+          marks_awarded?: number | null
+          moderated_at?: string | null
+          moderator_id?: string | null
+          student_ref?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marking_scripts_deployment_id_fkey"
+            columns: ["deployment_id"]
+            isOneToOne: false
+            referencedRelation: "marking_deployments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       paper_set_papers: {
         Row: {
           created_at: string
@@ -662,6 +861,8 @@ export type Database = {
       profiles: {
         Row: {
           created_at: string
+          department: string | null
+          display_name: string | null
           full_name: string | null
           id: string
           levels: string[] | null
@@ -672,6 +873,8 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          department?: string | null
+          display_name?: string | null
           full_name?: string | null
           id?: string
           levels?: string[] | null
@@ -682,6 +885,8 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          department?: string | null
+          display_name?: string | null
           full_name?: string | null
           id?: string
           levels?: string[] | null
@@ -1144,15 +1349,69 @@ export type Database = {
           },
         ]
       }
+      teacher_aliases: {
+        Row: {
+          alias: string
+          created_at: string
+          id: string
+          profile_id: string
+        }
+        Insert: {
+          alias: string
+          created_at?: string
+          id?: string
+          profile_id: string
+        }
+        Update: {
+          alias?: string
+          created_at?: string
+          id?: string
+          profile_id?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          department: string | null
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          school: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          department?: string | null
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          school?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          department?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          school?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "teacher" | "hod" | "sl" | "admin"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1279,6 +1538,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["teacher", "hod", "sl", "admin"],
+    },
   },
 } as const
