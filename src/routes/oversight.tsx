@@ -651,8 +651,6 @@ function OversightPage() {
             )}
           </CardContent>
         </Card>
-          </CardContent>
-        </Card>
       </main>
     </div>
   );
