@@ -179,6 +179,8 @@ export function parseMarkingXlsx(buffer: ArrayBuffer): ParsedImport {
     const markers = splitNames(markerCell);
     const classes = splitClasses(classesCell);
     if (markers.length === 0 && classes.length === 0) continue;
+    if (!current) continue;
+    const paper = current;
 
     // Read per-class counts for this row (positional)
     const counts = perClassCols.map((c) => Number(row[c] ?? 0)).map((n) => (Number.isFinite(n) ? n : 0));
@@ -187,13 +189,14 @@ export function parseMarkingXlsx(buffer: ArrayBuffer): ParsedImport {
     for (const name of markers) {
       nameSet.add(name);
       if (classCounts.length === 0) {
-        current.deployments.push({ role: "marker", teacher_name: name, class_label: null, script_count: 0 });
+        paper.deployments.push({ role: "marker", teacher_name: name, class_label: null, script_count: 0 });
       } else {
         for (const { cls, count } of classCounts) {
-          current.deployments.push({ role: "marker", teacher_name: name, class_label: cls, script_count: count });
+          paper.deployments.push({ role: "marker", teacher_name: name, class_label: cls, script_count: count });
         }
       }
     }
+  }
   }
 
   return { papers, warnings, uniqueNames: Array.from(nameSet).sort() };
