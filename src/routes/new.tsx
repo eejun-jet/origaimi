@@ -1784,12 +1784,56 @@ function SectionCard({
 
         {/* Learning Outcomes — grouped by topic, expandable */}
         <div className="mt-3 rounded-lg border border-border bg-muted/20 p-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <Label className="text-sm font-medium">
               {usingSoFallback ? "Skills Outcomes (SO)" : "Learning Outcomes (LOs)"}
             </Label>
             <span className="text-xs text-muted-foreground">{sectionLos.length} / {loCandidates.length} selected</span>
           </div>
+          {!usingSoFallback && (() => {
+            // Per-discipline quick toggles in the top row (Physics / Chemistry / Biology, etc.)
+            const byDisc = new Map<string, string[]>();
+            for (const t of section.topic_pool) {
+              const key = (t.section ?? "").trim();
+              if (!key) continue;
+              const arr = byDisc.get(key) ?? [];
+              for (const lo of (t.learning_outcomes ?? [])) {
+                const v = lo.trim();
+                if (v && !arr.includes(v)) arr.push(v);
+              }
+              byDisc.set(key, arr);
+            }
+            const entries = Array.from(byDisc.entries()).filter(([, los]) => los.length > 0);
+            if (entries.length < 2) return null;
+            return (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="text-[11px] uppercase tracking-wide text-muted-foreground">Quick select:</span>
+                {entries.map(([name, los]) => {
+                  const sel = los.filter((lo) => sectionLos.includes(lo)).length;
+                  const allChecked = sel === los.length;
+                  const someChecked = sel > 0 && !allChecked;
+                  return (
+                    <label
+                      key={name}
+                      className="flex cursor-pointer items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 text-xs hover:bg-muted/40"
+                    >
+                      <Checkbox
+                        checked={allChecked ? true : someChecked ? "indeterminate" : false}
+                        onCheckedChange={() => {
+                          const next = allChecked
+                            ? sectionLos.filter((x) => !los.includes(x))
+                            : Array.from(new Set([...sectionLos, ...los]));
+                          onUpdate({ learning_outcomes: next });
+                        }}
+                      />
+                      <span className="font-medium">{name}</span>
+                      <span className="text-muted-foreground">{sel}/{los.length}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            );
+          })()}
           {usingSoFallback && (
             <p className="mt-1 text-[11px] text-muted-foreground">
               This syllabus paper defines Skills Outcomes (SO) instead of topic-level Learning Outcomes. Pick the SOs this section should target.
