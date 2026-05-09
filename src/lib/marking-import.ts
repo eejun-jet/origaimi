@@ -197,7 +197,6 @@ export function parseMarkingXlsx(buffer: ArrayBuffer): ParsedImport {
       }
     }
   }
-  }
 
   return { papers, warnings, uniqueNames: Array.from(nameSet).sort() };
 }
