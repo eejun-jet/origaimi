@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as PapersRouteImport } from './routes/papers'
+import { Route as OversightRouteImport } from './routes/oversight'
 import { Route as OurStoryRouteImport } from './routes/our-story'
 import { Route as NewRouteImport } from './routes/new'
 import { Route as DashboardRouteImport } from './routes/dashboard'
@@ -18,6 +19,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PaperSetNewRouteImport } from './routes/paper-set.new'
 import { Route as PaperSetIdRouteImport } from './routes/paper-set.$id'
+import { Route as OversightImportRouteImport } from './routes/oversight.import'
 import { Route as AuthenticNewRouteImport } from './routes/authentic.new'
 import { Route as AuthenticIdRouteImport } from './routes/authentic.$id'
 import { Route as AssessmentIdRouteImport } from './routes/assessment.$id'
@@ -28,6 +30,11 @@ import { Route as ApiPublicCronSweepStuckPapersRouteImport } from './routes/api/
 const PapersRoute = PapersRouteImport.update({
   id: '/papers',
   path: '/papers',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OversightRoute = OversightRouteImport.update({
+  id: '/oversight',
+  path: '/oversight',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OurStoryRoute = OurStoryRouteImport.update({
@@ -70,6 +77,11 @@ const PaperSetIdRoute = PaperSetIdRouteImport.update({
   path: '/paper-set/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OversightImportRoute = OversightImportRouteImport.update({
+  id: '/import',
+  path: '/import',
+  getParentRoute: () => OversightRoute,
+} as any)
 const AuthenticNewRoute = AuthenticNewRouteImport.update({
   id: '/authentic/new',
   path: '/authentic/new',
@@ -109,10 +121,12 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRoute
   '/new': typeof NewRoute
   '/our-story': typeof OurStoryRoute
+  '/oversight': typeof OversightRouteWithChildren
   '/papers': typeof PapersRoute
   '/assessment/$id': typeof AssessmentIdRoute
   '/authentic/$id': typeof AuthenticIdRoute
   '/authentic/new': typeof AuthenticNewRoute
+  '/oversight/import': typeof OversightImportRoute
   '/paper-set/$id': typeof PaperSetIdRoute
   '/paper-set/new': typeof PaperSetNewRoute
   '/admin/syllabus/$id': typeof AdminSyllabusIdRoute
@@ -126,10 +140,12 @@ export interface FileRoutesByTo {
   '/dashboard': typeof DashboardRoute
   '/new': typeof NewRoute
   '/our-story': typeof OurStoryRoute
+  '/oversight': typeof OversightRouteWithChildren
   '/papers': typeof PapersRoute
   '/assessment/$id': typeof AssessmentIdRoute
   '/authentic/$id': typeof AuthenticIdRoute
   '/authentic/new': typeof AuthenticNewRoute
+  '/oversight/import': typeof OversightImportRoute
   '/paper-set/$id': typeof PaperSetIdRoute
   '/paper-set/new': typeof PaperSetNewRoute
   '/admin/syllabus/$id': typeof AdminSyllabusIdRoute
@@ -144,10 +160,12 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRoute
   '/new': typeof NewRoute
   '/our-story': typeof OurStoryRoute
+  '/oversight': typeof OversightRouteWithChildren
   '/papers': typeof PapersRoute
   '/assessment/$id': typeof AssessmentIdRoute
   '/authentic/$id': typeof AuthenticIdRoute
   '/authentic/new': typeof AuthenticNewRoute
+  '/oversight/import': typeof OversightImportRoute
   '/paper-set/$id': typeof PaperSetIdRoute
   '/paper-set/new': typeof PaperSetNewRoute
   '/admin/syllabus/$id': typeof AdminSyllabusIdRoute
@@ -163,10 +181,12 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/new'
     | '/our-story'
+    | '/oversight'
     | '/papers'
     | '/assessment/$id'
     | '/authentic/$id'
     | '/authentic/new'
+    | '/oversight/import'
     | '/paper-set/$id'
     | '/paper-set/new'
     | '/admin/syllabus/$id'
@@ -180,10 +200,12 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/new'
     | '/our-story'
+    | '/oversight'
     | '/papers'
     | '/assessment/$id'
     | '/authentic/$id'
     | '/authentic/new'
+    | '/oversight/import'
     | '/paper-set/$id'
     | '/paper-set/new'
     | '/admin/syllabus/$id'
@@ -197,10 +219,12 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/new'
     | '/our-story'
+    | '/oversight'
     | '/papers'
     | '/assessment/$id'
     | '/authentic/$id'
     | '/authentic/new'
+    | '/oversight/import'
     | '/paper-set/$id'
     | '/paper-set/new'
     | '/admin/syllabus/$id'
@@ -215,6 +239,7 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRoute
   NewRoute: typeof NewRoute
   OurStoryRoute: typeof OurStoryRoute
+  OversightRoute: typeof OversightRouteWithChildren
   PapersRoute: typeof PapersRoute
   AssessmentIdRoute: typeof AssessmentIdRoute
   AuthenticIdRoute: typeof AuthenticIdRoute
@@ -233,6 +258,13 @@ declare module '@tanstack/react-router' {
       path: '/papers'
       fullPath: '/papers'
       preLoaderRoute: typeof PapersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/oversight': {
+      id: '/oversight'
+      path: '/oversight'
+      fullPath: '/oversight'
+      preLoaderRoute: typeof OversightRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/our-story': {
@@ -291,6 +323,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PaperSetIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/oversight/import': {
+      id: '/oversight/import'
+      path: '/import'
+      fullPath: '/oversight/import'
+      preLoaderRoute: typeof OversightImportRouteImport
+      parentRoute: typeof OversightRoute
+    }
     '/authentic/new': {
       id: '/authentic/new'
       path: '/authentic/new'
@@ -336,6 +375,18 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface OversightRouteChildren {
+  OversightImportRoute: typeof OversightImportRoute
+}
+
+const OversightRouteChildren: OversightRouteChildren = {
+  OversightImportRoute: OversightImportRoute,
+}
+
+const OversightRouteWithChildren = OversightRoute._addFileChildren(
+  OversightRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRoute,
@@ -343,6 +394,7 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRoute,
   NewRoute: NewRoute,
   OurStoryRoute: OurStoryRoute,
+  OversightRoute: OversightRouteWithChildren,
   PapersRoute: PapersRoute,
   AssessmentIdRoute: AssessmentIdRoute,
   AuthenticIdRoute: AuthenticIdRoute,

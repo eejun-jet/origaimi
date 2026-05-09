@@ -39,6 +39,13 @@ export function AppHeader() {
             Papers
           </Link>
           <Link
+            to="/oversight"
+            className="text-sm text-muted-foreground hover:text-foreground"
+            activeProps={{ className: "text-foreground font-medium" }}
+          >
+            Oversight
+          </Link>
+          <Link
             to="/admin/syllabus"
             className="text-sm text-muted-foreground hover:text-foreground"
             activeProps={{ className: "text-foreground font-medium" }}
