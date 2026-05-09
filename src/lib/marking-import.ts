@@ -122,6 +122,8 @@ export function parseMarkingXlsx(buffer: ArrayBuffer): ParsedImport {
     remarks: colIndex("remarks"),
     total: colIndex("total"),
     assessment: colIndex("assessment"),
+    term: colIndex("term"),
+    stream: colIndex("stream"),
   };
 
   // Per-class numeric columns sit between "Classes" and "Total"
@@ -139,18 +141,42 @@ export function parseMarkingXlsx(buffer: ArrayBuffer): ParsedImport {
   // the spreadsheet shape where extra marker rows have empty Subject cells).
   let current: ParsedPaper | null = null;
 
+  const mapStream = (s: string): string | null => {
+    const v = s.trim().toUpperCase();
+    if (!v) return null;
+    if (v === "G3" || v === "EXP") return "Exp";
+    if (v === "G2" || v === "NA" || v === "N(A)") return "NA";
+    if (v === "G1" || v === "NT" || v === "N(T)") return "NT";
+    if (v.startsWith("G3+") || v.includes("G3")) return "Exp"; // combos: keep G3 row, importer-level cloning is out of scope here
+    return v;
+  };
+
+  const normaliseTerm = (s: string): string | null => {
+    const v = s.trim().toUpperCase().replace(/\s+/g, "");
+    const m = v.match(/^T(?:ERM)?(\d)$/);
+    if (m) return `Term ${m[1]}`;
+    return null;
+  };
+
   for (let r = headerIdx + 1; r < rows.length; r++) {
     const row = rows[r];
     if (!row || row.every((c) => String(c ?? "").trim() === "")) continue;
 
     const level = String(row[idx.level] ?? "").trim();
     const subject = String(row[idx.subject] ?? "").trim();
+
+    // Skip banner / divider rows like "─── TERM 1 ───"
+    const joined = row.map((c) => String(c ?? "")).join(" ");
+    if (/───|^\s*TERM\s*\d/i.test(joined) && !subject) continue;
+
     const duration = parseDuration(row[idx.duration]);
     const setterCell = idx.setter >= 0 ? row[idx.setter] : "";
     const markerCell = idx.marker >= 0 ? row[idx.marker] : "";
     const classesCell = idx.classes >= 0 ? row[idx.classes] : "";
     const remarks = idx.remarks >= 0 ? String(row[idx.remarks] ?? "").trim() : "";
     const assessmentCell = idx.assessment >= 0 ? String(row[idx.assessment] ?? "").trim() : "";
+    const termCell = idx.term >= 0 ? String(row[idx.term] ?? "").trim() : "";
+    const streamCell = idx.stream >= 0 ? String(row[idx.stream] ?? "").trim() : "";
 
     const startsNewPaper = !!level && !!subject;
     if (startsNewPaper) {
@@ -158,9 +184,10 @@ export function parseMarkingXlsx(buffer: ArrayBuffer): ParsedImport {
         title: `${level} ${subject}`.trim(),
         subject,
         level,
-        stream: parseStream(level),
+        stream: streamCell ? mapStream(streamCell) : parseStream(level),
         duration_minutes: duration,
         assessment_type: assessmentCell || null,
+        term: normaliseTerm(termCell),
         remarks: remarks || null,
         deployments: [],
       };
