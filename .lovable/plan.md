@@ -1,75 +1,39 @@
-## What's wrong today
+## Issue 1 — "40% / 20%" labels still visible
 
-The AO review treats `A1`, `A2`, `A3` as if they were the top-level AO buckets, with stored weightings of `40 / 40 / 20`. That is why `A2` and `A3` show only a few percent — most marks are getting tagged with sibling codes (`A4`, `A5`, `B1..B7`, `C1..C6`) that the panel shows as separate rows.
+These come from the stored Chemistry syllabus AO definitions (A1=40, A2=40, A3=20). The bucket rollup hides them in some panels but several places still render the raw sub-code numbers:
 
-The correct model is letter-prefix buckets:
+- **`src/routes/new.tsx`** — `CoverageStrips` (lines 1280–1300) iterates raw `aos` and prints `target {a.weightingPercent}%`, producing the `A1 / target 40%`, `A2 / target 40%`, `A3 / target 20%` rows. The AO selector list (~line 2021) also shows `[40%]`, `[20%]` next to each sub-code.
+- **`src/components/BuilderCoachPanel.tsx`** (~626–637) — "rolled up from A1 40%, A2 40%, A3 20%" caption and the italic helper line.
+- **`src/routes/paper-set.$id.tsx`** (~968–972) — same "rolled up from …" caption under each bucket bar.
 
-```text
-A  =  A1 + A2 + A3 + A4 + A5             -> 50%
-B  =  B1 + B2 + B3 + B4 + B5 + B6 + B7   -> 50%
-C  =  C1 + C2 + C3 + C4 + C5 + C6        -> only if the syllabus declares it
-```
+### Fix
+1. In `new.tsx` `CoverageStrips`, switch from raw `aos` to bucketed rows: use `bucketTargets(aos)` for targets and `rollupCounts(aoMarks)` for actuals. Render one row per letter bucket (A, B, …) — no sub-code rows, no `[40%]` chips. Drop the `missingAOs`/`publishedAOs` checks that key on sub-codes; rebuild against bucket codes.
+2. In the AO selector list (~2021) keep the sub-code rows for tagging (functional), but remove the `[{weightingPercent}%]` chip so the 40/20 numbers disappear.
+3. In `BuilderCoachPanel.tsx` `AlignmentStrip`, remove the "rolled up from …" sub-code caption and the italic footer line.
+4. In `paper-set.$id.tsx` `AOPanel`, remove the same "rolled up from …" caption (keep only the bucket-level bar + observed vs declared).
 
-The number after the letter is the sub-objective, not a separate AO.
+After these edits, the only AO percentages shown are bucket-level (A, B, …) so the legacy 40/40/20 numbers no longer appear anywhere.
 
-## Fix
+## Issue 2 — Recalculate button "doesn't recalculate"
 
-### 1. Add an AO rollup helper
+The `Recalculate with AI` button only invokes `retag-questions`, which rewrites each question's `ao_codes / knowledge_outcomes / learning_outcomes` from the AI. It does **not** touch the syllabus AO target weightings (those live in `syllabus_assessment_objectives` and define the "target %" you see).
 
-New file: `src/lib/ao-rollup.ts`
+So if a Chemistry paper's stored AO defs are A1/A2/A3=40/40/20, those target numbers stay the same after recalc — only the bars (actuals) move. That's likely why it "doesn't seem to recalculate".
 
-- `bucketOf(code)`: returns the letter prefix (`"A"`, `"B"`, `"C"`, …). Falls back to the original code if it doesn't match the `^[A-Z]\d+$` shape, so non-coded tags ("Untagged", custom labels) are preserved.
-- `rollupCounts(map)`: takes a `Map<code, number>` and returns a `Map<bucket, number>`.
-- `bucketTargets(aoDefs)`: aggregates declared `weighting_percent` per bucket from `syllabus_assessment_objectives`. If any single canonical bucket already has a declared weight (e.g. `A=50`), use that. If only sub-codes are stored (`A1=40, A2=40, A3=20`), sum them into the bucket (`A=100`). Then re-normalise so buckets sum to 100. For Chemistry/Combined Science this yields `A=50, B=50` (and `C` when present).
+Two fixes needed:
 
-This keeps existing data working without a database migration.
+1. **Re-render after recalc** — confirm the panel re-reads questions. `retagAllQuestions` already calls `loadAll()` after success, but the AO Coverage card on `assessment.$id.tsx` derives from `questions` state. Add a `console.log` of the `payload.updated/total/errors` to confirm; if `updated === 0`, surface that in the toast as a warning ("No questions changed — check section AO pool"). If errors exist, show the first error message instead of a silent success.
+2. **Make targets responsive to the bucket model** — when the stored AO defs have only sub-codes (e.g. only A1/A2/A3 with no B), the bucket rollup currently produces `A=100%` and no B target, which is misleading. Two options to pick from:
+   - **(a) Hide targets entirely** for papers whose stored defs cover only one bucket — render bars without the target tick / "vs N%". Cleanest, no data migration.
+   - **(b) Add a manual override** on `/admin/syllabus/:id` for bucket-level AO weighting (A=50, B=50) that wins over sub-code weights. Requires a small admin UI change but lets the user fix Chemistry to the real 50/50 model.
 
-### 2. Assessment Coach AO snapshot — `src/lib/intent-coach.ts`
-
-- Switch `aoFrequency` to weight by **marks per section**, not `num_questions`.
-- After counting, run the result through `rollupCounts`.
-- `computeAlignmentSummary` returns one row per bucket (`A`, `B`, `C` …), each with `plannedPercent` vs `targetPercent` from `bucketTargets`.
-- The cheap "AO target delta" signal compares bucket totals, so `A` at 80% vs 50% target shows up as a single clear nudge instead of three confusing A1/A2/A3 rows.
-
-### 3. Generated assessment review — `/assessment/:id`
-
-Same rollup before rendering, so this Chemistry paper shows:
-
-```text
-A   actual %   vs   50%
-B   actual %   vs   50%
-```
-
-Rows for `A1..A5` and `B1..B7` are removed from the headline view. They stay available as a "show sub-codes" expand toggle for users who want the granular breakdown.
-
-### 4. Paper-set AO review — `/paper-set/:id`
-
-`paper-set.$id.tsx` (`aoMarkShare`, `AOPanel`, `PerPaperPanel`) gets the same treatment so the macro review matches the per-assessment review.
-
-### 5. Builder UI — `BuilderCoachPanel.tsx`
-
-`AlignmentStrip` renders the bucket rows. Sub-codes that contributed >0% are listed underneath as a thin caption (`A ← A1 12%, A2 18%, A4 14%, A5 6%`) so the rollup is transparent.
-
-### 6. Caveat note in the UI
-
-Small one-liner under the AO panel:
-
-```text
-A1–A5 are rolled up to A, B1–B7 to B, to match the syllabus-level AO weighting.
-```
-
-Prevents confusion for users who remember seeing the granular tags earlier.
-
-## Out of scope
-
-- Re-tagging or re-classifying parsed past papers — current tags are fine once rolled up.
-- Rewriting `syllabus_assessment_objectives` rows in the database. The rollup is computed at read time.
-- Changing how AI generation picks AO codes for new questions.
+### Open question for you
+- For Issue 2 fix #2, do you want **(a)** auto-hide targets when sub-codes don't cover all buckets, or **(b)** an admin override field so you can set A=50, B=50 yourself? I lean (b) because it gives you the right targets going forward; (a) is faster but loses the target tick on the bars.
 
 ## Files touched
 
-- new: `src/lib/ao-rollup.ts`
-- edit: `src/lib/intent-coach.ts` (mark-based weighting + rollup)
-- edit: `src/components/BuilderCoachPanel.tsx` (`AlignmentStrip` shows buckets, caption with sub-codes)
-- edit: `src/routes/assessment.$id.tsx` (AO review uses buckets)
-- edit: `src/routes/paper-set.$id.tsx` (`AOPanel`, `PerPaperPanel` use buckets)
+- `src/routes/new.tsx` — bucket rollup for `CoverageStrips`, drop weighting chip in AO selector
+- `src/components/BuilderCoachPanel.tsx` — remove sub-code caption + footer line
+- `src/routes/paper-set.$id.tsx` — remove sub-code caption in `AOPanel`
+- `src/routes/assessment.$id.tsx` — better recalc toast (updated/total/errors)
+- *(if option b chosen)* `src/routes/admin.syllabus.$id.tsx` + a small migration for bucket-level AO rows
