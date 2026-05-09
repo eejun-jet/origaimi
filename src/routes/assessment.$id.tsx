@@ -489,11 +489,22 @@ function EditorPage() {
       const payload = data as { updated?: number; total?: number; errors?: { id: string; error: string }[]; error?: string };
       if (payload?.error) throw new Error(payload.error);
       await loadAll();
+      const updated = payload?.updated ?? 0;
+      const total = payload?.total ?? 0;
       const failed = payload?.errors?.length ?? 0;
-      toast.success(
-        `Recalculated ${payload?.updated ?? 0} / ${payload?.total ?? 0} questions${failed > 0 ? ` (${failed} skipped)` : ""}`,
-        { id: t },
-      );
+      if (updated === 0 && total > 0) {
+        toast.warning(
+          `No questions changed (${total} processed${failed > 0 ? `, ${failed} skipped` : ""}). Tags may already be optimal — or check the section's allowed AO pool.`,
+          { id: t },
+        );
+      } else if (failed > 0 && payload?.errors?.[0]) {
+        toast.success(
+          `Recalculated ${updated} / ${total} (${failed} skipped: ${payload.errors[0].error})`,
+          { id: t },
+        );
+      } else {
+        toast.success(`Recalculated ${updated} / ${total} questions`, { id: t });
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e), { id: t });
     } finally {
