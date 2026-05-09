@@ -280,27 +280,53 @@ export function computeIntentSignals(snap: BuilderSnapshot): IntentSignal[] {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type AlignmentRow = {
-  code: string;
+  code: string; // bucket letter (A, B, C …) or original code if non-coded
   title?: string | null;
   targetPercent: number | null;
   plannedPercent: number;
+  /** Sub-codes (e.g. A1, A2 …) that contributed to this bucket and their share. */
+  subCodes?: { code: string; percent: number }[];
 };
 
 export function computeAlignmentSummary(snap: BuilderSnapshot): AlignmentRow[] {
-  const counts = aoFrequency(snap.sections);
-  const total = Array.from(counts.values()).reduce((a, b) => a + b, 0);
-  const codes = new Set<string>([
-    ...snap.paperAOs.map((a) => a.code),
-    ...counts.keys(),
+  // Mark-weighted, rolled-up bucket counts.
+  const bucketCounts = aoFrequency(snap.sections);
+  const total = Array.from(bucketCounts.values()).reduce((a, b) => a + b, 0);
+
+  // Per-sub-code counts (used to render a transparent breakdown caption).
+  const subCounts = new Map<string, number>();
+  for (const s of snap.sections) {
+    const codes = s.ao_codes ?? [];
+    if (codes.length === 0) continue;
+    const weight = (s.marks && s.marks > 0) ? s.marks : (s.num_questions || 1);
+    const per = weight / codes.length;
+    for (const c of codes) subCounts.set(c, (subCounts.get(c) ?? 0) + per);
+  }
+
+  const targets = bucketTargets(
+    snap.paperAOs.map((a) => ({ code: a.code, weighting_percent: a.weightingPercent ?? null })),
+  );
+
+  const buckets = new Set<string>([
+    ...snap.paperAOs.map((a) => bucketOf(a.code)),
+    ...bucketCounts.keys(),
   ]);
+
   const rows: AlignmentRow[] = [];
-  for (const code of codes) {
-    const ao = snap.paperAOs.find((a) => a.code === code);
+  for (const bucket of buckets) {
+    const planned = total > 0 ? Math.round(((bucketCounts.get(bucket) ?? 0) / total) * 100) : 0;
+    const target = targets.get(bucket);
+    const subCodes = Array.from(subCounts.entries())
+      .filter(([code]) => bucketOf(code) === bucket && code !== bucket)
+      .map(([code, n]) => ({ code, percent: total > 0 ? Math.round((n / total) * 100) : 0 }))
+      .filter((s) => s.percent > 0)
+      .sort((a, b) => a.code.localeCompare(b.code));
     rows.push({
-      code,
-      title: ao?.title ?? null,
-      targetPercent: typeof ao?.weightingPercent === "number" ? ao.weightingPercent : null,
-      plannedPercent: total > 0 ? Math.round(((counts.get(code) ?? 0) / total) * 100) : 0,
+      code: bucket,
+      title: null,
+      targetPercent: typeof target === "number" ? target : null,
+      plannedPercent: planned,
+      subCodes,
     });
   }
   return rows.sort((a, b) => a.code.localeCompare(b.code));
