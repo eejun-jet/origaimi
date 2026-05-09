@@ -29,6 +29,7 @@ function ImportPage() {
   const [department, setDepartment] = useState("");
   const [semester, setSemester] = useState("");
   const [year, setYear] = useState<string>(String(new Date().getFullYear()));
+  const [defaultAssessment, setDefaultAssessment] = useState<string>("EoY");
   const [committing, setCommitting] = useState(false);
 
   const onFile = async (file: File) => {
