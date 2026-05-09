@@ -29,6 +29,7 @@ type Paper = {
   variant_of: string | null;
   points_setting: number | null;
   year: number | null;
+  import_id: string | null;
 };
 type Deployment = {
   id: string;
@@ -44,6 +45,17 @@ type Deployment = {
   due_at: string | null;
   points: number | null;
 };
+type ImportRow = {
+  id: string;
+  filename: string | null;
+  department: string | null;
+  semester: string | null;
+  year: number | null;
+  rows_parsed: number;
+  papers_created: number;
+  deployments_created: number;
+  created_at: string;
+};
 
 function OversightPage() {
   const location = useLocation();
@@ -51,6 +63,7 @@ function OversightPage() {
   const { canSeeOversight, isSl } = useRoles();
   const [papers, setPapers] = useState<Paper[]>([]);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
+  const [imports, setImports] = useState<ImportRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -63,9 +76,10 @@ function OversightPage() {
   const load = async () => {
     setLoading(true);
     setLoadError(null);
-    const [pRes, dRes] = await Promise.all([
+    const [pRes, dRes, iRes] = await Promise.all([
       supabase.from("marking_papers").select("*").order("created_at", { ascending: false }).limit(2000),
       supabase.from("marking_deployments").select("*").limit(5000),
+      supabase.from("marking_imports").select("id,filename,department,semester,year,rows_parsed,papers_created,deployments_created,created_at").order("created_at", { ascending: false }).limit(200),
     ]);
     if (pRes.error || dRes.error) {
       const msg = pRes.error?.message ?? dRes.error?.message ?? "Failed to load dashboard data.";
@@ -74,6 +88,7 @@ function OversightPage() {
     }
     setPapers((pRes.data ?? []) as Paper[]);
     setDeployments((dRes.data ?? []) as Deployment[]);
+    setImports((iRes.data ?? []) as ImportRow[]);
     setLoading(false);
   };
 
@@ -160,20 +175,91 @@ function OversightPage() {
       .sort((a, b) => a.level.localeCompare(b.level));
   }, [markerDeployments, paperById]);
 
-  // Per-teacher rollup (marker scripts)
-  const perTeacher = useMemo(() => {
-    const m = new Map<string, { name: string; assigned: number; marked: number; flagged: number; deployments: number }>();
+  // Per-teacher rollups — markers and setters separately (a setter doesn't necessarily mark, and vice versa)
+  const perMarker = useMemo(() => {
+    const m = new Map<string, { name: string; assigned: number; marked: number; flagged: number; classes: number }>();
     for (const d of markerDeployments) {
       const key = d.teacher_name ?? "Unassigned";
-      const e = m.get(key) ?? { name: key, assigned: 0, marked: 0, flagged: 0, deployments: 0 };
+      const e = m.get(key) ?? { name: key, assigned: 0, marked: 0, flagged: 0, classes: 0 };
       e.assigned += d.script_count;
       e.marked += d.marked_count;
       e.flagged += d.flagged_count;
-      e.deployments += 1;
+      e.classes += 1;
       m.set(key, e);
     }
     return Array.from(m.values()).sort((a, b) => b.assigned - a.assigned);
   }, [markerDeployments]);
+
+  const perSetter = useMemo(() => {
+    const m = new Map<string, { name: string; papers: Set<string>; scripts: number }>();
+    for (const d of setterDeployments) {
+      const key = d.teacher_name ?? "Unassigned";
+      const e = m.get(key) ?? { name: key, papers: new Set<string>(), scripts: 0 };
+      e.papers.add(d.paper_id);
+      // attach scripts by summing marker deployments on that paper, so setters see "scripts they set"
+      const markersOnPaper = markerDeployments
+        .filter((md) => md.paper_id === d.paper_id)
+        .reduce((a, md) => a + md.script_count, 0);
+      e.scripts += markersOnPaper;
+      m.set(key, e);
+    }
+    return Array.from(m.values())
+      .map((e) => ({ name: e.name, papers: e.papers.size, scripts: e.scripts }))
+      .sort((a, b) => b.papers - a.papers);
+  }, [setterDeployments, markerDeployments]);
+
+  // Points by teacher and role (deployment-by-points)
+  const totalPoints = useMemo(
+    () => visibleDeployments.reduce((a, d) => a + (Number(d.points) || 0), 0),
+    [visibleDeployments],
+  );
+  const leaderboard = useMemo(() => {
+    const m = new Map<string, { name: string; setting: number; marking: number; moderation: number }>();
+    for (const d of visibleDeployments) {
+      const key = d.teacher_name ?? "Unassigned";
+      const e = m.get(key) ?? { name: key, setting: 0, marking: 0, moderation: 0 };
+      const pts = Number(d.points) || 0;
+      if (d.role === "setter") e.setting += pts;
+      else if (d.role === "marker") e.marking += pts;
+      else if (d.role === "moderator") e.moderation += pts;
+      m.set(key, e);
+    }
+    return Array.from(m.values())
+      .map((e) => ({ ...e, total: e.setting + e.marking + e.moderation }))
+      .filter((e) => e.total > 0)
+      .sort((a, b) => b.total - a.total);
+  }, [visibleDeployments]);
+  const maxLeaderTotal = leaderboard[0]?.total ?? 0;
+
+  // ----- Mutations -----
+  const deleteImport = async (imp: ImportRow) => {
+    if (!confirm(`Delete import "${imp.filename ?? imp.id}" and all its deployments? This cannot be undone.`)) return;
+    // Find papers tagged with this import
+    const { data: scopedPapers } = await supabase.from("marking_papers").select("id").eq("import_id", imp.id);
+    const paperIds = (scopedPapers ?? []).map((p: { id: string }) => p.id);
+    if (paperIds.length > 0) {
+      const { data: deps } = await supabase.from("marking_deployments").select("id").in("paper_id", paperIds);
+      const depIds = (deps ?? []).map((d: { id: string }) => d.id);
+      if (depIds.length > 0) {
+        await supabase.from("marking_scripts").delete().in("deployment_id", depIds);
+      }
+      await supabase.from("marking_deployments").delete().in("paper_id", paperIds);
+      await supabase.from("marking_papers").delete().in("id", paperIds);
+    }
+    await supabase.from("marking_imports").delete().eq("id", imp.id);
+    await load();
+  };
+
+  const deleteAllDeploymentData = async () => {
+    if (!confirm("Delete ALL imported deployment data (papers, deployments, scripts, imports)? This cannot be undone.")) return;
+    if (!confirm("Are you sure? This wipes every import and starts fresh.")) return;
+    // delete scripts referencing any deployment, then deployments, then papers, then imports
+    await supabase.from("marking_scripts").delete().not("deployment_id", "is", null);
+    await supabase.from("marking_deployments").delete().not("id", "is", null);
+    await supabase.from("marking_papers").delete().not("id", "is", null);
+    await supabase.from("marking_imports").delete().not("id", "is", null);
+    await load();
+  };
 
   if (isNestedRoute) {
     return <Outlet />;
@@ -230,12 +316,13 @@ function OversightPage() {
         )}
 
         {/* KPI strip */}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
           <Kpi label="Papers" value={papers.length} />
           <Kpi label="Markers deployed" value={new Set(markerDeployments.map((d) => d.teacher_name ?? "")).size} />
           <Kpi label="Scripts assigned" value={totalAssigned} />
           <Kpi label="% complete" value={`${pctComplete}%`} sub={`${totalMarked}/${totalAssigned}`} />
           <Kpi label="Overdue / Flagged" value={`${overdue} / ${totalFlagged}`} tone={overdue > 0 || totalFlagged > 0 ? "warn" : undefined} />
+          <Kpi label="Total points" value={totalPoints.toFixed(1)} />
         </div>
 
         {/* Filters */}
@@ -400,34 +487,164 @@ function OversightPage() {
           </CardContent>
         </Card>
 
-        {/* Per-teacher */}
+        {/* Scripts assigned per marker */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2"><Users className="h-4 w-4" /> Per-teacher load</CardTitle>
+            <CardTitle className="text-base flex items-center gap-2"><Users className="h-4 w-4" /> Scripts assigned per marker</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {perMarker.length === 0 ? (
+              <div className="p-6 text-sm text-muted-foreground">No markers loaded yet.</div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Marker</TableHead>
+                    <TableHead className="text-right">Classes</TableHead>
+                    <TableHead className="text-right">Scripts assigned</TableHead>
+                    <TableHead className="text-right">Marked</TableHead>
+                    <TableHead className="text-right">Flagged</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {perMarker.map((t) => (
+                    <TableRow key={t.name}>
+                      <TableCell className="font-medium">{t.name}</TableCell>
+                      <TableCell className="text-right tabular-nums">{t.classes}</TableCell>
+                      <TableCell className="text-right tabular-nums">{t.assigned}</TableCell>
+                      <TableCell className="text-right tabular-nums">{t.marked}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {t.flagged > 0 ? (
+                          <span className="inline-flex items-center gap-1 text-amber-600">
+                            <AlertTriangle className="h-3 w-3" /> {t.flagged}
+                          </span>
+                        ) : 0}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Setters */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2"><Users className="h-4 w-4" /> Papers set per setter</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {perSetter.length === 0 ? (
+              <div className="p-6 text-sm text-muted-foreground">No setters loaded yet.</div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Setter</TableHead>
+                    <TableHead className="text-right">Papers set</TableHead>
+                    <TableHead className="text-right">Scripts (downstream)</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {perSetter.map((t) => (
+                    <TableRow key={t.name}>
+                      <TableCell className="font-medium">{t.name}</TableCell>
+                      <TableCell className="text-right tabular-nums">{t.papers}</TableCell>
+                      <TableCell className="text-right tabular-nums">{t.scripts}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Deployment by points */}
+        <Card>
+          <CardHeader className="flex-row items-center justify-between">
+            <CardTitle className="text-base">Deployment by points</CardTitle>
+            <Button asChild variant="ghost" size="sm">
+              <Link to="/oversight/points">Full leaderboard →</Link>
+            </Button>
           </CardHeader>
           <CardContent>
-            {perTeacher.length === 0 ? (
-              <div className="text-sm text-muted-foreground">No teachers loaded yet.</div>
+            {leaderboard.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No points yet — points are computed during import.</div>
             ) : (
               <div className="space-y-3">
-                {perTeacher.map((t) => {
-                  const pct = t.assigned > 0 ? Math.round((t.marked / t.assigned) * 100) : 0;
+                {leaderboard.map((t) => {
+                  const w = (n: number) => (maxLeaderTotal > 0 ? Math.round((n / maxLeaderTotal) * 100) : 0);
                   return (
                     <div key={t.name} className="grid grid-cols-12 items-center gap-3 text-sm">
                       <div className="col-span-3 font-medium truncate">{t.name}</div>
-                      <div className="col-span-6"><Progress value={pct} /></div>
+                      <div className="col-span-6">
+                        <div className="flex h-3 w-full overflow-hidden rounded bg-muted">
+                          <div className="bg-violet-500" style={{ width: `${w(t.setting)}%` }} title={`Setting ${t.setting.toFixed(1)}`} />
+                          <div className="bg-blue-500" style={{ width: `${w(t.marking)}%` }} title={`Marking ${t.marking.toFixed(1)}`} />
+                          <div className="bg-emerald-500" style={{ width: `${w(t.moderation)}%` }} title={`Moderation ${t.moderation.toFixed(1)}`} />
+                        </div>
+                      </div>
                       <div className="col-span-3 text-right tabular-nums text-muted-foreground">
-                        {t.marked}/{t.assigned} marked · {t.deployments} class{t.deployments === 1 ? "" : "es"}
-                        {t.flagged > 0 && (
-                          <span className="ml-2 inline-flex items-center gap-1 text-amber-600">
-                            <AlertTriangle className="h-3 w-3" /> {t.flagged}
-                          </span>
-                        )}
+                        {t.total.toFixed(1)} pts
+                        <span className="ml-2 text-[11px]">
+                          (S {t.setting.toFixed(1)} · M {t.marking.toFixed(1)} · Mod {t.moderation.toFixed(1)})
+                        </span>
                       </div>
                     </div>
                   );
                 })}
+                <div className="flex items-center gap-3 pt-2 text-[11px] text-muted-foreground">
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-violet-500" /> Setting</span>
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-blue-500" /> Marking</span>
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-emerald-500" /> Moderation</span>
+                </div>
               </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Imports management */}
+        <Card>
+          <CardHeader className="flex-row items-center justify-between">
+            <CardTitle className="text-base">Uploaded imports</CardTitle>
+            {imports.length > 0 && (
+              <Button variant="destructive" size="sm" onClick={deleteAllDeploymentData}>
+                Delete ALL deployment data
+              </Button>
+            )}
+          </CardHeader>
+          <CardContent className="p-0">
+            {imports.length === 0 ? (
+              <div className="p-6 text-sm text-muted-foreground">No imports recorded yet.</div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>File</TableHead>
+                    <TableHead>Department</TableHead>
+                    <TableHead>Year / Semester</TableHead>
+                    <TableHead className="text-right">Papers</TableHead>
+                    <TableHead className="text-right">Deployments</TableHead>
+                    <TableHead>Uploaded</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {imports.map((imp) => (
+                    <TableRow key={imp.id}>
+                      <TableCell className="font-medium truncate max-w-[260px]">{imp.filename ?? "—"}</TableCell>
+                      <TableCell className="text-sm">{imp.department ?? "—"}</TableCell>
+                      <TableCell className="text-sm">{[imp.year, imp.semester].filter(Boolean).join(" · ") || "—"}</TableCell>
+                      <TableCell className="text-right tabular-nums">{imp.papers_created}</TableCell>
+                      <TableCell className="text-right tabular-nums">{imp.deployments_created}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{new Date(imp.created_at).toLocaleString()}</TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="outline" size="sm" onClick={() => deleteImport(imp)}>Delete</Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             )}
           </CardContent>
         </Card>
