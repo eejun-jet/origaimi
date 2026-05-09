@@ -242,14 +242,16 @@ export function BuilderCoachPanel({
 // ────────────────────────────────────────────────────────────────────────────
 
 const STARTER_PROMPTS_PRE = [
-  "Is the AO mix balanced for this paper?",
-  "Suggest a transfer context for one section.",
-  "How can I push this beyond recall?",
+  "Is the AO mix on target for this paper?",
+  "Is the pitch right for this level?",
+  "Make the question style more varied.",
+  "Suggest one Singapore transfer context.",
 ];
 const STARTER_PROMPTS_POST = [
   "Which question feels weakest, and why?",
-  "Suggest a harder variant of one question.",
+  "Is the draft pitched too easy for this level?",
   "Spot any AO/LO drift in the draft.",
+  "Suggest a harder variant of one question.",
 ];
 
 function CoachChat({
