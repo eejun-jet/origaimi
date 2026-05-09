@@ -224,6 +224,12 @@ function OversightPage() {
           </div>
         </div>
 
+        {loadError && (
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+            Couldn't load dashboard data: {loadError}
+          </div>
+        )}
+
         {/* KPI strip */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
           <Kpi label="Papers" value={papers.length} />
