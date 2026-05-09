@@ -272,9 +272,10 @@ function OversightPage() {
             {loading ? (
               <div className="p-6 text-sm text-muted-foreground">Loading…</div>
             ) : filtered.length === 0 ? (
-              <div className="p-8 text-center text-sm text-muted-foreground">
+             <div className="p-8 text-center text-sm text-muted-foreground">
                 No deployments yet.{" "}
-                <Link to="/oversight/import" className="underline">Import your setters/markers list</Link> to get started.
+                <Link to="/oversight/import" className="underline">Import your setters/markers list</Link>{" "}
+                or <a href="/templates/setters-markers-template.xlsx" download className="underline">download the blank template</a> to get started.
               </div>
             ) : (
               <Table>
