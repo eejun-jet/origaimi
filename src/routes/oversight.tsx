@@ -175,20 +175,94 @@ function OversightPage() {
       .sort((a, b) => a.level.localeCompare(b.level));
   }, [markerDeployments, paperById]);
 
-  // Per-teacher rollup (marker scripts)
-  const perTeacher = useMemo(() => {
-    const m = new Map<string, { name: string; assigned: number; marked: number; flagged: number; deployments: number }>();
+  // Per-teacher rollups — markers and setters separately (a setter doesn't necessarily mark, and vice versa)
+  const perMarker = useMemo(() => {
+    const m = new Map<string, { name: string; assigned: number; marked: number; flagged: number; classes: number }>();
     for (const d of markerDeployments) {
       const key = d.teacher_name ?? "Unassigned";
-      const e = m.get(key) ?? { name: key, assigned: 0, marked: 0, flagged: 0, deployments: 0 };
+      const e = m.get(key) ?? { name: key, assigned: 0, marked: 0, flagged: 0, classes: 0 };
       e.assigned += d.script_count;
       e.marked += d.marked_count;
       e.flagged += d.flagged_count;
-      e.deployments += 1;
+      e.classes += 1;
       m.set(key, e);
     }
     return Array.from(m.values()).sort((a, b) => b.assigned - a.assigned);
   }, [markerDeployments]);
+
+  const perSetter = useMemo(() => {
+    const m = new Map<string, { name: string; papers: Set<string>; scripts: number }>();
+    for (const d of setterDeployments) {
+      const key = d.teacher_name ?? "Unassigned";
+      const e = m.get(key) ?? { name: key, papers: new Set<string>(), scripts: 0 };
+      e.papers.add(d.paper_id);
+      // attach scripts by summing marker deployments on that paper, so setters see "scripts they set"
+      const markersOnPaper = markerDeployments
+        .filter((md) => md.paper_id === d.paper_id)
+        .reduce((a, md) => a + md.script_count, 0);
+      e.scripts += markersOnPaper;
+      m.set(key, e);
+    }
+    return Array.from(m.values())
+      .map((e) => ({ name: e.name, papers: e.papers.size, scripts: e.scripts }))
+      .sort((a, b) => b.papers - a.papers);
+  }, [setterDeployments, markerDeployments]);
+
+  // Points by teacher and role (deployment-by-points)
+  const totalPoints = useMemo(
+    () => visibleDeployments.reduce((a, d) => a + (Number(d.points) || 0), 0),
+    [visibleDeployments],
+  );
+  const leaderboard = useMemo(() => {
+    const m = new Map<string, { name: string; setting: number; marking: number; moderation: number }>();
+    for (const d of visibleDeployments) {
+      const key = d.teacher_name ?? "Unassigned";
+      const e = m.get(key) ?? { name: key, setting: 0, marking: 0, moderation: 0 };
+      const pts = Number(d.points) || 0;
+      if (d.role === "setter") e.setting += pts;
+      else if (d.role === "marker") e.marking += pts;
+      else if (d.role === "moderator") e.moderation += pts;
+      m.set(key, e);
+    }
+    return Array.from(m.values())
+      .map((e) => ({ ...e, total: e.setting + e.marking + e.moderation }))
+      .filter((e) => e.total > 0)
+      .sort((a, b) => b.total - a.total);
+  }, [visibleDeployments]);
+  const maxLeaderTotal = leaderboard[0]?.total ?? 0;
+
+  // ----- Mutations -----
+  const deleteImport = async (imp: ImportRow) => {
+    if (!confirm(`Delete import "${imp.filename ?? imp.id}" and all its deployments? This cannot be undone.`)) return;
+    // Find papers tagged with this import
+    const { data: scopedPapers } = await supabase.from("marking_papers").select("id").eq("import_id", imp.id);
+    const paperIds = (scopedPapers ?? []).map((p: { id: string }) => p.id);
+    if (paperIds.length > 0) {
+      const { data: deps } = await supabase.from("marking_deployments").select("id").in("paper_id", paperIds);
+      const depIds = (deps ?? []).map((d: { id: string }) => d.id);
+      if (depIds.length > 0) {
+        await supabase.from("marking_scripts").delete().in("deployment_id", depIds);
+      }
+      await supabase.from("marking_deployments").delete().in("paper_id", paperIds);
+      await supabase.from("marking_papers").delete().in("id", paperIds);
+    }
+    await supabase.from("marking_imports").delete().eq("id", imp.id);
+    await load();
+  };
+
+  const deleteAllDeploymentData = async () => {
+    if (!confirm("Delete ALL imported deployment data (papers, deployments, scripts, imports)? This cannot be undone.")) return;
+    if (!confirm("Are you sure? This wipes every import and starts fresh.")) return;
+    const { data: allDeps } = await supabase.from("marking_deployments").select("id");
+    const depIds = (allDeps ?? []).map((d: { id: string }) => d.id);
+    if (depIds.length > 0) await supabase.from("marking_scripts").delete().in("id", depIds.length ? [] : []); // no-op safety
+    // delete scripts referencing any deployment
+    await supabase.from("marking_scripts").delete().not("deployment_id", "is", null);
+    await supabase.from("marking_deployments").delete().not("id", "is", null);
+    await supabase.from("marking_papers").delete().not("id", "is", null);
+    await supabase.from("marking_imports").delete().not("id", "is", null);
+    await load();
+  };
 
   if (isNestedRoute) {
     return <Outlet />;
