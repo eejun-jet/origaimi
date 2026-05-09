@@ -647,36 +647,6 @@ function OversightPage() {
             )}
           </CardContent>
         </Card>
-
-        {/* Setting load */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Setting load (points)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {(() => {
-              const rows = leaderboard.filter((t) => t.setting > 0).sort((a, b) => b.setting - a.setting);
-              const max = rows[0]?.setting ?? 0;
-              if (rows.length === 0) return <div className="text-sm text-muted-foreground">No setting points yet.</div>;
-              return (
-                <div className="space-y-3">
-                  {rows.map((t) => (
-                    <div key={t.name} className="grid grid-cols-12 items-center gap-3 text-sm">
-                      <div className="col-span-3 font-medium truncate">{t.name}</div>
-                      <div className="col-span-6">
-                        <div className="h-3 w-full overflow-hidden rounded bg-muted">
-                          <div className="h-full bg-violet-500" style={{ width: `${max > 0 ? Math.round((t.setting / max) * 100) : 0}%` }} />
-                        </div>
-                      </div>
-                      <div className="col-span-3 text-right tabular-nums text-muted-foreground">{t.setting.toFixed(1)} pts</div>
-                    </div>
-                  ))}
-                </div>
-              );
-            })()}
-          </CardContent>
-        </Card>
-
         {/* Imports management */}
         <Card>
           <CardHeader className="flex-row items-center justify-between">
