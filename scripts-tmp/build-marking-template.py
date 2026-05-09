@@ -60,8 +60,10 @@ ws.cell(row=row, column=1).fill = roster_hdr_fill
 ws.merge_cells(start_row=row, end_row=row, start_column=1, end_column=len(HEADERS))
 row += 1
 
+# Roster laid out as 4 visible columns (A..D) but the dropdown source is a single
+# continuous column (Lists!E) so Excel/Sheets dropdowns stay reliable.
 ROSTER_COLS = 4
-ROSTER_ROWS = -(-len(ROSTER) // ROSTER_COLS)  # ceil
+ROSTER_ROWS = -(-len(ROSTER) // ROSTER_COLS)
 roster_start_row = row
 for r in range(ROSTER_ROWS):
     for c in range(ROSTER_COLS):
@@ -71,6 +73,19 @@ for r in range(ROSTER_ROWS):
             cell.border = border
     row += 1
 roster_end_row = row - 1
+# Hidden mirror column on Deployment col W (23) — single continuous list that
+# Excel can use as a dropdown source. Each cell links to the visible roster.
+MIRROR_COL = 23  # W
+for idx in range(len(ROSTER)):
+    c = idx // ROSTER_ROWS  # 0..3
+    r_off = idx % ROSTER_ROWS
+    src_col = get_column_letter(c + 1)
+    src_row = roster_start_row + r_off
+    ws.cell(row=roster_start_row + idx, column=MIRROR_COL,
+            value=f"={src_col}{src_row}")
+mirror_start = roster_start_row
+mirror_end = roster_start_row + len(ROSTER) - 1
+ws.column_dimensions[get_column_letter(MIRROR_COL)].hidden = True
 row += 1
 
 # Header row
@@ -223,13 +238,9 @@ for i, v in enumerate(TERMS,      start=2): ws_lists.cell(row=i, column=3, value
 ws_lists.sheet_state = "hidden"
 
 # --- Defined names ---
-# Teachers: union of 4 roster columns on Deployment sheet
-roster_refs = []
-for c in range(1, ROSTER_COLS + 1):
-    col = get_column_letter(c)
-    roster_refs.append(f"Deployment!${col}${roster_start_row}:${col}${roster_end_row}")
-teachers_ref = ",".join(roster_refs)
-
+# Teachers: single continuous hidden mirror column on Deployment (col W)
+mcol = get_column_letter(MIRROR_COL)
+teachers_ref = f"Deployment!${mcol}${mirror_start}:${mcol}${mirror_end}"
 wb.defined_names["Teachers"]    = DefinedName("Teachers",    attr_text=teachers_ref)
 wb.defined_names["Assessments"] = DefinedName("Assessments", attr_text=f"Lists!$A$2:$A${len(ASSESSMENTS)+1}")
 wb.defined_names["Streams"]     = DefinedName("Streams",     attr_text=f"Lists!$B$2:$B${len(STREAMS)+1}")
