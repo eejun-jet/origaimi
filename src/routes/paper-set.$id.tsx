@@ -984,7 +984,7 @@ function AOPanel({
 }
 
 function PerPaperPanel({ rows, aoDefs }: { rows: { paper: PaperRow; marks: number; questions: number; aoMap: Map<string, number>; koCount: number }[]; aoDefs: AODef[] }) {
-  const aoCodes = aoDefs.map((a) => a.code);
+  const aoCodes = bucketsFromDefs(aoDefs);
   return (
     <div className="rounded-lg border border-border bg-card overflow-x-auto">
       <table className="w-full text-sm">
