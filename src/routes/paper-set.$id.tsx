@@ -11,6 +11,7 @@ import {
   buildDisciplineLookup,
   normaliseDiscipline,
 } from "@/lib/discipline-scope";
+import { bucketOf, bucketTargets, bucketsFromDefs, rollupCounts } from "@/lib/ao-rollup";
 
 export const Route = createFileRoute("/paper-set/$id")({
   component: PaperSetView,
@@ -209,6 +210,20 @@ function PaperSetView() {
       const per = effectiveMarks / codes.length;
       for (const c of codes) aoTotals.set(c, (aoTotals.get(c) ?? 0) + per);
     }
+    // Roll granular sub-codes (A1, A2, B1, …) up to letter buckets (A, B, …).
+    return rollupCounts(aoTotals);
+  }, [flatQuestions]);
+
+  // Per-sub-code mark share — used to render the transparent "rolled up from
+  // A1 12%, A2 18%, …" caption beneath each bucket bar.
+  const aoSubMarkShare = useMemo(() => {
+    const aoTotals = new Map<string, number>();
+    for (const { q, effectiveMarks } of flatQuestions) {
+      const codes = (q.ao_codes ?? []).filter(Boolean);
+      if (codes.length === 0) continue;
+      const per = effectiveMarks / codes.length;
+      for (const c of codes) aoTotals.set(c, (aoTotals.get(c) ?? 0) + per);
+    }
     return aoTotals;
   }, [flatQuestions]);
 
@@ -339,10 +354,13 @@ function PaperSetView() {
         const per = x.effectiveMarks / codes.length;
         for (const c of codes) aoMap.set(c, (aoMap.get(c) ?? 0) + per);
       }
+      // Roll sub-codes up to letter buckets so per-paper columns line up
+      // with the canonical AO buckets (A, B, …).
+      const aoBucketMap = rollupCounts(aoMap);
       const kosTouched = new Set(
         qs.flatMap((x) => (x.q.knowledge_outcomes ?? []).filter(Boolean)),
       );
-      return { paper: p, marks, questions: qs.length, aoMap, koCount: kosTouched.size };
+      return { paper: p, marks, questions: qs.length, aoMap: aoBucketMap, koCount: kosTouched.size };
     });
   }, [papers, flatQuestions]);
 
@@ -591,7 +609,7 @@ function PaperSetView() {
             onFilterChange={setCoverageFilter}
           />
         ) : tab === "ao" ? (
-          <AOPanel aoDefs={aoDefs} aoMarkShare={aoMarkShare} totalMarks={totalMarks} />
+          <AOPanel aoDefs={aoDefs} aoMarkShare={aoMarkShare} aoSubMarkShare={aoSubMarkShare} totalMarks={totalMarks} />
         ) : tab === "papers" ? (
           <PerPaperPanel rows={perPaper} aoDefs={aoDefs} />
         ) : (
@@ -882,53 +900,81 @@ function KoDetail({ group, papers, onBack }: { group: KoBucket; papers: PaperRow
   );
 }
 
-function AOPanel({ aoDefs, aoMarkShare, totalMarks }: { aoDefs: AODef[]; aoMarkShare: Map<string, number>; totalMarks: number }) {
+function AOPanel({
+  aoDefs,
+  aoMarkShare,
+  aoSubMarkShare,
+  totalMarks,
+}: {
+  aoDefs: AODef[];
+  aoMarkShare: Map<string, number>; // already rolled up to letter buckets
+  aoSubMarkShare: Map<string, number>; // raw per-sub-code marks (A1, A2, …)
+  totalMarks: number;
+}) {
   if (totalMarks === 0) {
     return <p className="text-sm text-muted-foreground">No marks tagged yet — papers may need re-parsing.</p>;
   }
-  const codes = Array.from(new Set([...aoDefs.map((a) => a.code), ...Array.from(aoMarkShare.keys())])).sort();
+  const targets = bucketTargets(aoDefs);
+  const buckets = Array.from(
+    new Set([
+      ...bucketsFromDefs(aoDefs),
+      ...Array.from(aoMarkShare.keys()),
+    ]),
+  ).sort();
   return (
     <div className="rounded-lg border border-border bg-card p-4 space-y-3">
       <p className="text-sm text-muted-foreground">
-        AO mark-share aggregated across the set, compared with the syllabus weighting where one is declared.
+        AO mark-share aggregated across the set. Sub-codes (A1–A5, B1–B7, …) are rolled up to their letter bucket so the share matches the syllabus AO weighting.
       </p>
-      <div className="space-y-2">
-        {codes.map((code) => {
-          const def = aoDefs.find((a) => a.code === code);
-          const marks = aoMarkShare.get(code) ?? 0;
+      <div className="space-y-3">
+        {buckets.map((bucket) => {
+          const marks = aoMarkShare.get(bucket) ?? 0;
           const observed = totalMarks > 0 ? (marks / totalMarks) * 100 : 0;
-          const declared = def?.weighting_percent ?? null;
+          const declared = targets.get(bucket) ?? null;
           const delta = declared != null ? observed - declared : null;
           const danger = delta != null && Math.abs(delta) > 8;
+          // Sub-codes that contributed to this bucket.
+          const subs = Array.from(aoSubMarkShare.entries())
+            .filter(([code]) => bucketOf(code) === bucket && code !== bucket)
+            .map(([code, m]) => ({ code, percent: totalMarks > 0 ? (m / totalMarks) * 100 : 0 }))
+            .filter((s) => s.percent > 0)
+            .sort((a, b) => a.code.localeCompare(b.code));
           return (
-            <div key={code} className="grid grid-cols-[80px_minmax(0,1fr)_auto] items-center gap-3 text-sm">
-              <div className="font-mono">{code}</div>
-              <div className="relative h-3 rounded bg-muted overflow-hidden">
-                <div
-                  className="h-full bg-primary"
-                  style={{ width: `${Math.min(100, observed)}%` }}
-                />
-                {declared != null ? (
+            <div key={bucket} className="space-y-1">
+              <div className="grid grid-cols-[80px_minmax(0,1fr)_auto] items-center gap-3 text-sm">
+                <div className="font-mono">{bucket}</div>
+                <div className="relative h-3 rounded bg-muted overflow-hidden">
                   <div
-                    className="absolute top-0 bottom-0 w-0.5 bg-foreground/60"
-                    style={{ left: `${Math.min(100, declared)}%` }}
-                    title={`Declared ${declared}%`}
+                    className="h-full bg-primary"
+                    style={{ width: `${Math.min(100, observed)}%` }}
                   />
-                ) : null}
+                  {declared != null ? (
+                    <div
+                      className="absolute top-0 bottom-0 w-0.5 bg-foreground/60"
+                      style={{ left: `${Math.min(100, declared)}%` }}
+                      title={`Declared ${declared}%`}
+                    />
+                  ) : null}
+                </div>
+                <div className="tabular-nums text-right">
+                  {observed.toFixed(0)}%
+                  {declared != null ? (
+                    <span className={`ml-2 text-xs ${danger ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
+                      vs {declared}% ({delta && delta > 0 ? "+" : ""}{delta?.toFixed(0)}pp)
+                    </span>
+                  ) : null}
+                </div>
               </div>
-              <div className="tabular-nums text-right">
-                {observed.toFixed(0)}%
-                {declared != null ? (
-                  <span className={`ml-2 text-xs ${danger ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
-                    vs {declared}% ({delta && delta > 0 ? "+" : ""}{delta?.toFixed(0)}pp)
-                  </span>
-                ) : null}
-              </div>
+              {subs.length > 0 ? (
+                <p className="pl-[92px] text-xs text-muted-foreground">
+                  rolled up from {subs.map((s) => `${s.code} ${s.percent.toFixed(0)}%`).join(", ")}
+                </p>
+              ) : null}
             </div>
           );
         })}
       </div>
-      {codes.includes("Untagged") ? (
+      {aoMarkShare.has("Untagged") ? (
         <p className="text-xs text-muted-foreground">
           "Untagged" marks come from questions whose AO codes weren't classified during parsing.
         </p>
@@ -938,7 +984,7 @@ function AOPanel({ aoDefs, aoMarkShare, totalMarks }: { aoDefs: AODef[]; aoMarkS
 }
 
 function PerPaperPanel({ rows, aoDefs }: { rows: { paper: PaperRow; marks: number; questions: number; aoMap: Map<string, number>; koCount: number }[]; aoDefs: AODef[] }) {
-  const aoCodes = aoDefs.map((a) => a.code);
+  const aoCodes = bucketsFromDefs(aoDefs);
   return (
     <div className="rounded-lg border border-border bg-card overflow-x-auto">
       <table className="w-full text-sm">

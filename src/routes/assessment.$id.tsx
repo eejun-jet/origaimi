@@ -24,6 +24,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { BLOOMS } from "@/lib/syllabus";
 import { toSectioned, sectionAtPosition, getSbqSkill, KNOWLEDGE_OUTCOMES, isHumanitiesSubject, isScienceSubject, type Section } from "@/lib/sections";
 import { expandQuestionTags } from "@/lib/coverage-infer";
+import { bucketOf, bucketTargets, bucketsFromDefs } from "@/lib/ao-rollup";
 import {
   inferInScopeDisciplines,
   buildDisciplineLookup,
@@ -1983,18 +1984,23 @@ function computeCoverage(
   const koOf = (q: Question) => expandedById.get(q.id)?.knowledge_outcomes ?? q.knowledge_outcomes ?? [];
   const loOf = (q: Question) => expandedById.get(q.id)?.learning_outcomes ?? q.learning_outcomes ?? [];
 
-  // ── Paper-wide AO targets from syllabus weightings + actuals from questions
-  const aoCodeSet = new Set<string>();
-  aoDefs.forEach((d) => aoCodeSet.add(d.code));
-  sections.forEach((s) => (s.ao_codes ?? []).forEach((c) => aoCodeSet.add(c)));
-  questions.forEach((q) => aoOf(q).forEach((c) => aoCodeSet.add(c)));
+  // ── Paper-wide AO targets, rolled up to letter buckets (A, B, C …).
+  // Sub-codes (A1..A5, B1..B7, …) are aggregated into their bucket so the
+  // review reflects the syllabus-level AO weighting rather than splitting
+  // marks across what are really sub-objectives of one AO.
+  const targetsByBucket = bucketTargets(aoDefs);
+  const bucketSet = new Set<string>(bucketsFromDefs(aoDefs));
+  sections.forEach((s) => (s.ao_codes ?? []).forEach((c) => bucketSet.add(bucketOf(c))));
+  questions.forEach((q) => aoOf(q).forEach((c) => bucketSet.add(bucketOf(c))));
 
-  const paperAOs = Array.from(aoCodeSet).sort().map((code) => {
-    const def = aoDefs.find((d) => d.code === code) ?? null;
-    const weighting = def?.weighting_percent ?? null;
+  const paperAOs = Array.from(bucketSet).sort().map((bucket) => {
+    const weighting = targetsByBucket.get(bucket) ?? null;
     const target = weighting != null ? Math.round((weighting / 100) * totalMarks) : 0;
-    const actual = questions.reduce((sum, q) => sum + (aoOf(q).includes(code) ? q.marks : 0), 0);
-    return { code, title: def?.title ?? null, target, actual, weighting };
+    const actual = questions.reduce(
+      (sum, q) => sum + (aoOf(q).some((c) => bucketOf(c) === bucket) ? q.marks : 0),
+      0,
+    );
+    return { code: bucket, title: null as string | null, target, actual, weighting };
   });
 
   // Discipline scoping: drop KOs/LOs that belong only to out-of-scope disciplines
@@ -2059,8 +2065,9 @@ function computeCoverage(
   const bySection: Coverage["bySection"] = {};
   for (const s of sections) {
     const qs = questions.filter((q) => sectionByPos[q.position]?.id === s.id);
-    const aoCodes = new Set<string>([...(s.ao_codes ?? [])]);
-    qs.forEach((q) => aoOf(q).forEach((c) => aoCodes.add(c)));
+    const aoBuckets = new Set<string>();
+    (s.ao_codes ?? []).forEach((c) => aoBuckets.add(bucketOf(c)));
+    qs.forEach((q) => aoOf(q).forEach((c) => aoBuckets.add(bucketOf(c))));
     const kos = new Set<string>([...(s.knowledge_outcomes ?? [])]);
     qs.forEach((q) => koOf(q).forEach((c) => kos.add(c)));
     const los = new Set<string>([...(s.learning_outcomes ?? [])]);
@@ -2073,10 +2080,13 @@ function computeCoverage(
         target: s.marks,
         actual: qs.reduce((sum, q) => sum + q.marks, 0),
       },
-      aos: Array.from(aoCodes).sort().map((code) => ({
-        code,
-        title: aoDefs.find((d) => d.code === code)?.title ?? null,
-        actual: qs.reduce((sum, q) => sum + (aoOf(q).includes(code) ? q.marks : 0), 0),
+      aos: Array.from(aoBuckets).sort().map((bucket) => ({
+        code: bucket,
+        title: null as string | null,
+        actual: qs.reduce(
+          (sum, q) => sum + (aoOf(q).some((c) => bucketOf(c) === bucket) ? q.marks : 0),
+          0,
+        ),
       })),
       kos: Array.from(kos).map((name) => ({
         name,
@@ -3171,7 +3181,7 @@ function CoveragePanel({
 
   // Find evidence questions for a target (per-paper rollup)
   const evidenceFor = (t: CoverageTarget): Question[] => {
-    if (t.kind === "ao") return questions.filter((q) => (q.ao_codes ?? []).includes(t.code));
+    if (t.kind === "ao") return questions.filter((q) => (q.ao_codes ?? []).some((c) => bucketOf(c) === t.code));
     if (t.kind === "ko") return questions.filter((q) => (q.knowledge_outcomes ?? []).includes(t.name));
     return questions.filter((q) => (q.learning_outcomes ?? []).includes(t.text));
   };

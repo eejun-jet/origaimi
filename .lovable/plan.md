@@ -1,62 +1,75 @@
-## Goal
+## What's wrong today
 
-Sharpen the Assessment Coach so teachers get **specific, syllabus-grounded, evidence-based** guidance on alignment, question style, pitch, and variety — without making the panel chatty or preachy. Today the Coach reads the snapshot + syllabus aims/rationale/command words. It does not look at the syllabus AO weighting table, the question bank of past papers, or the previously generated questions in the same paper. That's the headroom.
+The AO review treats `A1`, `A2`, `A3` as if they were the top-level AO buckets, with stored weightings of `40 / 40 / 20`. That is why `A2` and `A3` show only a few percent — most marks are getting tagged with sibling codes (`A4`, `A5`, `B1..B7`, `C1..C6`) that the panel shows as separate rows.
 
-## What the Coach can say better today
+The correct model is letter-prefix buckets:
 
-1. **Syllabus alignment — beyond aims text**
-   - Pull the **AO weighting table** (e.g. SS TLS: AO‑A ~50%, AO‑B ~50%, AO‑C practical-only) directly from `syllabus_documents` and feed it to the Coach as a *target distribution*, then compare against the teacher's planned AO mix from `sections[].ao_codes × marks`.
-   - Surface deltas as concrete one-liners: *"Plan is ~75% AO‑A vs syllabus target ~50%. Consider shifting one structured question to AO‑B."*
-   - Pull `syllabus_topics.outcome_categories` (KO bands) so coverage feedback names the missing band rather than a vague "narrow coverage".
-   - For multi-discipline syllabi (Combined Science), check **per-discipline balance** — flag if Biology has 0 marks while Physics+Chem dominate.
+```text
+A  =  A1 + A2 + A3 + A4 + A5             -> 50%
+B  =  B1 + B2 + B3 + B4 + B5 + B6 + B7   -> 50%
+C  =  C1 + C2 + C3 + C4 + C5 + C6        -> only if the syllabus declares it
+```
 
-2. **Pitching (difficulty calibration)**
-   - Use `question_bank_items` (past papers already classified to this syllabus) as a **difficulty anchor**: median marks-per-command-word, command-word frequency, and Bloom mix at this level.
-   - Compare the planned section mix (command words × marks × Bloom hints) against that anchor and flag drift: *"Your Paper 2 looks lighter on 'explain/justify' than the typical N(A)-level paper at this level."*
-   - Post-generation: re-run the same anchor against the drafted questions for "this draft pitches one band easier than past papers" cues.
+The number after the letter is the sub-objective, not a separate AO.
 
-3. **Question style & variety**
-   - Compute a **style fingerprint** of the plan/draft: command-word diversity, stimulus types (text, data table, source extract, diagram), context types (familiar / unfamiliar / Singapore / global), and item formats (MCQ, short, structured, essay/source).
-   - Coach calls out low-diversity patterns (e.g. *"5 of 6 stems start with 'state' or 'describe' — consider one 'evaluate' or 'compare'"*).
-   - For source-based subjects (SS, History, English comprehension) — flag missing source-skill verbs (infer, compare sources, assess reliability) when AO‑B is targeted.
-   - Pull a small **exemplar set** (1–2 past-paper question stems matching the LO) into the chat context so the Coach can say *"a typical SS SBQ on this LO uses two contrasting sources"* instead of generic style advice.
+## Fix
 
-4. **Pre vs post coaching split**
-   - **Pre** (intent): focus on *plan* — AO/KO/LO coverage vs syllabus targets, pitch target, intended variety.
-   - **Post** (review): focus on *draft* — actual command-word/Bloom/stimulus distribution, repeated stems, cognitive plateau, pitch drift, alignment of each Q's tagged LO/AO to its stem.
-   - Add a third category bucket — **`pitch`** and **`style`** — alongside existing `ao_balance`, `coverage`, etc., so chips are scannable.
+### 1. Add an AO rollup helper
 
-5. **Deterministic signals (free, instant, no AI calls)**
-   Extend `src/lib/intent-coach.ts` so the cheap layer already covers:
-   - AO-target delta (needs syllabus weighting in snapshot).
-   - Per-discipline mark balance for Combined Science / multi-paper syllabi.
-   - Command-word concentration (>60% one verb).
-   - Stimulus-type concentration (all text-only when syllabus expects data/source work).
-   - Bloom plateau (only 'remember/understand' for an AO‑B-heavy paper).
-   - Pitch hint vs syllabus level (e.g. only 1-mark items in an O-Level paper).
+New file: `src/lib/ao-rollup.ts`
 
-6. **AI layer upgrades (`coach-intent` + `coach-chat`)**
-   - Inject **AO weighting table + per-AO description**, **command-word glossary in full**, **top KO bands**, and a **5-stem exemplar excerpt** from `question_bank_items` for the same syllabus/level.
-   - Add explicit `pitch_target` and `style_target` fields to the tool schema so suggestions are categorised cleanly.
-   - Tighten the system prompt with the new categories and examples ("Two of three sections lean on 'state' — consider…").
-   - Keep the "silence is better than noise" rule; cap at 3 obs / 2 suggestions.
+- `bucketOf(code)`: returns the letter prefix (`"A"`, `"B"`, `"C"`, …). Falls back to the original code if it doesn't match the `^[A-Z]\d+$` shape, so non-coded tags ("Untagged", custom labels) are preserved.
+- `rollupCounts(map)`: takes a `Map<code, number>` and returns a `Map<bucket, number>`.
+- `bucketTargets(aoDefs)`: aggregates declared `weighting_percent` per bucket from `syllabus_assessment_objectives`. If any single canonical bucket already has a declared weight (e.g. `A=50`), use that. If only sub-codes are stored (`A1=40, A2=40, A3=20`), sum them into the bucket (`A=100`). Then re-normalise so buckets sum to 100. For Chemistry/Combined Science this yields `A=50, B=50` (and `C` when present).
 
-7. **UI affordances in `BuilderCoachPanel`**
-   - Add a compact **"Alignment snapshot"** strip above signals: target-vs-plan AO bars (e.g. AO‑A 50% target / 72% plan) — click to expand for KO bands. Read-only, no nagging.
-   - Add a **"Style snapshot"** chip row: command-word diversity, format mix, stimulus mix.
-   - Group AI observations under labelled sub-headers: Alignment · Pitch · Style · Coverage. Same sparse cap.
-   - Starter prompts updated: *"Is the pitch right for this level?"*, *"Make the style more varied."*, *"Show me the AO target vs my plan."*
+This keeps existing data working without a database migration.
 
-## Technical notes (for the engineer)
+### 2. Assessment Coach AO snapshot — `src/lib/intent-coach.ts`
 
-- `BuilderSnapshot` already carries `paperAOs` with `weightingPercent`. The deterministic AO-delta check just needs to read that and compute `planned% − target%` from `sections[].ao_codes × marks`.
-- `coach-intent` and `coach-chat` should select additional columns: `syllabus_documents.ao_weighting_table` (already used elsewhere via `paperAOs`) and `syllabus_topics.outcome_categories`. For exemplars: `question_bank_items` filtered by `syllabus_doc_id`, top 5 by recency or matching LO.
-- New deterministic helpers go in `src/lib/intent-coach.ts`. Push exemplar fetching server-side (in `coach-intent`) to avoid bloating client snapshots.
-- Add two new `category` enum values — `pitch`, `style` — to both the tool schema in `coach-intent` and the `IntentSignal["category"]` type. Update the chip renderer to colour them distinctly.
-- Keep existing pre/post split, streaming, apply-to-instructions affordance, and the silence default.
+- Switch `aoFrequency` to weight by **marks per section**, not `num_questions`.
+- After counting, run the result through `rollupCounts`.
+- `computeAlignmentSummary` returns one row per bucket (`A`, `B`, `C` …), each with `plannedPercent` vs `targetPercent` from `bucketTargets`.
+- The cheap "AO target delta" signal compares bucket totals, so `A` at 80% vs 50% target shows up as a single clear nudge instead of three confusing A1/A2/A3 rows.
 
-## Out of scope (not changing here)
+### 3. Generated assessment review — `/assessment/:id`
 
-- Generation pipeline (`generate-assessment`) — the Coach only advises.
-- Auto-applying suggestions; teacher always clicks Apply.
-- Adding a new model dependency — reuse Lovable AI Gateway models already wired.
+Same rollup before rendering, so this Chemistry paper shows:
+
+```text
+A   actual %   vs   50%
+B   actual %   vs   50%
+```
+
+Rows for `A1..A5` and `B1..B7` are removed from the headline view. They stay available as a "show sub-codes" expand toggle for users who want the granular breakdown.
+
+### 4. Paper-set AO review — `/paper-set/:id`
+
+`paper-set.$id.tsx` (`aoMarkShare`, `AOPanel`, `PerPaperPanel`) gets the same treatment so the macro review matches the per-assessment review.
+
+### 5. Builder UI — `BuilderCoachPanel.tsx`
+
+`AlignmentStrip` renders the bucket rows. Sub-codes that contributed >0% are listed underneath as a thin caption (`A ← A1 12%, A2 18%, A4 14%, A5 6%`) so the rollup is transparent.
+
+### 6. Caveat note in the UI
+
+Small one-liner under the AO panel:
+
+```text
+A1–A5 are rolled up to A, B1–B7 to B, to match the syllabus-level AO weighting.
+```
+
+Prevents confusion for users who remember seeing the granular tags earlier.
+
+## Out of scope
+
+- Re-tagging or re-classifying parsed past papers — current tags are fine once rolled up.
+- Rewriting `syllabus_assessment_objectives` rows in the database. The rollup is computed at read time.
+- Changing how AI generation picks AO codes for new questions.
+
+## Files touched
+
+- new: `src/lib/ao-rollup.ts`
+- edit: `src/lib/intent-coach.ts` (mark-based weighting + rollup)
+- edit: `src/components/BuilderCoachPanel.tsx` (`AlignmentStrip` shows buckets, caption with sub-codes)
+- edit: `src/routes/assessment.$id.tsx` (AO review uses buckets)
+- edit: `src/routes/paper-set.$id.tsx` (`AOPanel`, `PerPaperPanel` use buckets)
