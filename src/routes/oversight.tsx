@@ -490,35 +490,167 @@ function OversightPage() {
           </CardContent>
         </Card>
 
-        {/* Per-teacher */}
+        {/* Scripts assigned per marker */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2"><Users className="h-4 w-4" /> Per-teacher load</CardTitle>
+            <CardTitle className="text-base flex items-center gap-2"><Users className="h-4 w-4" /> Scripts assigned per marker</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {perMarker.length === 0 ? (
+              <div className="p-6 text-sm text-muted-foreground">No markers loaded yet.</div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Marker</TableHead>
+                    <TableHead className="text-right">Classes</TableHead>
+                    <TableHead className="text-right">Scripts assigned</TableHead>
+                    <TableHead className="text-right">Marked</TableHead>
+                    <TableHead className="text-right">Flagged</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {perMarker.map((t) => (
+                    <TableRow key={t.name}>
+                      <TableCell className="font-medium">{t.name}</TableCell>
+                      <TableCell className="text-right tabular-nums">{t.classes}</TableCell>
+                      <TableCell className="text-right tabular-nums">{t.assigned}</TableCell>
+                      <TableCell className="text-right tabular-nums">{t.marked}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {t.flagged > 0 ? (
+                          <span className="inline-flex items-center gap-1 text-amber-600">
+                            <AlertTriangle className="h-3 w-3" /> {t.flagged}
+                          </span>
+                        ) : 0}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Setters */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2"><Users className="h-4 w-4" /> Papers set per setter</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {perSetter.length === 0 ? (
+              <div className="p-6 text-sm text-muted-foreground">No setters loaded yet.</div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Setter</TableHead>
+                    <TableHead className="text-right">Papers set</TableHead>
+                    <TableHead className="text-right">Scripts (downstream)</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {perSetter.map((t) => (
+                    <TableRow key={t.name}>
+                      <TableCell className="font-medium">{t.name}</TableCell>
+                      <TableCell className="text-right tabular-nums">{t.papers}</TableCell>
+                      <TableCell className="text-right tabular-nums">{t.scripts}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Deployment by points */}
+        <Card>
+          <CardHeader className="flex-row items-center justify-between">
+            <CardTitle className="text-base">Deployment by points</CardTitle>
+            <Button asChild variant="ghost" size="sm">
+              <Link to="/oversight/points">Full leaderboard →</Link>
+            </Button>
           </CardHeader>
           <CardContent>
-            {perTeacher.length === 0 ? (
-              <div className="text-sm text-muted-foreground">No teachers loaded yet.</div>
+            {leaderboard.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No points yet — points are computed during import.</div>
             ) : (
               <div className="space-y-3">
-                {perTeacher.map((t) => {
-                  const pct = t.assigned > 0 ? Math.round((t.marked / t.assigned) * 100) : 0;
+                {leaderboard.map((t) => {
+                  const w = (n: number) => (maxLeaderTotal > 0 ? Math.round((n / maxLeaderTotal) * 100) : 0);
                   return (
                     <div key={t.name} className="grid grid-cols-12 items-center gap-3 text-sm">
                       <div className="col-span-3 font-medium truncate">{t.name}</div>
-                      <div className="col-span-6"><Progress value={pct} /></div>
+                      <div className="col-span-6">
+                        <div className="flex h-3 w-full overflow-hidden rounded bg-muted">
+                          <div className="bg-violet-500" style={{ width: `${w(t.setting)}%` }} title={`Setting ${t.setting.toFixed(1)}`} />
+                          <div className="bg-blue-500" style={{ width: `${w(t.marking)}%` }} title={`Marking ${t.marking.toFixed(1)}`} />
+                          <div className="bg-emerald-500" style={{ width: `${w(t.moderation)}%` }} title={`Moderation ${t.moderation.toFixed(1)}`} />
+                        </div>
+                      </div>
                       <div className="col-span-3 text-right tabular-nums text-muted-foreground">
-                        {t.marked}/{t.assigned} marked · {t.deployments} class{t.deployments === 1 ? "" : "es"}
-                        {t.flagged > 0 && (
-                          <span className="ml-2 inline-flex items-center gap-1 text-amber-600">
-                            <AlertTriangle className="h-3 w-3" /> {t.flagged}
-                          </span>
-                        )}
+                        {t.total.toFixed(1)} pts
+                        <span className="ml-2 text-[11px]">
+                          (S {t.setting.toFixed(1)} · M {t.marking.toFixed(1)} · Mod {t.moderation.toFixed(1)})
+                        </span>
                       </div>
                     </div>
                   );
                 })}
+                <div className="flex items-center gap-3 pt-2 text-[11px] text-muted-foreground">
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-violet-500" /> Setting</span>
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-blue-500" /> Marking</span>
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-emerald-500" /> Moderation</span>
+                </div>
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        {/* Imports management */}
+        <Card>
+          <CardHeader className="flex-row items-center justify-between">
+            <CardTitle className="text-base">Uploaded imports</CardTitle>
+            {imports.length > 0 && (
+              <Button variant="destructive" size="sm" onClick={deleteAllDeploymentData}>
+                Delete ALL deployment data
+              </Button>
+            )}
+          </CardHeader>
+          <CardContent className="p-0">
+            {imports.length === 0 ? (
+              <div className="p-6 text-sm text-muted-foreground">No imports recorded yet.</div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>File</TableHead>
+                    <TableHead>Department</TableHead>
+                    <TableHead>Year / Semester</TableHead>
+                    <TableHead className="text-right">Papers</TableHead>
+                    <TableHead className="text-right">Deployments</TableHead>
+                    <TableHead>Uploaded</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {imports.map((imp) => (
+                    <TableRow key={imp.id}>
+                      <TableCell className="font-medium truncate max-w-[260px]">{imp.filename ?? "—"}</TableCell>
+                      <TableCell className="text-sm">{imp.department ?? "—"}</TableCell>
+                      <TableCell className="text-sm">{[imp.year, imp.semester].filter(Boolean).join(" · ") || "—"}</TableCell>
+                      <TableCell className="text-right tabular-nums">{imp.papers_created}</TableCell>
+                      <TableCell className="text-right tabular-nums">{imp.deployments_created}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{new Date(imp.created_at).toLocaleString()}</TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="outline" size="sm" onClick={() => deleteImport(imp)}>Delete</Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
           </CardContent>
         </Card>
       </main>
