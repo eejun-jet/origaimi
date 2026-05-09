@@ -142,7 +142,23 @@ function OversightPage() {
   const overdue = markerDeployments.filter(
     (d) => d.due_at && new Date(d.due_at) < new Date() && d.status !== "marking_done" && d.status !== "moderated",
   ).length;
-  const totalPoints = visibleDeployments.reduce((a, d) => a + (Number(d.points) || 0), 0);
+  // Scripts breakdown by level
+  const byLevel = useMemo(() => {
+    const m = new Map<string, { level: string; papers: Set<string>; assigned: number; marked: number; flagged: number }>();
+    for (const d of markerDeployments) {
+      const p = paperById.get(d.paper_id);
+      const level = p?.level ?? "—";
+      const e = m.get(level) ?? { level, papers: new Set<string>(), assigned: 0, marked: 0, flagged: 0 };
+      e.papers.add(d.paper_id);
+      e.assigned += d.script_count;
+      e.marked += d.marked_count;
+      e.flagged += d.flagged_count;
+      m.set(level, e);
+    }
+    return Array.from(m.values())
+      .map((e) => ({ level: e.level, papers: e.papers.size, assigned: e.assigned, marked: e.marked, flagged: e.flagged }))
+      .sort((a, b) => a.level.localeCompare(b.level));
+  }, [markerDeployments, paperById]);
 
   // Per-teacher rollup (marker scripts)
   const perTeacher = useMemo(() => {
