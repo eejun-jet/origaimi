@@ -58,18 +58,30 @@ function OversightPage() {
   const [yearFilter, setYearFilter] = useState<string>("all");
   const [assessmentFilter, setAssessmentFilter] = useState<string>("all");
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   const load = async () => {
     setLoading(true);
-    const [{ data: pData }, { data: dData }] = await Promise.all([
-      supabase.from("marking_papers").select("*").order("created_at", { ascending: false }),
-      supabase.from("marking_deployments").select("*"),
+    setLoadError(null);
+    const [pRes, dRes] = await Promise.all([
+      supabase.from("marking_papers").select("*").order("created_at", { ascending: false }).limit(2000),
+      supabase.from("marking_deployments").select("*").limit(5000),
     ]);
-    setPapers((pData ?? []) as Paper[]);
-    setDeployments((dData ?? []) as Deployment[]);
+    if (pRes.error || dRes.error) {
+      const msg = pRes.error?.message ?? dRes.error?.message ?? "Failed to load dashboard data.";
+      console.error("[oversight] load failed", pRes.error, dRes.error);
+      setLoadError(msg);
+    }
+    setPapers((pRes.data ?? []) as Paper[]);
+    setDeployments((dRes.data ?? []) as Deployment[]);
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, []);
+  // Reload whenever we (re)enter the dashboard, e.g. after returning from /oversight/import.
+  useEffect(() => {
+    if (!isNestedRoute) load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNestedRoute]);
 
   const paperById = useMemo(() => {
     const m = new Map<string, Paper>();
@@ -211,6 +223,12 @@ function OversightPage() {
             </Button>
           </div>
         </div>
+
+        {loadError && (
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+            Couldn't load dashboard data: {loadError}
+          </div>
+        )}
 
         {/* KPI strip */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
