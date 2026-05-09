@@ -67,6 +67,31 @@ function ImportPage() {
       }
       const unmatched = names.filter((n) => !nameToId.has(n));
 
+      // Create the import record FIRST so we can stamp papers with its id.
+      const { data: importRow, error: impErr } = await supabase
+        .from("marking_imports")
+        .insert({
+          user_id: user.id,
+          filename,
+          department: department || null,
+          semester: semester || null,
+          year: year ? parseInt(year, 10) : null,
+          rows_parsed: parsed.papers.reduce((a, p) => a + p.deployments.length, 0),
+          papers_created: 0,
+          deployments_created: 0,
+          unmatched_names: unmatched,
+          errors: parsed.warnings,
+        })
+        .select("id")
+        .single();
+      if (impErr || !importRow) {
+        console.error("Import row insert failed", impErr);
+        toast.error("Couldn't record the import. Aborting.");
+        setCommitting(false);
+        return;
+      }
+      const importId = importRow.id as string;
+
       let papersCreated = 0;
       let deploymentsCreated = 0;
       const newPaperIds: string[] = [];
@@ -85,6 +110,7 @@ function ImportPage() {
             remarks: p.remarks,
             semester: p.term || semester || null,
             year: year ? parseInt(year, 10) : null,
+            import_id: importId,
           })
           .select("id")
           .single();
@@ -119,18 +145,10 @@ function ImportPage() {
         console.error("Points recompute failed", e);
       }
 
-      await supabase.from("marking_imports").insert({
-        user_id: user.id,
-        filename,
-        department: department || null,
-        semester: semester || null,
-        year: year ? parseInt(year, 10) : null,
-        rows_parsed: parsed.papers.reduce((a, p) => a + p.deployments.length, 0),
-        papers_created: papersCreated,
-        deployments_created: deploymentsCreated,
-        unmatched_names: unmatched,
-        errors: parsed.warnings,
-      });
+      await supabase
+        .from("marking_imports")
+        .update({ papers_created: papersCreated, deployments_created: deploymentsCreated })
+        .eq("id", importId);
 
       toast.success(`Imported ${papersCreated} paper(s), ${deploymentsCreated} deployment(s).`);
       navigate({ to: "/oversight" });
