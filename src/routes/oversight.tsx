@@ -258,7 +258,7 @@ function OversightPage() {
             </SelectContent>
           </Select>
           <Button variant="outline" size="sm" asChild className="ml-auto">
-            <Link to="/oversight/points">Points leaderboard →</Link>
+            <Link to="/oversight/points">Dashboard leaderboard →</Link>
           </Button>
         </div>
 
