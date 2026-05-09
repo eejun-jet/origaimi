@@ -360,7 +360,7 @@ function PaperSetView() {
       const kosTouched = new Set(
         qs.flatMap((x) => (x.q.knowledge_outcomes ?? []).filter(Boolean)),
       );
-      return { paper: p, marks, questions: qs.length, aoMap, koCount: kosTouched.size };
+      return { paper: p, marks, questions: qs.length, aoMap: aoBucketMap, koCount: kosTouched.size };
     });
   }, [papers, flatQuestions]);
 
