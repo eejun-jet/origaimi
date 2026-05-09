@@ -1,25 +1,44 @@
+Make the dashboard charts respond to all four filters (Search, Subject, Year, Assessment, Status) on `/oversight`. Currently only Year + Assessment affect the charts; Subject and Status only filter the "Marker deployments" table.
 
-Edits in `src/routes/oversight.tsx` only — presentation changes.
+**File:** `src/routes/oversight.tsx` only — presentation/derivation logic. No DB or schema changes.
 
-**1. Remove "Papers set per setter" card**
-- Delete the entire card block (lines 601–644), including its TooltipProvider/Tooltip rows.
-- Remove the now-unused `perSetter` useMemo (lines 225–265) since no other consumer remains on this page.
+### 1. Extend `paperPasses` to include Subject
+Add subject check so it gates `visibleDeployments` (which feeds every chart):
+```ts
+if (subjectFilter !== "all" && (p.subject ?? "") !== subjectFilter) return false;
+```
+Update the `useMemo` deps for `visibleDeployments` to include `subjectFilter`.
 
-**2. Enhance "Setting load (points)" → horizontal bar chart with hover details**
-- Replace the existing simple rendering (lines 646–673) with a new per-setter rollup that combines setting points (bar value) with rich metadata (hover content).
-- Build a new `settingLoad` useMemo derived from `setterDeployments` + `paperById` + `markerDeployments`:
-  - `name` — teacher name (or "Unassigned")
-  - `points` — sum of `points` on that teacher's setter deployments
-  - `papers` — count of distinct paper IDs they set
-  - `paperTitles: string[]` — distinct paper titles
-  - `subjects: string[]` — distinct subjects (from each paper)
-  - `levels: string[]` — distinct levels (from each paper)
-  - `postingGroups: string[]` — distinct values from `paper.stream` (G3/G2/G1 etc.); fall back to filtering empties
-  - `classLabels: string[]` — distinct downstream class labels by joining each set paper to its `markerDeployments`
-- Sort descending by `points`, filter `points > 0`.
-- Render as the existing bar-chart pattern (violet bar, points on the right) wrapped in `TooltipProvider` + `Tooltip`/`TooltipTrigger asChild`/`TooltipContent`.
-- Tooltip shows: points, papers (count + titles), subjects, levels, posting groups, classes.
+### 2. Apply Status + Search to marker-derived charts
+Status and free-text search are marker-specific (setters have no `status`, and search matches teacher/class/paper text). Replace the current `markerDeployments` memo with a filtered version so the charts that read from it react to those filters too:
 
-**3. No changes**
-- Keep the "Marker deployments" table, "Scripts by level", "Scripts assigned per marker" bar chart, "Uploaded imports" card, KPI strip, and filters as-is.
-- No DB / schema / business-logic changes.
+```ts
+const markerDeployments = useMemo(() => {
+  return visibleDeployments.filter((d) => {
+    if (d.role !== "marker") return false;
+    if (statusFilter !== "all" && d.status !== statusFilter) return false;
+    if (search) {
+      const p = paperById.get(d.paper_id);
+      const hay = `${p?.title ?? ""} ${p?.subject ?? ""} ${p?.level ?? ""} ${d.teacher_name ?? ""} ${d.class_label ?? ""}`.toLowerCase();
+      if (!hay.includes(search.toLowerCase())) return false;
+    }
+    return true;
+  });
+}, [visibleDeployments, paperById, statusFilter, search]);
+```
+
+This means the following all react to Subject/Year/Assessment/Status/Search:
+- KPI strip (Markers deployed, Scripts assigned, % complete, Overdue/Flagged)
+- "Scripts by level" chart (`byLevel`)
+- "Scripts assigned per marker" bar chart (`perMarker`)
+- "Marker deployments" table (`filtered` — simplify since redundant filters now live upstream)
+
+### 3. Setter chart (Setting load)
+`setterDeployments` already derives from `visibleDeployments`, so adding Subject to step 1 makes the "Setting load (points)" bar chart react to Subject/Year/Assessment automatically. Status and free-text search do not apply to setters (no status field; search is teacher/class oriented) — leave them out for that chart, which matches the intent of those filters.
+
+### 4. Simplify the table memo
+Since `markerDeployments` now already incorporates status + search + subject + year + assessment, the existing `filtered` memo can be reduced to just `markerDeployments` (or removed and the table can read `markerDeployments` directly). Keep the variable name to minimize churn.
+
+### Out of scope
+- "Uploaded imports" card stays unfiltered (it lists raw imports).
+- No new filter UI; existing controls just gain reach.
