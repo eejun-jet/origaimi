@@ -83,7 +83,7 @@ function ImportPage() {
             assessment_type: p.assessment_type ?? defaultAssessment ?? null,
             department: department || null,
             remarks: p.remarks,
-            semester: semester || null,
+            semester: p.term || semester || null,
             year: year ? parseInt(year, 10) : null,
           })
           .select("id")
@@ -214,6 +214,13 @@ function ImportPage() {
             <p className="text-xs text-muted-foreground">
               Used for any rows that don't have an Assessment column value. Drives points awarded across the year.
             </p>
+            <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
+              <p className="font-medium text-foreground">Template shape</p>
+              <p>• Roster at the top of the sheet — rename Andy / Barry / … to your real teachers; Setter and Marker dropdowns pull from there.</p>
+              <p>• Rows are grouped by Term (T1–T4) using banner rows the importer ignores.</p>
+              <p>• Assessment dropdown: WA1 / WA2 / WA3 / Exam. Stream dropdown: G3 / G2 / G1 (or combos).</p>
+              <p>• G1 papers score 1 point for setting, same as a G2 variant of a G3 paper.</p>
+            </div>
 
             <label className="flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-border bg-muted/40 p-8 text-sm text-muted-foreground hover:bg-muted">
               <FileSpreadsheet className="h-5 w-5" />
@@ -260,6 +267,8 @@ function ImportPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead>Term</TableHead>
+                      <TableHead>Assessment</TableHead>
                       <TableHead>Paper</TableHead>
                       <TableHead>Stream</TableHead>
                       <TableHead>Setter(s)</TableHead>
@@ -277,6 +286,8 @@ function ImportPage() {
                       const total = Array.from(markerSummary.values()).reduce((a, b) => a + b, 0);
                       return (
                         <TableRow key={i}>
+                          <TableCell className="text-sm">{p.term ?? "—"}</TableCell>
+                          <TableCell className="text-sm">{p.assessment_type ?? "—"}</TableCell>
                           <TableCell className="font-medium">
                             {p.title}
                             <div className="text-xs text-muted-foreground">{p.subject} · {p.level}{p.duration_minutes ? ` · ${p.duration_minutes} min` : ""}</div>

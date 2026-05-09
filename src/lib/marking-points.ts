@@ -77,7 +77,7 @@ function classifyAssessment(t: AssessmentType): "wa" | "mye" | "eoy" | "full" {
   if (!v) return "full"; // no marker → assume full paper (e.g. EoY)
   if (v.startsWith("WA") || v.startsWith("CA")) return "wa";
   if (v === "MYE" || v.includes("MID")) return "mye";
-  if (v === "EOY" || v === "EOY EXAM" || v.includes("PRELIM") || v.includes("END")) return "eoy";
+  if (v === "EOY" || v === "EOY EXAM" || v === "EXAM" || v.includes("PRELIM") || v.includes("END")) return "eoy";
   return "full";
 }
 
