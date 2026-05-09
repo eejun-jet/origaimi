@@ -152,7 +152,7 @@ function ImportPage() {
             <CardContent className="space-y-4 text-sm text-muted-foreground">
               <p>Only HODs, School Leaders and admins can import marking deployments. Ask your HOD to upload the sheet on your behalf.</p>
               <Button asChild variant="outline">
-                <Link to="/oversight"><ArrowLeft className="mr-2 h-4 w-4" />Back to Oversight</Link>
+                <Link to="/oversight"><ArrowLeft className="mr-2 h-4 w-4" />Back to Dashboard</Link>
               </Button>
             </CardContent>
           </Card>
@@ -175,7 +175,7 @@ function ImportPage() {
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Import setters / markers list</h1>
             <p className="text-sm text-muted-foreground">
-              Upload your department spreadsheet, or start from a clean template.
+              Upload your department spreadsheet to populate the dashboard, or start from a clean template.
               We'll detect Assessment, Level, Subject, Setter, Marker, Classes and per-class script counts automatically.
             </p>
           </div>

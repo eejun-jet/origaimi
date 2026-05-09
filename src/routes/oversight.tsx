@@ -14,7 +14,7 @@ import { useRoles } from "@/lib/roles";
 
 export const Route = createFileRoute("/oversight")({
   component: OversightPage,
-  head: () => ({ meta: [{ title: "Oversight · origAImi" }] }),
+  head: () => ({ meta: [{ title: "Dashboard · origAImi" }] }),
 });
 
 type Paper = {
@@ -168,7 +168,7 @@ function OversightPage() {
         <AppHeader />
         <main className="mx-auto max-w-3xl px-6 py-12">
           <Card>
-            <CardHeader><CardTitle>Oversight</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Dashboard</CardTitle></CardHeader>
             <CardContent className="text-sm text-muted-foreground">
               This area is for HODs and School Leaders. Ask an admin to grant your account a role to view it.
             </CardContent>
@@ -184,12 +184,12 @@ function OversightPage() {
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 space-y-6">
          <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Marking oversight</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Marking dashboard</h1>
             <p className="text-sm text-muted-foreground">
               Setters, markers, scripts and progress {isSl ? "across the school" : "in your department"}.
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              New here? Download the blank template, fill in your setters/markers, then import.
+              New here? Download the blank template, fill in your setters/markers, then import to see your dashboard data.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -215,7 +215,7 @@ function OversightPage() {
           <Kpi label="Scripts assigned" value={totalAssigned} />
           <Kpi label="% complete" value={`${pctComplete}%`} sub={`${totalMarked}/${totalAssigned}`} />
           <Kpi label="Overdue / Flagged" value={`${overdue} / ${totalFlagged}`} tone={overdue > 0 || totalFlagged > 0 ? "warn" : undefined} />
-          <Kpi label="Points awarded" value={totalPoints.toFixed(1)} sub="set + mark + mod" />
+          <Kpi label="Dashboard score" value={totalPoints.toFixed(1)} sub="set + mark + mod" />
         </div>
 
         {/* Filters */}
@@ -258,7 +258,7 @@ function OversightPage() {
             </SelectContent>
           </Select>
           <Button variant="outline" size="sm" asChild className="ml-auto">
-            <Link to="/oversight/points">Points leaderboard →</Link>
+            <Link to="/oversight/points">Dashboard leaderboard →</Link>
           </Button>
         </div>
 
@@ -324,19 +324,19 @@ function OversightPage() {
           </CardContent>
         </Card>
 
-        {/* Points leaderboard */}
+        {/* Dashboard leaderboard */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              <FileCheck2 className="h-4 w-4" /> Points leaderboard
+              <FileCheck2 className="h-4 w-4" /> Dashboard leaderboard
               <span className="text-xs font-normal text-muted-foreground ml-2">
-                Setting · Marking · Moderation across the year
+                Contributions across the year
               </span>
             </CardTitle>
           </CardHeader>
           <CardContent>
             {leaderboard.length === 0 ? (
-              <div className="text-sm text-muted-foreground">No points awarded yet — import a deployment sheet to get started.</div>
+              <div className="text-sm text-muted-foreground">No data yet — import a deployment sheet to populate the dashboard.</div>
             ) : (
               <div className="space-y-2">
                 {leaderboard.map((t) => {

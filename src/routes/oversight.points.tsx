@@ -97,7 +97,7 @@ function PointsPage() {
       <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 space-y-6">
         <div className="flex flex-wrap items-end justify-between gap-3 print:hidden">
           <Button variant="ghost" size="sm" asChild>
-            <Link to="/oversight"><ArrowLeft className="mr-1 h-4 w-4" /> Back to oversight</Link>
+            <Link to="/oversight"><ArrowLeft className="mr-1 h-4 w-4" /> Back to dashboard</Link>
           </Button>
           <div className="flex items-center gap-2">
             <Select value={year} onValueChange={setYear}>
