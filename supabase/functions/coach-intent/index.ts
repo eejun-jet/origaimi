@@ -33,7 +33,16 @@ const INTENT_TOOL = {
               severity: { type: "string", enum: ["info", "warn"] },
               category: {
                 type: "string",
-                enum: ["intent", "ao_balance", "cognitive_demand", "coverage", "context", "instructions"],
+                enum: [
+                  "intent",
+                  "ao_balance",
+                  "cognitive_demand",
+                  "coverage",
+                  "context",
+                  "instructions",
+                  "pitch",
+                  "style",
+                ],
               },
               note: { type: "string", description: "One sentence, plain teacher language, British spelling." },
             },
