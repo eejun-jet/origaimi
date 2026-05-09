@@ -276,6 +276,7 @@ function OversightPage() {
               <SelectItem value="marking_done">Marking done</SelectItem>
               <SelectItem value="moderated">Moderated</SelectItem>
             </SelectContent>
+          </Select>
         </div>
 
         {/* Deployment table */}
