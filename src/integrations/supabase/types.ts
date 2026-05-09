@@ -537,6 +537,7 @@ export type Database = {
           department: string | null
           duration_minutes: number | null
           id: string
+          import_id: string | null
           level: string | null
           points_setting: number | null
           remarks: string | null
@@ -556,6 +557,7 @@ export type Database = {
           department?: string | null
           duration_minutes?: number | null
           id?: string
+          import_id?: string | null
           level?: string | null
           points_setting?: number | null
           remarks?: string | null
@@ -575,6 +577,7 @@ export type Database = {
           department?: string | null
           duration_minutes?: number | null
           id?: string
+          import_id?: string | null
           level?: string | null
           points_setting?: number | null
           remarks?: string | null
