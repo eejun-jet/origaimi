@@ -267,6 +267,8 @@ function ImportPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead>Term</TableHead>
+                      <TableHead>Assessment</TableHead>
                       <TableHead>Paper</TableHead>
                       <TableHead>Stream</TableHead>
                       <TableHead>Setter(s)</TableHead>
@@ -284,6 +286,8 @@ function ImportPage() {
                       const total = Array.from(markerSummary.values()).reduce((a, b) => a + b, 0);
                       return (
                         <TableRow key={i}>
+                          <TableCell className="text-sm">{p.term ?? "—"}</TableCell>
+                          <TableCell className="text-sm">{p.assessment_type ?? "—"}</TableCell>
                           <TableCell className="font-medium">
                             {p.title}
                             <div className="text-xs text-muted-foreground">{p.subject} · {p.level}{p.duration_minutes ? ` · ${p.duration_minutes} min` : ""}</div>
