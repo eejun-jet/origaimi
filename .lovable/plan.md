@@ -1,39 +1,112 @@
-## Issue 1 — "40% / 20%" labels still visible
+## Goal
 
-These come from the stored Chemistry syllabus AO definitions (A1=40, A2=40, A3=20). The bucket rollup hides them in some panels but several places still render the raw sub-code numbers:
+Give HODs and School Leaders visibility into the exam-marking workflow — who's setting, who's marking, how many scripts each teacher has, and how far along they are — modelled on the school's existing **Setters/Markers List** spreadsheet (sample: 2019 Humanities) so HODs can drop their current file in.
 
-- **`src/routes/new.tsx`** — `CoverageStrips` (lines 1280–1300) iterates raw `aos` and prints `target {a.weightingPercent}%`, producing the `A1 / target 40%`, `A2 / target 40%`, `A3 / target 20%` rows. The AO selector list (~line 2021) also shows `[40%]`, `[20%]` next to each sub-code.
-- **`src/components/BuilderCoachPanel.tsx`** (~626–637) — "rolled up from A1 40%, A2 40%, A3 20%" caption and the italic helper line.
-- **`src/routes/paper-set.$id.tsx`** (~968–972) — same "rolled up from …" caption under each bucket bar.
+## Sample shape we're matching
 
-### Fix
-1. In `new.tsx` `CoverageStrips`, switch from raw `aos` to bucketed rows: use `bucketTargets(aos)` for targets and `rollupCounts(aoMarks)` for actuals. Render one row per letter bucket (A, B, …) — no sub-code rows, no `[40%]` chips. Drop the `missingAOs`/`publishedAOs` checks that key on sub-codes; rebuild against bucket codes.
-2. In the AO selector list (~2021) keep the sub-code rows for tagging (functional), but remove the `[{weightingPercent}%]` chip so the 40/20 numbers disappear.
-3. In `BuilderCoachPanel.tsx` `AlignmentStrip`, remove the "rolled up from …" sub-code caption and the italic footer line.
-4. In `paper-set.$id.tsx` `AOPanel`, remove the same "rolled up from …" caption (keep only the bucket-level bar + observed vs declared).
+The school's spreadsheet keys on:
 
-After these edits, the only AO percentages shown are bucket-level (A, B, …) so the legacy 40/40/20 numbers no longer appear anywhere.
+```
+SN | Level (Sec 1 Exp / Sec 1 NA / Sec 3 NT) | Subject | Duration |
+Setter(s) | Marker(s) | Classes | per-class scripts (1..10) | Total | Remarks
+```
 
-## Issue 2 — Recalculate button "doesn't recalculate"
+Things the schema must handle:
+- Distinct **Setter** vs **Marker** roles for the same paper
+- Co-marking, written as `"Saramma Matthews/Chen Huifen"` — split into rows
+- Multiple markers per paper, each with their own classes (one row per marker × class)
+- Stream tagging on level (Exp / NA / NT)
+- Department-scoped sheet (this one = Humanities)
+- Per-class script counts, with a "Total" rollup
+- Free-text "Remarks" (e.g. `MCQ`)
 
-The `Recalculate with AI` button only invokes `retag-questions`, which rewrites each question's `ao_codes / knowledge_outcomes / learning_outcomes` from the AI. It does **not** touch the syllabus AO target weightings (those live in `syllabus_assessment_objectives` and define the "target %" you see).
+## Phase 1 — Roles & departments (migration)
 
-So if a Chemistry paper's stored AO defs are A1/A2/A3=40/40/20, those target numbers stay the same after recalc — only the bars (actuals) move. That's likely why it "doesn't seem to recalculate".
+```text
+app_role enum: 'teacher' | 'hod' | 'sl' | 'admin'
+```
 
-Two fixes needed:
+- `user_roles(user_id, role, department, school)` — separate from `profiles` (avoids privilege escalation)
+- `has_role(_user_id, _role)` security-definer fn for RLS, plus `is_hod_of(dept)` / `is_sl_of(school)` helpers
+- Add `department text`, `school text`, `display_name text` to `profiles`
+- `teacher_aliases(profile_id, alias)` to resolve names like "Chen Huifen" from a CSV/XLSX cell to a profile
 
-1. **Re-render after recalc** — confirm the panel re-reads questions. `retagAllQuestions` already calls `loadAll()` after success, but the AO Coverage card on `assessment.$id.tsx` derives from `questions` state. Add a `console.log` of the `payload.updated/total/errors` to confirm; if `updated === 0`, surface that in the toast as a warning ("No questions changed — check section AO pool"). If errors exist, show the first error message instead of a silent success.
-2. **Make targets responsive to the bucket model** — when the stored AO defs have only sub-codes (e.g. only A1/A2/A3 with no B), the bucket rollup currently produces `A=100%` and no B target, which is misleading. Two options to pick from:
-   - **(a) Hide targets entirely** for papers whose stored defs cover only one bucket — render bars without the target tick / "vs N%". Cleanest, no data migration.
-   - **(b) Add a manual override** on `/admin/syllabus/:id` for bucket-level AO weighting (A=50, B=50) that wins over sub-code weights. Requires a small admin UI change but lets the user fix Chemistry to the real 50/50 model.
+## Phase 2 — Marking domain (migration)
 
-### Open question for you
-- For Issue 2 fix #2, do you want **(a)** auto-hide targets when sub-codes don't cover all buckets, or **(b)** an admin override field so you can set A=50, B=50 yourself? I lean (b) because it gives you the right targets going forward; (a) is faster but loses the target tick on the bars.
+- **`marking_papers`** — one per (assessment OR free-text title) × level × subject × stream
+  - `assessment_id` (nullable — for papers not yet built in origAImi), `title`, `subject`, `level`, `stream` (Exp/NA/NT), `duration_minutes`, `department`, `school`, `remarks`
+- **`marking_deployments`** — one row per **marker × class** (the granular unit)
+  - `paper_id`, `role` ('setter' | 'marker'), `teacher_id`, `class_label` (e.g. `3A2`), `script_count` (assigned), `due_at`,
+    `status` (`assigned` / `in_progress` / `marking_done` / `moderated`), `marked_count`, `flagged_count`
+- **`marking_scripts`** (v1.5, optional) — per-student rows
+  - `deployment_id`, `student_ref`, `marked_at`, `marks_awarded`, `flagged`, `flag_reason`, `moderated_at`, `moderator_id`
+- **`marking_imports`** — log of XLSX/CSV imports (filename, dept, semester, row count, errors)
 
-## Files touched
+RLS via `has_role`:
+- Teacher: read/write only own deployments
+- HOD: read all in own department
+- SL: read all in own school
+- Admin: full
 
-- `src/routes/new.tsx` — bucket rollup for `CoverageStrips`, drop weighting chip in AO selector
-- `src/components/BuilderCoachPanel.tsx` — remove sub-code caption + footer line
-- `src/routes/paper-set.$id.tsx` — remove sub-code caption in `AOPanel`
-- `src/routes/assessment.$id.tsx` — better recalc toast (updated/total/errors)
-- *(if option b chosen)* `src/routes/admin.syllabus.$id.tsx` + a small migration for bucket-level AO rows
+## Phase 3 — Import (XLSX/CSV) matching the sample
+
+- Server fn `importDeploymentXlsx` (`createServerFn` + `requireSupabaseAuth`, HOD/admin only)
+- Parse with the `xlsx` package (run server-side)
+- Expected headers: `Level`, `Subject`, `Duration`, `Setter(s)`, `Marker(s)`, `Classes`, per-class counts (`1..10`), `Total`, `Remarks`
+- Splitting rules:
+  - Split `Marker(s)` cell on `/` → one row per marker
+  - Split `Classes` on `,` → one deployment row per (marker × class)
+  - Per-class counts map to that class's `script_count`
+- Resolve teacher names → profiles via `display_name` + `teacher_aliases`; unmatched names go to a "needs review" panel
+- Show import preview (rows parsed, warnings, unmatched names) → user confirms → insert `marking_papers` + `marking_deployments`
+- Downloadable template (XLSX) on the import page
+
+## Phase 4 — Oversight dashboard `/oversight`
+
+New top-level route, gated to `hod` / `sl` / `admin` in `_authenticated` layout via `beforeLoad` + role check (mirrors how protected loaders are scoped today).
+
+### KPI strip
+Total papers · setters deployed · markers deployed · scripts assigned · scripts marked · % complete · overdue · flagged
+
+### Deployment table (default)
+Columns: Subject · Level/Stream · Paper · Setter · Marker · Classes · Scripts assigned · Marked · Remaining · Status · Due
+
+Filters: subject, level, stream, marker, status, "overdue only", "flagged only"; SL adds department filter.
+
+### Per-teacher drawer
+- Stacked bar (assigned / marked / flagged / moderated) per teacher
+- Avg turnaround per script
+- Click → all deployments for that teacher across papers
+
+### Per-paper drawer
+- Coverage: which markers, % complete, moderation status
+- Co-marker pairing visible
+- Flagged-script feed (when scripts table is populated)
+
+### Header nav
+Add "Oversight" link in `AppHeader` for hod/sl/admin only.
+
+## Phase 5 — Teacher touchpoints
+
+- On `/assessment/$id`, "My marking" panel listing deployments for the signed-in teacher
+- "Update progress" form: enter `marked_count`, mark complete, flag scripts with reason
+- HOD on oversight table can stamp `moderated`
+
+## Files to create / change
+
+- `supabase/migrations/...` — `app_role`, `user_roles`, `has_role`, `is_hod_of`, `is_sl_of`, `marking_papers`, `marking_deployments`, `marking_scripts`, `marking_imports`, `teacher_aliases`, profile columns, RLS
+- `bun add xlsx` for server-side parse
+- `src/lib/roles.ts` — `useRole()`, `hasRole`, `isHodOf`, `isSlOf`
+- `src/lib/marking.functions.ts` — `importDeploymentXlsx`, `listDeployments`, `updateDeploymentProgress`, `flagScript`, `moderateDeployment`
+- `src/routes/_authenticated/oversight.tsx` — dashboard
+- `src/routes/_authenticated/oversight.import.tsx` — upload + preview + name-resolution UI
+- `src/components/MarkingDeploymentTable.tsx`, `MarkingKPIStrip.tsx`, `TeacherProgressBar.tsx`, `ImportXlsxDialog.tsx`, `NameResolutionPanel.tsx`
+- `src/components/AppHeader.tsx` — show "Oversight" nav for HOD/SL
+- `src/routes/assessment.$id.tsx` — add "My marking" panel
+- `src/routes/admin.users.tsx` (new or extended) — assign role / department / aliases
+
+## What's in vs out for v1
+
+**In:** Roles + departments, paper + deployment tables, XLSX import matching the sample sheet, oversight dashboard, teacher progress entry, basic moderation stamp, header gating.
+
+**Out (later):** Per-script CSV (student-level marks), live SEAB/MIS sync, multi-rater moderation agreement, automated overdue email/Slack reminders, exporting back to XLSX.
