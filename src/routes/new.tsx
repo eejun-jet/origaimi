@@ -2031,7 +2031,6 @@ function AOGroupedSelector({
                           <span className="font-mono font-medium">{ao.code}</span>
                           {ao.title && <span className="text-foreground">{ao.title}</span>}
                         </div>
-                        </div>
                         {ao.description && (
                           <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">{ao.description}</p>
                         )}
