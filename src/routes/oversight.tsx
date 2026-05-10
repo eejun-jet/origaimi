@@ -517,11 +517,20 @@ function OversightPage() {
         )}
 
         {/* KPI strip */}
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-6">
           <Kpi label="Papers" value={papers.length} />
           <Kpi label="Markers deployed" value={new Set(markerDeployments.map((d) => d.teacher_name ?? "")).size} />
           <Kpi label="Scripts assigned" value={totalAssigned} />
-          <Kpi label="% complete" value={`${pctComplete}%`} sub={`${totalMarked}/${totalAssigned}`} />
+          <Kpi
+            label="% complete — Paper status"
+            value={`${paperPctComplete}%`}
+            sub={`In progress: ${paperInProgress} · Completed: ${paperCompleted}`}
+          />
+          <Kpi
+            label="% complete — Marking status"
+            value={`${markPctComplete}%`}
+            sub={`In progress: ${markInProgress} · Completed: ${markCompleted}`}
+          />
           <Kpi label="Overdue / Flagged" value={`${overdue} / ${totalFlagged}`} tone={overdue > 0 || totalFlagged > 0 ? "warn" : undefined} />
         </div>
 
