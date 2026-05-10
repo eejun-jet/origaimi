@@ -229,12 +229,32 @@ function OversightPage() {
 
   // KPIs
   const totalAssigned = markerDeployments.reduce((a, d) => a + d.script_count, 0);
-  const totalMarked = markerDeployments.reduce((a, d) => a + d.marked_count, 0);
   const totalFlagged = markerDeployments.reduce((a, d) => a + d.flagged_count, 0);
-  const pctComplete = totalAssigned > 0 ? Math.round((totalMarked / totalAssigned) * 100) : 0;
   const overdue = markerDeployments.filter(
     (d) => d.due_at && new Date(d.due_at) < new Date() && d.status !== "marking_done" && d.status !== "moderated",
   ).length;
+
+  // Paper-status completion (visible papers)
+  const visiblePapers = useMemo(() => papers.filter(paperPasses), [papers, paperPasses]);
+  const paperBuckets = { setting: 0, editing: 0, vetting: 0, cleared: 0 };
+  for (const p of visiblePapers) {
+    const s = (p.paper_status ?? "setting") as keyof typeof paperBuckets;
+    if (s in paperBuckets) paperBuckets[s]++;
+  }
+  const paperInProgress = paperBuckets.setting + paperBuckets.editing + paperBuckets.vetting;
+  const paperCompleted = paperBuckets.cleared;
+  const paperPctComplete = (paperInProgress + paperCompleted) > 0
+    ? Math.round((paperCompleted / (paperInProgress + paperCompleted)) * 100) : 0;
+
+  // Marking-status completion (excludes "assigned")
+  const markBuckets = { in_progress: 0, marking_done: 0, moderated: 0 };
+  for (const d of markerDeployments) {
+    if (d.status in markBuckets) markBuckets[d.status as keyof typeof markBuckets]++;
+  }
+  const markInProgress = markBuckets.in_progress + markBuckets.marking_done;
+  const markCompleted = markBuckets.moderated;
+  const markPctComplete = (markInProgress + markCompleted) > 0
+    ? Math.round((markCompleted / (markInProgress + markCompleted)) * 100) : 0;
   // Scripts breakdown by level
   const byLevel = useMemo(() => {
     const m = new Map<string, { level: string; papers: Set<string>; assigned: number; marked: number; flagged: number }>();
@@ -495,11 +515,20 @@ function OversightPage() {
         )}
 
         {/* KPI strip */}
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-6">
           <Kpi label="Papers" value={papers.length} />
           <Kpi label="Markers deployed" value={new Set(markerDeployments.map((d) => d.teacher_name ?? "")).size} />
           <Kpi label="Scripts assigned" value={totalAssigned} />
-          <Kpi label="% complete" value={`${pctComplete}%`} sub={`${totalMarked}/${totalAssigned}`} />
+          <Kpi
+            label="% complete — Paper status"
+            value={`${paperPctComplete}%`}
+            sub={`In progress: ${paperInProgress} · Completed: ${paperCompleted}`}
+          />
+          <Kpi
+            label="% complete — Marking status"
+            value={`${markPctComplete}%`}
+            sub={`In progress: ${markInProgress} · Completed: ${markCompleted}`}
+          />
           <Kpi label="Overdue / Flagged" value={`${overdue} / ${totalFlagged}`} tone={overdue > 0 || totalFlagged > 0 ? "warn" : undefined} />
         </div>
 
