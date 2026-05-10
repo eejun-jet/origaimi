@@ -213,6 +213,14 @@ function OversightPage() {
     });
   }, [visibleDeployments, paperById, statusFilter, search]);
   const setterDeployments = useMemo(() => visibleDeployments.filter((d) => d.role === "setter"), [visibleDeployments]);
+  const teacherOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const d of deployments) {
+      const n = d.teacher_name?.trim();
+      if (n) names.add(n);
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [deployments]);
 
   const filtered = markerDeployments;
 
