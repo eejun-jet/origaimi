@@ -566,7 +566,7 @@ function OversightPage() {
             sub={`In progress: ${paperInProgress} · Completed: ${paperCompleted}`}
           />
           <Kpi
-            label="% complete — Marking status"
+            label="% COMPLETE — MARKING STATUS"
             value={`${markPctComplete}%`}
             sub={`In progress: ${markInProgress} · Completed: ${markCompleted}`}
           />
