@@ -168,6 +168,18 @@ function OversightPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNestedRoute]);
 
+  // Realtime: refresh KPIs/tables when papers or deployments change anywhere.
+  useEffect(() => {
+    if (isNestedRoute) return;
+    const ch = supabase
+      .channel("oversight-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "marking_deployments" }, () => { void load(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "marking_papers" }, () => { void load(); })
+      .subscribe();
+    return () => { void supabase.removeChannel(ch); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNestedRoute]);
+
   const paperById = useMemo(() => {
     const m = new Map<string, Paper>();
     for (const p of papers) m.set(p.id, p);
