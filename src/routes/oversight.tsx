@@ -539,7 +539,7 @@ function OversightPage() {
                       <TableRow key={d.id}>
                         <TableCell className="font-medium">
                           {p?.title}
-                          <div className="text-xs text-muted-foreground">
+                          <div className="text-xs text-muted-foreground font-normal">
                             {[p?.subject, p?.level, p?.stream].filter(Boolean).join(" · ")}
                           </div>
                         </TableCell>
