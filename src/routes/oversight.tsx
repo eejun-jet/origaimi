@@ -31,6 +31,7 @@ type Paper = {
   points_setting: number | null;
   year: number | null;
   import_id: string | null;
+  paper_status: "setting" | "editing" | "vetting" | "cleared" | null;
 };
 type Deployment = {
   id: string;
