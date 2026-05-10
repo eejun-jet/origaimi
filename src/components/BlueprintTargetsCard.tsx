@@ -178,6 +178,19 @@ export function BlueprintTargetsCard({
           const def = aoDefs.find((d) => d.code === code);
           const pct = Number(values[code]) || 0;
           const targetMarks = Math.round((pct / 100) * totalMarks);
+          // For bucket rows, build a title from the canonical bucket row or
+          // from contributing sub-codes' titles.
+          const title = useBuckets && /^[A-Z]$/.test(code)
+            ? (def?.title
+              ?? Array.from(
+                new Set(
+                  aoDefs
+                    .filter((d) => bucketOf(d.code) === code && d.code !== code)
+                    .map((d) => d.title)
+                    .filter((t): t is string => !!t),
+                ),
+              ).join(" · ") || `AO ${code}`)
+            : (def?.title ?? "—");
           return (
             <div
               key={code}
@@ -186,9 +199,9 @@ export function BlueprintTargetsCard({
               <span className="text-xs font-semibold text-foreground">{code}</span>
               <span
                 className="col-span-2 truncate text-xs text-muted-foreground sm:col-span-1"
-                title={def?.title ?? ""}
+                title={title}
               >
-                {def?.title ?? "—"}
+                {title}
               </span>
               <div className="col-start-2 flex items-center gap-1 sm:col-start-3">
                 <Input
