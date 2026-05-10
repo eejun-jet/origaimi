@@ -102,6 +102,7 @@ function OversightPage() {
     const { error } = await supabase.from("marking_papers").update({ paper_status: value } as never).eq("id", paperId);
     if (error) { setPapers(prev); toast.error(`Update failed: ${error.message}`); return; }
     toast.success("Paper status updated");
+    void load();
   };
 
   const updateMarkingStatus = async (deploymentId: string, value: Deployment["status"]) => {
@@ -110,6 +111,7 @@ function OversightPage() {
     const { error } = await supabase.from("marking_deployments").update({ status: value }).eq("id", deploymentId);
     if (error) { setDeployments(prev); toast.error(`Update failed: ${error.message}`); return; }
     toast.success("Marking status updated");
+    void load();
   };
 
   const updateMarkerName = async (deploymentId: string, name: string) => {
@@ -119,6 +121,7 @@ function OversightPage() {
     const { error } = await supabase.from("marking_deployments").update({ teacher_name: trimmed || null }).eq("id", deploymentId);
     if (error) { setDeployments(prev); toast.error(`Update failed: ${error.message}`); return; }
     toast.success("Marker updated");
+    void load();
   };
 
   const updateSetterName = async (paperId: string, name: string) => {
