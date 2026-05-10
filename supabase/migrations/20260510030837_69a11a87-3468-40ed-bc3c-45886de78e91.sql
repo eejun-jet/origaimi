@@ -1,0 +1,1 @@
+ALTER TABLE public.marking_papers ADD COLUMN IF NOT EXISTS paper_status text NOT NULL DEFAULT 'setting';

@@ -539,6 +539,7 @@ export type Database = {
           id: string
           import_id: string | null
           level: string | null
+          paper_status: string
           points_setting: number | null
           remarks: string | null
           school: string | null
@@ -559,6 +560,7 @@ export type Database = {
           id?: string
           import_id?: string | null
           level?: string | null
+          paper_status?: string
           points_setting?: number | null
           remarks?: string | null
           school?: string | null
@@ -579,6 +581,7 @@ export type Database = {
           id?: string
           import_id?: string | null
           level?: string | null
+          paper_status?: string
           points_setting?: number | null
           remarks?: string | null
           school?: string | null

@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Upload, Users, FileCheck2, AlertTriangle, Download } from "lucide-react";
+import { toast } from "sonner";
 import { useRoles } from "@/lib/roles";
 
 export const Route = createFileRoute("/oversight")({
@@ -31,6 +32,7 @@ type Paper = {
   points_setting: number | null;
   year: number | null;
   import_id: string | null;
+  paper_status: "setting" | "editing" | "vetting" | "cleared" | null;
 };
 type Deployment = {
   id: string;
@@ -91,6 +93,65 @@ function OversightPage() {
     setDeployments((dRes.data ?? []) as Deployment[]);
     setImports((iRes.data ?? []) as ImportRow[]);
     setLoading(false);
+  };
+
+  // Inline edit helpers — optimistic updates with toast feedback.
+  const updatePaperStatus = async (paperId: string, value: Paper["paper_status"]) => {
+    const prev = papers;
+    setPapers((ps) => ps.map((p) => (p.id === paperId ? { ...p, paper_status: value } : p)));
+    const { error } = await supabase.from("marking_papers").update({ paper_status: value } as never).eq("id", paperId);
+    if (error) { setPapers(prev); toast.error(`Update failed: ${error.message}`); return; }
+    toast.success("Paper status updated");
+  };
+
+  const updateMarkingStatus = async (deploymentId: string, value: Deployment["status"]) => {
+    const prev = deployments;
+    setDeployments((ds) => ds.map((d) => (d.id === deploymentId ? { ...d, status: value } : d)));
+    const { error } = await supabase.from("marking_deployments").update({ status: value }).eq("id", deploymentId);
+    if (error) { setDeployments(prev); toast.error(`Update failed: ${error.message}`); return; }
+    toast.success("Marking status updated");
+  };
+
+  const updateMarkerName = async (deploymentId: string, name: string) => {
+    const trimmed = name.trim();
+    const prev = deployments;
+    setDeployments((ds) => ds.map((d) => (d.id === deploymentId ? { ...d, teacher_name: trimmed || null } : d)));
+    const { error } = await supabase.from("marking_deployments").update({ teacher_name: trimmed || null }).eq("id", deploymentId);
+    if (error) { setDeployments(prev); toast.error(`Update failed: ${error.message}`); return; }
+    toast.success("Marker updated");
+  };
+
+  const updateSetterName = async (paperId: string, name: string) => {
+    const trimmed = name.trim();
+    const setterRows = deployments.filter((d) => d.paper_id === paperId && d.role === "setter");
+    const prev = deployments;
+
+    if (setterRows.length === 0) {
+      // Create a new setter deployment row.
+      const { data, error } = await supabase
+        .from("marking_deployments")
+        .insert({ paper_id: paperId, role: "setter", teacher_name: trimmed || null, status: "assigned" })
+        .select("*")
+        .single();
+      if (error || !data) { toast.error(`Update failed: ${error?.message ?? "unknown"}`); return; }
+      setDeployments((ds) => [...ds, data as Deployment]);
+      toast.success("Setter updated");
+      return;
+    }
+
+    // Collapse to a single setter row holding the new value; clear others.
+    const [keep, ...rest] = setterRows;
+    setDeployments((ds) =>
+      ds
+        .filter((d) => !rest.some((r) => r.id === d.id))
+        .map((d) => (d.id === keep.id ? { ...d, teacher_name: trimmed || null } : d)),
+    );
+    const { error } = await supabase.from("marking_deployments").update({ teacher_name: trimmed || null }).eq("id", keep.id);
+    if (error) { setDeployments(prev); toast.error(`Update failed: ${error.message}`); return; }
+    if (rest.length > 0) {
+      await supabase.from("marking_deployments").delete().in("id", rest.map((r) => r.id));
+    }
+    toast.success("Setter updated");
   };
 
   // Reload whenever we (re)enter the dashboard, e.g. after returning from /oversight/import.
@@ -452,13 +513,14 @@ function OversightPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Paper</TableHead>
-                    <TableHead>Setter</TableHead>
-                    <TableHead>Marker</TableHead>
+                    <TableHead className="w-40">Setter</TableHead>
+                    <TableHead className="w-40">Marker</TableHead>
                     <TableHead>Class</TableHead>
                     <TableHead className="text-right">Assigned</TableHead>
                     <TableHead className="text-right">Marked</TableHead>
-                    <TableHead className="w-40">Progress</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead className="w-32">Progress</TableHead>
+                    <TableHead className="w-36">Paper status</TableHead>
+                    <TableHead className="w-36">Marking status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -470,6 +532,9 @@ function OversightPage() {
                       .filter(Boolean)
                       .join(", ");
                     const pct = d.script_count > 0 ? Math.round((d.marked_count / d.script_count) * 100) : 0;
+                    const paperStatus = (p?.paper_status ?? "setting") as NonNullable<Paper["paper_status"]>;
+                    // Collapse `assigned` into the "Marking" bucket so the dropdown has 3 sensible options.
+                    const markingValue = d.status === "assigned" ? "in_progress" : d.status;
                     return (
                       <TableRow key={d.id}>
                         <TableCell className="font-medium">
@@ -478,13 +543,51 @@ function OversightPage() {
                             {[p?.subject, p?.level, p?.stream].filter(Boolean).join(" · ")}
                           </div>
                         </TableCell>
-                        <TableCell className="text-sm">{setters || "—"}</TableCell>
-                        <TableCell className="text-sm">{d.teacher_name ?? "—"}</TableCell>
+                        <TableCell>
+                          <InlineText
+                            value={setters}
+                            placeholder="—"
+                            onSave={(v) => updateSetterName(d.paper_id, v)}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <InlineText
+                            value={d.teacher_name ?? ""}
+                            placeholder="—"
+                            onSave={(v) => updateMarkerName(d.id, v)}
+                          />
+                        </TableCell>
                         <TableCell className="text-sm">{d.class_label ?? "—"}</TableCell>
                         <TableCell className="text-right tabular-nums">{d.script_count}</TableCell>
                         <TableCell className="text-right tabular-nums">{d.marked_count}</TableCell>
                         <TableCell><Progress value={pct} /></TableCell>
-                        <TableCell><StatusBadge status={d.status} /></TableCell>
+                        <TableCell>
+                          <Select
+                            value={paperStatus}
+                            onValueChange={(v) => updatePaperStatus(p!.id, v as Paper["paper_status"])}
+                          >
+                            <SelectTrigger className="h-8 w-full"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="setting">Setting</SelectItem>
+                              <SelectItem value="editing">Editing</SelectItem>
+                              <SelectItem value="vetting">Vetting</SelectItem>
+                              <SelectItem value="cleared">Cleared</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          <Select
+                            value={markingValue}
+                            onValueChange={(v) => updateMarkingStatus(d.id, v as Deployment["status"])}
+                          >
+                            <SelectTrigger className="h-8 w-full"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="in_progress">Marking</SelectItem>
+                              <SelectItem value="marking_done">Moderating</SelectItem>
+                              <SelectItem value="moderated">Marked</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
                       </TableRow>
                     );
                   })}
@@ -721,3 +824,30 @@ function StatusBadge({ status }: { status: Deployment["status"] }) {
 
 // Silence unused-import warning for FileCheck2 in some builds; reserved for future panel.
 void FileCheck2;
+
+function InlineText({
+  value,
+  placeholder,
+  onSave,
+}: {
+  value: string;
+  placeholder?: string;
+  onSave: (v: string) => void | Promise<void>;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => { setDraft(value); }, [value]);
+  return (
+    <Input
+      value={draft}
+      placeholder={placeholder}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => { if (draft !== value) onSave(draft); }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") { (e.target as HTMLInputElement).blur(); }
+        if (e.key === "Escape") { setDraft(value); (e.target as HTMLInputElement).blur(); }
+      }}
+      className="h-8 text-sm"
+    />
+  );
+}
+
