@@ -1,62 +1,75 @@
 ## Goal
 
-Make the hover tooltips on the **Scripts assigned per marker** and **Setting load (points)** bars on `/oversight` more useful by **tabulating the information per class**, with the number of subjects and papers shown in parentheses.
+Add two **"% complete"** tiles to the Marking dashboard (`/oversight`) KPI strip — one for **Paper status**, one for **Marking status** — each with two indicators ("In progress" and "Completed").
 
 ## Where this lives
 
-`src/routes/oversight.tsx`, two tooltip bodies:
+`src/routes/oversight.tsx`, the KPI strip around line 498–504.
 
-- Marker bar (`perMarker`) — currently shows: "Classes (n): …", "Levels: …", "Subjects: …", "Papers: …" as comma-joined strings.
-- Setter bar (`settingLoad`) — currently shows similar comma-joined lists.
+## Status mapping
 
-Today, all subjects/papers/classes are listed as flat comma-separated strings, so there's no way to see which paper or subject belongs to which class.
+**Paper status tile** (source: `papers[].paper_status`)
+- In progress: `setting`, `editing`, `vetting`
+- Completed: `cleared`
+- % complete = Completed / (In progress + Completed)
 
-## What changes
+**Marking status tile** (source: `markerDeployments[].status`)
+- In progress: `in_progress` (Marking), `marking_done` (Moderating)
+- Completed: `moderated` (Marked)
+- % complete = Completed / (In progress + Completed)
+- (Rows with status `assigned` are excluded from the denominator since they haven't started.)
 
-Replace the flat lines inside each `<TooltipContent>` with a small table grouped by class:
-
-```
-Marker: Mr Tan
-Scripts assigned: 120 · Marked: 80
-
-Class            Subjects (n)         Papers (n)
-1A1              Math, Sci (2)        EOY P1, EOY P2 (2)
-1A2              Math (1)             EOY P1 (1)
-2B3              Hist (1)             SA1 (1)
-```
-
-Render rules:
-
-- One row per class for that teacher.
-- "Subjects" cell lists the unique subjects that appear in papers for that class, with the count in parentheses at the end.
-- "Papers" cell lists the unique paper titles for that class, with the count in parentheses at the end.
-- If a teacher has classes but no class label was provided, group those under a single "—" / "Unassigned class" row.
-- Empty subjects or papers show "—".
-
-## Data shape change
-
-Update the `perMarker` and `settingLoad` `useMemo` reducers to also build a per-class breakdown:
-
-```ts
-classBreakdown: Array<{
-  classLabel: string;        // e.g. "1A1" or "—"
-  subjects: string[];        // unique, sorted
-  papers: string[];          // unique paper titles, sorted
-}>
-```
-
-For markers, the join key is `(teacher_name, class_label)` from `marking_deployments` joined to `marking_papers`. For setters, since setter rows often have no `class_label`, derive the class list by looking at marker rows on the same `paper_id` (we already do this) and group those marker class labels with their paper.
+Both denominators respect the current filters (subject/year/assessment/search) — Paper tile uses `visiblePapers` (papers that pass `paperPasses`), Marking tile uses the existing `markerDeployments`.
 
 ## UI
 
-Use a compact `<table>` inside the existing `<TooltipContent>` (or a CSS grid) with three columns: Class · Subjects (n) · Papers (n). Keep the header row sticky-styled with `text-muted-foreground` and small font (`text-xs`). Cap width to `max-w-md` and allow vertical scroll for very tall tooltips (`max-h-72 overflow-auto`).
+Replace the single existing `% complete` Kpi at line 502 with two new tiles. Update the KPI strip from `md:grid-cols-5` to `md:grid-cols-6` to fit.
+
+```text
+[ Papers ] [ Markers deployed ] [ Scripts assigned ] [ % complete (Paper status) ] [ % complete (Marking status) ] [ Overdue / Flagged ]
+```
+
+Each new tile renders:
+- Top: label `"% complete — Paper status"` (or `"… — Marking status"`)
+- Big value: `"{pct}%"`
+- Sub-line: `"In progress: {n} · Completed: {m}"`
+
+Use the existing `Kpi` component; pass the sub-line via the `sub` prop. Wrap the value in a `Tooltip` (already imported) showing the per-status counts:
+- Paper: Setting · Editing · Vetting · Cleared
+- Marking: Marking · Moderating · Marked
+
+## Computation (added near existing KPI calcs ~line 230)
+
+```ts
+// Paper status rollup (visible papers only)
+const visiblePapers = papers.filter(paperPasses);
+const paperBuckets = { setting: 0, editing: 0, vetting: 0, cleared: 0 };
+for (const p of visiblePapers) {
+  const s = p.paper_status ?? "setting";
+  paperBuckets[s]++;
+}
+const paperInProgress = paperBuckets.setting + paperBuckets.editing + paperBuckets.vetting;
+const paperCompleted = paperBuckets.cleared;
+const paperPctComplete = (paperInProgress + paperCompleted) > 0
+  ? Math.round((paperCompleted / (paperInProgress + paperCompleted)) * 100) : 0;
+
+// Marking status rollup (markers only, excludes "assigned")
+const markBuckets = { in_progress: 0, marking_done: 0, moderated: 0 };
+for (const d of markerDeployments) {
+  if (d.status in markBuckets) markBuckets[d.status as keyof typeof markBuckets]++;
+}
+const markInProgress = markBuckets.in_progress + markBuckets.marking_done;
+const markCompleted = markBuckets.moderated;
+const markPctComplete = (markInProgress + markCompleted) > 0
+  ? Math.round((markCompleted / (markInProgress + markCompleted)) * 100) : 0;
+```
 
 ## Out of scope
 
-- Changing the visible bars themselves (lengths, colours, ordering).
-- Adding new columns like points-per-class or marked-per-class — keep it focused on the requested subjects/papers counts.
+- The existing scripts-based `% complete` (Marked / Assigned) — replaced by the two new tiles since the user asked for paper/marking-status-based indicators.
+- Any change to the deployment table, charts, or filters.
+- Schema changes — both fields already exist.
 
 ## Open question
 
-1. The user mentioned tabulating "subjects" and "papers". I want the cells to**show the count** (just "(2)") for compactness? 
-  &nbsp;
+The existing scripts-based `% complete` (Marked scripts / Assigned scripts) will be **removed** to make room. If you'd prefer to keep it as a third tile (3 "% complete" tiles total), let me know and I'll widen the strip to `md:grid-cols-7` instead.
