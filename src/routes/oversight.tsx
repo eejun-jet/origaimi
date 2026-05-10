@@ -383,7 +383,7 @@ function OversightPage() {
         )}
 
         {/* KPI strip */}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
           <Kpi label="Papers" value={papers.length} />
           <Kpi label="Markers deployed" value={new Set(markerDeployments.map((d) => d.teacher_name ?? "")).size} />
           <Kpi label="Scripts assigned" value={totalAssigned} />
@@ -699,7 +699,7 @@ function OversightPage() {
 function Kpi({ label, value, sub, tone }: { label: string; value: string | number; sub?: string; tone?: "warn" }) {
   return (
     <Card>
-      <CardContent className="p-4">
+      <CardContent className="flex flex-col items-center justify-center p-4 text-center">
         <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
         <div className={`mt-1 text-2xl font-semibold tabular-nums ${tone === "warn" ? "text-amber-600" : ""}`}>{value}</div>
         {sub && <div className="text-xs text-muted-foreground">{sub}</div>}
