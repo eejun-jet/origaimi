@@ -1,40 +1,47 @@
 ## Goal
 
-On the Oversight ("Dashboard") page, let users edit deployment details inline after the deployment file has been uploaded — no need to re-import the sheet for small contingency changes.
+On the Oversight dashboard (`/oversight`), make two improvements to the inline editing flow in the **Marker deployments** table:
 
-## What becomes editable per row
+1. **Auto-refresh after edits** — when a user changes Setter, Marker, Paper status, or Marking status, the dashboard's KPIs and the row itself should reflect the change immediately, with no "Update" / reload step.
+2. **Setter & Marker pickers** — replace the plain text input with a combobox: a dropdown of names already known from previous uploads, plus the ability to type a new name to override (for new staff).
 
-In the **Marker deployments** table (`/oversight`), each row gets four inline-editable fields:
+## What to change (`src/routes/oversight.tsx`)
 
-1. **Setter** — text input. Updates the `teacher_name` on the setter deployment(s) for that paper.
-2. **Marker** — text input. Updates `teacher_name` on the marker deployment row.
-3. **Paper status** — new dropdown: `Setting` / `Editing` / `Vetting` / `Cleared`. Stored on `marking_papers`.
-4. **Marking status** — dropdown: `Marking` / `Moderating` / `Marked`. Stored on `marking_deployments.status`.
+### 1. Auto-refresh on edit
 
-Each field saves on blur / select-change with a small toast confirmation. No "Save" button — fully inline.
+Today each `updatePaperStatus` / `updateMarkingStatus` / `updateMarkerName` / `updateSetterName` updates local state optimistically, but the KPI tiles at the top (papers cleared, marking progress, etc.) appear stale to the user because the change isn't always reflected immediately, and there's no visible confirmation beyond the toast.
 
-## Data model changes
+Plan:
+- Keep optimistic local updates (instant UI), then call `load()` in the background after the Supabase write succeeds so all derived numbers (KPIs, progress bars, filters) are recomputed from authoritative server data.
+- Wrap each updater so a single helper handles: optimistic change → write → background `load()` → toast. On error, revert and toast the failure.
+- Remove the requirement to navigate away and back to `/oversight` (the only current way the table fully refreshes).
 
-Add one column:
-- `marking_papers.paper_status` text, default `'setting'`, allowed values `setting | editing | vetting | cleared`.
+### 2. Setter & Marker dropdown with manual override
 
-Map the new "Marking status" dropdown to existing `marking_deployments.status` values:
-- Marking → `in_progress`
-- Moderating → `marking_done`
-- Marked → `moderated`
+Build the list of known names from the data already in memory:
+- `setterOptions` = unique non-empty `teacher_name` from all deployments where `role = 'setter'`, sorted alphabetically.
+- `markerOptions` = unique non-empty `teacher_name` from all deployments where `role = 'marker'`.
+- Union for both fields so a marker can also be picked as a setter and vice versa.
 
-(`assigned` stays as the initial state from import; the dropdown shows "Marking" for both `assigned` and `in_progress` to keep things simple, and writing "Marking" sets `in_progress`.)
+Replace the inline `<Input>` for Setter and Marker with a small **Combobox** (shadcn `Popover` + `Command`, the standard pattern already used by shadcn). Behaviour:
+- Click → shows the searchable list of existing names.
+- Typing filters; if no match, a "Use '<typed>'" item appears so the user can save a brand-new name (new staff).
+- Selecting an option (or pressing Enter on the "Use" item) calls the existing `updateSetterName` / `updateMarkerName`.
+- Empty selection clears the name (writes `null`), same as today.
 
-## UI changes (`src/routes/oversight.tsx`)
+Extract this into one component, e.g. `<TeacherCombobox value options onSave placeholder />`, and use it for both columns.
 
-- Replace the Setter/Marker `<TableCell>` text with a small inline `<Input>` that writes back to the relevant deployment row(s) on blur.
-- Replace the `StatusBadge` cell with the **Marking status** `<Select>`. Add a new **Paper status** column with its own `<Select>`.
-- All edits route through helpers `updatePaperStatus(paperId, value)`, `updateDeploymentStatus(deploymentId, value)`, `updateMarker(deploymentId, name)`, `updateSetter(paperId, name)` that call `supabase.from(...).update(...)` and update local state optimistically.
-- Setter edit policy: if the paper has multiple setter rows, the inline edit replaces the comma-joined list with a single setter row (simplest sensible behaviour); we can refine to per-setter chips later if needed.
-- Permissions: gated by the existing `useRoles()` check already on the page.
+### 3. Minor polish
+
+- Show a subtle "Saving…" indicator on the row being edited (greyed out while the network round-trip is in flight) so the user sees feedback even before the toast.
+
+## Out of scope
+
+- Realtime subscriptions (Supabase channels) for multi-user live updates — stick with reload-after-write for now; can be added later if multiple SLs edit the same dashboard concurrently.
+- Persisting a separate "staff directory" table — names are still derived from past uploads.
+- Changes to the `/oversight/import` flow.
 
 ## Open questions
 
-1. **Marking status mapping** — confirm Marking=`in_progress`, Moderating=`marking_done`, Marked=`moderated`. Or do you want four options including a separate "Assigned"?
-2. **Setter editing** — for papers with multiple setters today (comma-joined), is collapsing to a single editable name acceptable, or should we keep multi-setter editing (one row per setter)?
-3. **Who can edit** — anyone who can see Oversight, or restricted to SL / HOD only?
+1. For the dropdown options, should we **also include names from `profiles` / `teacher_aliases`** (registered teachers in the system), or keep it strictly to names seen in past uploads? Including profiles would surface staff who haven't yet been deployed.
+2. When a user picks a known name from the dropdown, do you also want the system to **auto-link `teacher_id`** (so points roll up to that profile), or keep the link manual?
