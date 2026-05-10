@@ -414,7 +414,7 @@ function OversightPage() {
             <p className="text-sm text-muted-foreground">
               Setters, markers, scripts and progress across the department/school.
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="mt-1 text-xs text-muted-foreground font-normal">
               New here? Download the sample template (15 mock rows per term), replace with your data, then upload to see your dashboard data.
             </p>
           </div>
