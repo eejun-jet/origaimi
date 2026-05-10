@@ -265,6 +265,7 @@ function OversightPage() {
       levels: Set<string>;
       subjects: Set<string>;
       papers: Set<string>;
+      byClass: Map<string, { subjects: Set<string>; papers: Set<string> }>;
     };
     const m = new Map<string, Entry>();
     for (const d of markerDeployments) {
@@ -273,6 +274,7 @@ function OversightPage() {
       const e = m.get(key) ?? {
         name: key, assigned: 0, marked: 0, flagged: 0, classes: 0,
         classLabels: [], levels: new Set<string>(), subjects: new Set<string>(), papers: new Set<string>(),
+        byClass: new Map<string, { subjects: Set<string>; papers: Set<string> }>(),
       };
       e.assigned += d.script_count;
       e.marked += d.marked_count;
@@ -282,6 +284,11 @@ function OversightPage() {
       if (p?.level) e.levels.add(p.level);
       if (p?.subject) e.subjects.add(p.subject);
       if (p?.title) e.papers.add(p.title);
+      const ck = d.class_label || "—";
+      const cb = e.byClass.get(ck) ?? { subjects: new Set<string>(), papers: new Set<string>() };
+      if (p?.subject) cb.subjects.add(p.subject);
+      if (p?.title) cb.papers.add(p.title);
+      e.byClass.set(ck, cb);
       m.set(key, e);
     }
     return Array.from(m.values())
@@ -295,6 +302,13 @@ function OversightPage() {
         levels: Array.from(e.levels).sort(),
         subjects: Array.from(e.subjects).sort(),
         papers: Array.from(e.papers).sort(),
+        classBreakdown: Array.from(e.byClass.entries())
+          .map(([classLabel, v]) => ({
+            classLabel,
+            subjectCount: v.subjects.size,
+            paperCount: v.papers.size,
+          }))
+          .sort((a, b) => a.classLabel.localeCompare(b.classLabel)),
       }))
       .sort((a, b) => b.assigned - a.assigned);
   }, [markerDeployments, paperById]);
