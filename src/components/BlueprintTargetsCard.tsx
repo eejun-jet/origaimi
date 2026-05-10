@@ -40,16 +40,53 @@ export function BlueprintTargetsCard({
   initialConfirmed,
   onSaved,
 }: Props) {
+  // Determine whether the syllabus declares canonical bucket rows (single
+  // letters like "A", "B"). When it does, the editor renders one row per
+  // bucket and stores overrides keyed by bucket letter — so the Coach,
+  // Coverage panel and TOS Δ all read the syllabus's bucket-level blueprint
+  // instead of per sub-code.
+  const canonicalBuckets = useMemo(() => {
+    const set = new Set<string>();
+    for (const d of aoDefs) {
+      const c = d.code?.trim();
+      if (c && /^[A-Z]$/.test(c)) set.add(c);
+    }
+    return set;
+  }, [aoDefs]);
+
+  const useBuckets = canonicalBuckets.size > 0;
+
+  // The list of editable rows. In bucket mode we collapse sub-codes into
+  // their letter prefix; otherwise we list every observed/declared code.
   const codes = useMemo(() => {
+    if (useBuckets) {
+      const set = new Set<string>(canonicalBuckets);
+      for (const c of observedAoCodes) {
+        const m = c.match(/^([A-Z])\d+$/);
+        if (m && canonicalBuckets.has(m[1])) set.add(m[1]);
+        else set.add(c);
+      }
+      return Array.from(set).sort();
+    }
     const set = new Set<string>();
     aoDefs.forEach((d) => set.add(d.code));
     observedAoCodes.forEach((c) => set.add(c));
     return Array.from(set).sort();
-  }, [aoDefs, observedAoCodes]);
+  }, [aoDefs, observedAoCodes, useBuckets, canonicalBuckets]);
 
+  // Look up a default percentage for a given row key (bucket letter or code).
   const defaultFor = (code: string): string => {
     const ov = initialOverrides?.[code];
     if (typeof ov === "number") return String(ov);
+    if (useBuckets) {
+      // Prefer the canonical bucket row, otherwise sum sub-code weights.
+      const canonical = aoDefs.find((d) => d.code === code)?.weighting_percent;
+      if (typeof canonical === "number") return String(canonical);
+      const sum = aoDefs
+        .filter((d) => bucketOf(d.code) === code && d.code !== code)
+        .reduce((s, d) => s + (typeof d.weighting_percent === "number" ? d.weighting_percent : 0), 0);
+      return sum > 0 ? String(sum) : "";
+    }
     const def = aoDefs.find((d) => d.code === code)?.weighting_percent;
     return typeof def === "number" ? String(def) : "";
   };
