@@ -265,6 +265,7 @@ function OversightPage() {
       levels: Set<string>;
       subjects: Set<string>;
       papers: Set<string>;
+      byClass: Map<string, { subjects: Set<string>; papers: Set<string> }>;
     };
     const m = new Map<string, Entry>();
     for (const d of markerDeployments) {
@@ -273,6 +274,7 @@ function OversightPage() {
       const e = m.get(key) ?? {
         name: key, assigned: 0, marked: 0, flagged: 0, classes: 0,
         classLabels: [], levels: new Set<string>(), subjects: new Set<string>(), papers: new Set<string>(),
+        byClass: new Map<string, { subjects: Set<string>; papers: Set<string> }>(),
       };
       e.assigned += d.script_count;
       e.marked += d.marked_count;
@@ -282,6 +284,11 @@ function OversightPage() {
       if (p?.level) e.levels.add(p.level);
       if (p?.subject) e.subjects.add(p.subject);
       if (p?.title) e.papers.add(p.title);
+      const ck = d.class_label || "—";
+      const cb = e.byClass.get(ck) ?? { subjects: new Set<string>(), papers: new Set<string>() };
+      if (p?.subject) cb.subjects.add(p.subject);
+      if (p?.title) cb.papers.add(p.title);
+      e.byClass.set(ck, cb);
       m.set(key, e);
     }
     return Array.from(m.values())
@@ -295,6 +302,13 @@ function OversightPage() {
         levels: Array.from(e.levels).sort(),
         subjects: Array.from(e.subjects).sort(),
         papers: Array.from(e.papers).sort(),
+        classBreakdown: Array.from(e.byClass.entries())
+          .map(([classLabel, v]) => ({
+            classLabel,
+            subjectCount: v.subjects.size,
+            paperCount: v.papers.size,
+          }))
+          .sort((a, b) => a.classLabel.localeCompare(b.classLabel)),
       }))
       .sort((a, b) => b.assigned - a.assigned);
   }, [markerDeployments, paperById]);
@@ -309,6 +323,7 @@ function OversightPage() {
       levels: Set<string>;
       postingGroups: Set<string>;
       classLabels: Set<string>;
+      byClass: Map<string, { subjects: Set<string>; papers: Set<string> }>;
     };
     const m = new Map<string, Entry>();
     for (const d of setterDeployments) {
@@ -319,6 +334,7 @@ function OversightPage() {
         paperIds: new Set<string>(), paperTitles: new Set<string>(),
         subjects: new Set<string>(), levels: new Set<string>(),
         postingGroups: new Set<string>(), classLabels: new Set<string>(),
+        byClass: new Map<string, { subjects: Set<string>; papers: Set<string> }>(),
       };
       e.points += Number(d.points) || 0;
       e.paperIds.add(d.paper_id);
@@ -326,9 +342,21 @@ function OversightPage() {
       if (p?.subject) e.subjects.add(p.subject);
       if (p?.level) e.levels.add(p.level);
       if (p?.stream) e.postingGroups.add(p.stream);
-      for (const md of markerDeployments) {
-        if (md.paper_id !== d.paper_id) continue;
-        if (md.class_label) e.classLabels.add(md.class_label);
+      const matchingMarkers = markerDeployments.filter((md) => md.paper_id === d.paper_id);
+      const classesForPaper: string[] = [];
+      for (const md of matchingMarkers) {
+        if (md.class_label) {
+          e.classLabels.add(md.class_label);
+          classesForPaper.push(md.class_label);
+        }
+      }
+      // If no marker class label, still record under "—" so the paper appears in the breakdown.
+      const keys = classesForPaper.length > 0 ? classesForPaper : ["—"];
+      for (const ck of keys) {
+        const cb = e.byClass.get(ck) ?? { subjects: new Set<string>(), papers: new Set<string>() };
+        if (p?.subject) cb.subjects.add(p.subject);
+        if (p?.title) cb.papers.add(p.title);
+        e.byClass.set(ck, cb);
       }
       m.set(key, e);
     }
@@ -342,6 +370,13 @@ function OversightPage() {
         levels: Array.from(e.levels).sort(),
         postingGroups: Array.from(e.postingGroups).sort(),
         classLabels: Array.from(e.classLabels).sort(),
+        classBreakdown: Array.from(e.byClass.entries())
+          .map(([classLabel, v]) => ({
+            classLabel,
+            subjectCount: v.subjects.size,
+            paperCount: v.papers.size,
+          }))
+          .sort((a, b) => a.classLabel.localeCompare(b.classLabel)),
       }))
       .filter((e) => e.points > 0)
       .sort((a, b) => b.points - a.points);
@@ -707,13 +742,13 @@ function OversightPage() {
                             </div>
                           </div>
                         </TooltipTrigger>
-                        <TooltipContent side="top" align="start" className="max-w-sm space-y-1">
+                        <TooltipContent side="top" align="start" className="max-w-md space-y-2">
                           <div className="font-medium">{t.name}</div>
-                          <div>Scripts assigned: <span className="tabular-nums">{t.assigned}</span> · Marked: <span className="tabular-nums">{t.marked}</span>{t.flagged > 0 ? <> · Flagged: <span className="tabular-nums">{t.flagged}</span></> : null}</div>
-                          <div>Classes ({t.classes}): {t.classLabels.length ? t.classLabels.join(", ") : "—"}</div>
-                          <div>Levels: {t.levels.length ? t.levels.join(", ") : "—"}</div>
-                          <div>Subjects: {t.subjects.length ? t.subjects.join(", ") : "—"}</div>
-                          <div>Papers: {t.papers.length ? t.papers.join("; ") : "—"}</div>
+                          <div className="text-xs">
+                            Scripts assigned: <span className="tabular-nums">{t.assigned}</span> · Marked: <span className="tabular-nums">{t.marked}</span>
+                            {t.flagged > 0 ? <> · Flagged: <span className="tabular-nums">{t.flagged}</span></> : null}
+                          </div>
+                          <ClassBreakdownTable rows={t.classBreakdown} />
                         </TooltipContent>
                       </Tooltip>
                     ));
@@ -750,14 +785,12 @@ function OversightPage() {
                             <div className="col-span-3 text-right tabular-nums text-muted-foreground">{t.points.toFixed(1)} pts</div>
                           </div>
                         </TooltipTrigger>
-                        <TooltipContent side="top" align="start" className="max-w-sm space-y-1">
+                        <TooltipContent side="top" align="start" className="max-w-md space-y-2">
                           <div className="font-medium">{t.name}</div>
-                          <div>Points: <span className="tabular-nums">{t.points.toFixed(1)}</span> · Papers set: <span className="tabular-nums">{t.papers}</span></div>
-                          <div>Subjects: {t.subjects.length ? t.subjects.join(", ") : "—"}</div>
-                          <div>Levels: {t.levels.length ? t.levels.join(", ") : "—"}</div>
-                          <div>Posting groups: {t.postingGroups.length ? t.postingGroups.join(", ") : "—"}</div>
-                          <div>Classes: {t.classLabels.length ? t.classLabels.join(", ") : "—"}</div>
-                          <div>Paper titles: {t.paperTitles.length ? t.paperTitles.join("; ") : "—"}</div>
+                          <div className="text-xs">
+                            Points: <span className="tabular-nums">{t.points.toFixed(1)}</span> · Papers set: <span className="tabular-nums">{t.papers}</span>
+                          </div>
+                          <ClassBreakdownTable rows={t.classBreakdown} />
                         </TooltipContent>
                       </Tooltip>
                     ));
@@ -956,3 +989,34 @@ function TeacherCombobox({
   );
 }
 
+function ClassBreakdownTable({
+  rows,
+}: {
+  rows: Array<{ classLabel: string; subjectCount: number; paperCount: number }>;
+}) {
+  if (!rows || rows.length === 0) {
+    return <div className="text-xs text-muted-foreground">No class data.</div>;
+  }
+  return (
+    <div className="max-h-72 overflow-auto rounded border border-border">
+      <table className="w-full text-xs">
+        <thead className="bg-muted/50 text-muted-foreground">
+          <tr>
+            <th className="px-2 py-1 text-left font-normal">Class</th>
+            <th className="px-2 py-1 text-right font-normal">Subjects</th>
+            <th className="px-2 py-1 text-right font-normal">Papers</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.classLabel} className="border-t border-border">
+              <td className="px-2 py-1">{r.classLabel}</td>
+              <td className="px-2 py-1 text-right tabular-nums">({r.subjectCount})</td>
+              <td className="px-2 py-1 text-right tabular-nums">({r.paperCount})</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
