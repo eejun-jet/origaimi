@@ -323,6 +323,7 @@ function OversightPage() {
       levels: Set<string>;
       postingGroups: Set<string>;
       classLabels: Set<string>;
+      byClass: Map<string, { subjects: Set<string>; papers: Set<string> }>;
     };
     const m = new Map<string, Entry>();
     for (const d of setterDeployments) {
@@ -333,6 +334,7 @@ function OversightPage() {
         paperIds: new Set<string>(), paperTitles: new Set<string>(),
         subjects: new Set<string>(), levels: new Set<string>(),
         postingGroups: new Set<string>(), classLabels: new Set<string>(),
+        byClass: new Map<string, { subjects: Set<string>; papers: Set<string> }>(),
       };
       e.points += Number(d.points) || 0;
       e.paperIds.add(d.paper_id);
@@ -340,9 +342,21 @@ function OversightPage() {
       if (p?.subject) e.subjects.add(p.subject);
       if (p?.level) e.levels.add(p.level);
       if (p?.stream) e.postingGroups.add(p.stream);
-      for (const md of markerDeployments) {
-        if (md.paper_id !== d.paper_id) continue;
-        if (md.class_label) e.classLabels.add(md.class_label);
+      const matchingMarkers = markerDeployments.filter((md) => md.paper_id === d.paper_id);
+      const classesForPaper: string[] = [];
+      for (const md of matchingMarkers) {
+        if (md.class_label) {
+          e.classLabels.add(md.class_label);
+          classesForPaper.push(md.class_label);
+        }
+      }
+      // If no marker class label, still record under "—" so the paper appears in the breakdown.
+      const keys = classesForPaper.length > 0 ? classesForPaper : ["—"];
+      for (const ck of keys) {
+        const cb = e.byClass.get(ck) ?? { subjects: new Set<string>(), papers: new Set<string>() };
+        if (p?.subject) cb.subjects.add(p.subject);
+        if (p?.title) cb.papers.add(p.title);
+        e.byClass.set(ck, cb);
       }
       m.set(key, e);
     }
@@ -356,6 +370,13 @@ function OversightPage() {
         levels: Array.from(e.levels).sort(),
         postingGroups: Array.from(e.postingGroups).sort(),
         classLabels: Array.from(e.classLabels).sort(),
+        classBreakdown: Array.from(e.byClass.entries())
+          .map(([classLabel, v]) => ({
+            classLabel,
+            subjectCount: v.subjects.size,
+            paperCount: v.papers.size,
+          }))
+          .sort((a, b) => a.classLabel.localeCompare(b.classLabel)),
       }))
       .filter((e) => e.points > 0)
       .sort((a, b) => b.points - a.points);
