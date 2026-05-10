@@ -139,6 +139,7 @@ function OversightPage() {
       if (error || !data) { toast.error(`Update failed: ${error?.message ?? "unknown"}`); return; }
       setDeployments((ds) => [...ds, data as Deployment]);
       toast.success("Setter updated");
+      void load();
       return;
     }
 
@@ -155,6 +156,7 @@ function OversightPage() {
       await supabase.from("marking_deployments").delete().in("id", rest.map((r) => r.id));
     }
     toast.success("Setter updated");
+    void load();
   };
 
   // Reload whenever we (re)enter the dashboard, e.g. after returning from /oversight/import.
