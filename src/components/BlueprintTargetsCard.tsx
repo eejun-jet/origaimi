@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { bucketOf } from "@/lib/ao-rollup";
 
 export type AODefMin = {
   code: string;
@@ -39,16 +40,53 @@ export function BlueprintTargetsCard({
   initialConfirmed,
   onSaved,
 }: Props) {
+  // Determine whether the syllabus declares canonical bucket rows (single
+  // letters like "A", "B"). When it does, the editor renders one row per
+  // bucket and stores overrides keyed by bucket letter — so the Coach,
+  // Coverage panel and TOS Δ all read the syllabus's bucket-level blueprint
+  // instead of per sub-code.
+  const canonicalBuckets = useMemo(() => {
+    const set = new Set<string>();
+    for (const d of aoDefs) {
+      const c = d.code?.trim();
+      if (c && /^[A-Z]$/.test(c)) set.add(c);
+    }
+    return set;
+  }, [aoDefs]);
+
+  const useBuckets = canonicalBuckets.size > 0;
+
+  // The list of editable rows. In bucket mode we collapse sub-codes into
+  // their letter prefix; otherwise we list every observed/declared code.
   const codes = useMemo(() => {
+    if (useBuckets) {
+      const set = new Set<string>(canonicalBuckets);
+      for (const c of observedAoCodes) {
+        const m = c.match(/^([A-Z])\d+$/);
+        if (m && canonicalBuckets.has(m[1])) set.add(m[1]);
+        else set.add(c);
+      }
+      return Array.from(set).sort();
+    }
     const set = new Set<string>();
     aoDefs.forEach((d) => set.add(d.code));
     observedAoCodes.forEach((c) => set.add(c));
     return Array.from(set).sort();
-  }, [aoDefs, observedAoCodes]);
+  }, [aoDefs, observedAoCodes, useBuckets, canonicalBuckets]);
 
+  // Look up a default percentage for a given row key (bucket letter or code).
   const defaultFor = (code: string): string => {
     const ov = initialOverrides?.[code];
     if (typeof ov === "number") return String(ov);
+    if (useBuckets) {
+      // Prefer the canonical bucket row, otherwise sum sub-code weights.
+      const canonical = aoDefs.find((d) => d.code === code)?.weighting_percent;
+      if (typeof canonical === "number") return String(canonical);
+      const sum = aoDefs
+        .filter((d) => bucketOf(d.code) === code && d.code !== code)
+        .reduce((s, d) => s + (typeof d.weighting_percent === "number" ? d.weighting_percent : 0), 0);
+      return sum > 0 ? String(sum) : "";
+    }
     const def = aoDefs.find((d) => d.code === code)?.weighting_percent;
     return typeof def === "number" ? String(def) : "";
   };
@@ -140,6 +178,19 @@ export function BlueprintTargetsCard({
           const def = aoDefs.find((d) => d.code === code);
           const pct = Number(values[code]) || 0;
           const targetMarks = Math.round((pct / 100) * totalMarks);
+          // For bucket rows, build a title from the canonical bucket row or
+          // from contributing sub-codes' titles.
+          const title = useBuckets && /^[A-Z]$/.test(code)
+            ? (def?.title
+              ?? (Array.from(
+                new Set(
+                  aoDefs
+                    .filter((d) => bucketOf(d.code) === code && d.code !== code)
+                    .map((d) => d.title)
+                    .filter((t): t is string => !!t),
+                ),
+              ).join(" · ") || `AO ${code}`))
+            : (def?.title ?? "—");
           return (
             <div
               key={code}
@@ -148,9 +199,9 @@ export function BlueprintTargetsCard({
               <span className="text-xs font-semibold text-foreground">{code}</span>
               <span
                 className="col-span-2 truncate text-xs text-muted-foreground sm:col-span-1"
-                title={def?.title ?? ""}
+                title={title}
               >
-                {def?.title ?? "—"}
+                {title}
               </span>
               <div className="col-start-2 flex items-center gap-1 sm:col-start-3">
                 <Input
