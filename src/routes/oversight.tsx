@@ -258,9 +258,15 @@ function OversightPage() {
   const paperPctComplete = (paperInProgress + paperCompleted) > 0
     ? Math.round((paperCompleted / (paperInProgress + paperCompleted)) * 100) : 0;
 
-  // Marking-status completion (excludes "assigned")
+  // Marking-status completion (excludes "assigned").
+  // Use visibleDeployments (subject/year/assessment filters only) so the KPI
+  // tile is NOT affected by the table's Status filter or search box.
+  const markerDeploymentsForKpi = useMemo(
+    () => visibleDeployments.filter((d) => d.role === "marker"),
+    [visibleDeployments],
+  );
   const markBuckets = { in_progress: 0, marking_done: 0, moderated: 0 };
-  for (const d of markerDeployments) {
+  for (const d of markerDeploymentsForKpi) {
     if (d.status in markBuckets) markBuckets[d.status as keyof typeof markBuckets]++;
   }
   const markInProgress = markBuckets.in_progress + markBuckets.marking_done;
