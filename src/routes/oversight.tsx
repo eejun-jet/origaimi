@@ -99,7 +99,7 @@ function OversightPage() {
   const updatePaperStatus = async (paperId: string, value: Paper["paper_status"]) => {
     const prev = papers;
     setPapers((ps) => ps.map((p) => (p.id === paperId ? { ...p, paper_status: value } : p)));
-    const { error } = await supabase.from("marking_papers").update({ paper_status: value }).eq("id", paperId);
+    const { error } = await supabase.from("marking_papers").update({ paper_status: value } as never).eq("id", paperId);
     if (error) { setPapers(prev); toast.error(`Update failed: ${error.message}`); return; }
     toast.success("Paper status updated");
   };
