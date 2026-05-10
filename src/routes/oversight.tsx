@@ -272,21 +272,17 @@ function OversightPage() {
   const paperPctComplete = (paperInProgress + paperCompleted) > 0
     ? Math.round((paperCompleted / (paperInProgress + paperCompleted)) * 100) : 0;
 
-  // Marking-status completion (excludes "assigned").
-  // Use visibleDeployments (subject/year/assessment filters only) so the KPI
-  // tile is NOT affected by the table's Status filter or search box.
+  // Marking-status completion. Use visibleDeployments (subject/year/assessment filters
+  // only) so the KPI tile is NOT affected by the table's Status filter or search box.
+  // "Marked" (internal status `moderated`) counts as completed; everything else is in progress.
   const markerDeploymentsForKpi = useMemo(
     () => visibleDeployments.filter((d) => d.role === "marker"),
     [visibleDeployments],
   );
-  const markBuckets = { in_progress: 0, marking_done: 0, moderated: 0 };
-  for (const d of markerDeploymentsForKpi) {
-    if (d.status in markBuckets) markBuckets[d.status as keyof typeof markBuckets]++;
-  }
-  const markInProgress = markBuckets.in_progress + markBuckets.marking_done;
-  const markCompleted = markBuckets.moderated;
-  const markPctComplete = (markInProgress + markCompleted) > 0
-    ? Math.round((markCompleted / (markInProgress + markCompleted)) * 100) : 0;
+  const markCompleted = markerDeploymentsForKpi.filter((d) => d.status === "moderated").length;
+  const markInProgress = markerDeploymentsForKpi.length - markCompleted;
+  const markPctComplete = markerDeploymentsForKpi.length > 0
+    ? Math.round((markCompleted / markerDeploymentsForKpi.length) * 100) : 0;
   // Scripts breakdown by level
   const byLevel = useMemo(() => {
     const m = new Map<string, { level: string; papers: Set<string>; assigned: number; marked: number; flagged: number }>();
