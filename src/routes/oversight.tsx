@@ -415,7 +415,7 @@ function OversightPage() {
               Setters, markers, scripts and progress {isSl ? "across the school" : "in your department"}.
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              New here? Download the sample template (15 mock rows per term), replace with your data, then import to see your dashboard data.
+              New here? Download the sample template (15 mock rows per term), replace with your data, then upload to see your dashboard data.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
