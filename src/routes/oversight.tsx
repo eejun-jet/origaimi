@@ -742,13 +742,13 @@ function OversightPage() {
                             </div>
                           </div>
                         </TooltipTrigger>
-                        <TooltipContent side="top" align="start" className="max-w-sm space-y-1">
+                        <TooltipContent side="top" align="start" className="max-w-md space-y-2">
                           <div className="font-medium">{t.name}</div>
-                          <div>Scripts assigned: <span className="tabular-nums">{t.assigned}</span> · Marked: <span className="tabular-nums">{t.marked}</span>{t.flagged > 0 ? <> · Flagged: <span className="tabular-nums">{t.flagged}</span></> : null}</div>
-                          <div>Classes ({t.classes}): {t.classLabels.length ? t.classLabels.join(", ") : "—"}</div>
-                          <div>Levels: {t.levels.length ? t.levels.join(", ") : "—"}</div>
-                          <div>Subjects: {t.subjects.length ? t.subjects.join(", ") : "—"}</div>
-                          <div>Papers: {t.papers.length ? t.papers.join("; ") : "—"}</div>
+                          <div className="text-xs">
+                            Scripts assigned: <span className="tabular-nums">{t.assigned}</span> · Marked: <span className="tabular-nums">{t.marked}</span>
+                            {t.flagged > 0 ? <> · Flagged: <span className="tabular-nums">{t.flagged}</span></> : null}
+                          </div>
+                          <ClassBreakdownTable rows={t.classBreakdown} />
                         </TooltipContent>
                       </Tooltip>
                     ));
