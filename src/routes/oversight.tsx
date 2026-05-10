@@ -414,7 +414,7 @@ function OversightPage() {
             <p className="text-sm text-muted-foreground">
               Setters, markers, scripts and progress across the department/school.
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="mt-1 text-xs text-muted-foreground font-normal">
               New here? Download the sample template (15 mock rows per term), replace with your data, then upload to see your dashboard data.
             </p>
           </div>
@@ -497,7 +497,7 @@ function OversightPage() {
         <Card>
           <CardHeader className="flex-row items-center justify-between">
             <CardTitle className="text-base">Marker deployments</CardTitle>
-            <span className="text-xs text-muted-foreground">{filtered.length} rows</span>
+            <span className="text-xs text-muted-foreground font-normal">{filtered.length} rows</span>
           </CardHeader>
           <CardContent className="p-0">
             {loading ? (
@@ -539,7 +539,7 @@ function OversightPage() {
                       <TableRow key={d.id}>
                         <TableCell className="font-medium">
                           {p?.title}
-                          <div className="text-xs text-muted-foreground">
+                          <div className="text-xs text-muted-foreground font-normal">
                             {[p?.subject, p?.level, p?.stream].filter(Boolean).join(" · ")}
                           </div>
                         </TableCell>
@@ -805,7 +805,7 @@ function Kpi({ label, value, sub, tone }: { label: string; value: string | numbe
       <CardContent className="flex flex-col items-center justify-center p-4 text-center font-bold text-3xl">
         <div className="text-xs uppercase tracking-wide text-muted-foreground font-normal">{label}</div>
         <div className={`text-muted-foreground text-center text-3xl font-bold ${tone === "warn" ? "text-amber-600" : ""}`}>{value}</div>
-        {sub && <div className="text-xs text-muted-foreground">{sub}</div>}
+        {sub && <div className="text-xs text-muted-foreground font-normal">{sub}</div>}
       </CardContent>
     </Card>
   );
