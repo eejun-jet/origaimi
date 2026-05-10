@@ -343,8 +343,8 @@ function OversightPage() {
         classBreakdown: Array.from(e.byClass.entries())
           .map(([classLabel, v]) => ({
             classLabel,
-            subjectCount: v.subjects.size,
-            paperCount: v.papers.size,
+            subjects: Array.from(v.subjects).sort(),
+            papers: Array.from(v.papers).sort(),
           }))
           .sort((a, b) => a.classLabel.localeCompare(b.classLabel)),
       }))
