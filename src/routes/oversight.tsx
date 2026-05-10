@@ -426,7 +426,7 @@ function OversightPage() {
             </Button>
             <Button asChild>
               <Link to="/oversight/import">
-                <Upload className="mr-2 h-4 w-4" />Import deployment sheet
+                <Upload className="mr-2 h-4 w-4" />Upload deployment sheet
               </Link>
             </Button>
             {imports.length > 0 && (
