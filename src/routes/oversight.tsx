@@ -10,7 +10,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Upload, Users, FileCheck2, AlertTriangle, Download } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Upload, Users, FileCheck2, AlertTriangle, Download, ChevronsUpDown, Check } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useRoles } from "@/lib/roles";
 
@@ -102,6 +105,7 @@ function OversightPage() {
     const { error } = await supabase.from("marking_papers").update({ paper_status: value } as never).eq("id", paperId);
     if (error) { setPapers(prev); toast.error(`Update failed: ${error.message}`); return; }
     toast.success("Paper status updated");
+    void load();
   };
 
   const updateMarkingStatus = async (deploymentId: string, value: Deployment["status"]) => {
@@ -110,6 +114,7 @@ function OversightPage() {
     const { error } = await supabase.from("marking_deployments").update({ status: value }).eq("id", deploymentId);
     if (error) { setDeployments(prev); toast.error(`Update failed: ${error.message}`); return; }
     toast.success("Marking status updated");
+    void load();
   };
 
   const updateMarkerName = async (deploymentId: string, name: string) => {
@@ -119,6 +124,7 @@ function OversightPage() {
     const { error } = await supabase.from("marking_deployments").update({ teacher_name: trimmed || null }).eq("id", deploymentId);
     if (error) { setDeployments(prev); toast.error(`Update failed: ${error.message}`); return; }
     toast.success("Marker updated");
+    void load();
   };
 
   const updateSetterName = async (paperId: string, name: string) => {
@@ -136,6 +142,7 @@ function OversightPage() {
       if (error || !data) { toast.error(`Update failed: ${error?.message ?? "unknown"}`); return; }
       setDeployments((ds) => [...ds, data as Deployment]);
       toast.success("Setter updated");
+      void load();
       return;
     }
 
@@ -152,6 +159,7 @@ function OversightPage() {
       await supabase.from("marking_deployments").delete().in("id", rest.map((r) => r.id));
     }
     toast.success("Setter updated");
+    void load();
   };
 
   // Reload whenever we (re)enter the dashboard, e.g. after returning from /oversight/import.
@@ -208,6 +216,14 @@ function OversightPage() {
     });
   }, [visibleDeployments, paperById, statusFilter, search]);
   const setterDeployments = useMemo(() => visibleDeployments.filter((d) => d.role === "setter"), [visibleDeployments]);
+  const teacherOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const d of deployments) {
+      const n = d.teacher_name?.trim();
+      if (n) names.add(n);
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [deployments]);
 
   const filtered = markerDeployments;
 
@@ -544,15 +560,17 @@ function OversightPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <InlineText
+                          <TeacherCombobox
                             value={setters}
+                            options={teacherOptions}
                             placeholder="—"
                             onSave={(v) => updateSetterName(d.paper_id, v)}
                           />
                         </TableCell>
                         <TableCell>
-                          <InlineText
+                          <TeacherCombobox
                             value={d.teacher_name ?? ""}
+                            options={teacherOptions}
                             placeholder="—"
                             onSave={(v) => updateMarkerName(d.id, v)}
                           />
@@ -848,6 +866,93 @@ function InlineText({
       }}
       className="h-8 text-sm"
     />
+  );
+}
+
+function TeacherCombobox({
+  value,
+  options,
+  placeholder,
+  onSave,
+}: {
+  value: string;
+  options: string[];
+  placeholder?: string;
+  onSave: (v: string) => void | Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const trimmedQuery = query.trim();
+  const exists = !!trimmedQuery && options.some((o) => o.toLowerCase() === trimmedQuery.toLowerCase());
+  const select = (next: string) => {
+    setOpen(false);
+    setQuery("");
+    if (next !== value) void onSave(next);
+  };
+  return (
+    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setQuery(""); }}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="h-8 w-full justify-between px-2 text-sm font-normal"
+        >
+          <span className={cn("truncate", !value && "text-muted-foreground")}>
+            {value || placeholder || "Select…"}
+          </span>
+          <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[240px] p-0" align="start">
+        <Command>
+          <CommandInput
+            placeholder="Search or type a name…"
+            value={query}
+            onValueChange={setQuery}
+          />
+          <CommandList>
+            <CommandEmpty>
+              {trimmedQuery ? (
+                <button
+                  type="button"
+                  className="w-full rounded px-2 py-1.5 text-left text-sm hover:bg-accent"
+                  onClick={() => select(trimmedQuery)}
+                >
+                  Use "{trimmedQuery}"
+                </button>
+              ) : (
+                <span className="text-sm text-muted-foreground">No names yet.</span>
+              )}
+            </CommandEmpty>
+            {value ? (
+              <CommandGroup>
+                <CommandItem value="__clear__" onSelect={() => select("")}>
+                  <span className="text-muted-foreground">Clear</span>
+                </CommandItem>
+              </CommandGroup>
+            ) : null}
+            {options.length > 0 ? (
+              <CommandGroup heading="Existing">
+                {options.map((name) => (
+                  <CommandItem key={name} value={name} onSelect={() => select(name)}>
+                    <Check className={cn("mr-2 h-3.5 w-3.5", value === name ? "opacity-100" : "opacity-0")} />
+                    {name}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ) : null}
+            {trimmedQuery && !exists ? (
+              <CommandGroup heading="New">
+                <CommandItem value={`__new__${trimmedQuery}`} onSelect={() => select(trimmedQuery)}>
+                  Use "{trimmedQuery}"
+                </CommandItem>
+              </CommandGroup>
+            ) : null}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 
