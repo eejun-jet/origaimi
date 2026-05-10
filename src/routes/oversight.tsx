@@ -513,13 +513,14 @@ function OversightPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Paper</TableHead>
-                    <TableHead>Setter</TableHead>
-                    <TableHead>Marker</TableHead>
+                    <TableHead className="w-40">Setter</TableHead>
+                    <TableHead className="w-40">Marker</TableHead>
                     <TableHead>Class</TableHead>
                     <TableHead className="text-right">Assigned</TableHead>
                     <TableHead className="text-right">Marked</TableHead>
-                    <TableHead className="w-40">Progress</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead className="w-32">Progress</TableHead>
+                    <TableHead className="w-36">Paper status</TableHead>
+                    <TableHead className="w-36">Marking status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -531,6 +532,9 @@ function OversightPage() {
                       .filter(Boolean)
                       .join(", ");
                     const pct = d.script_count > 0 ? Math.round((d.marked_count / d.script_count) * 100) : 0;
+                    const paperStatus = (p?.paper_status ?? "setting") as NonNullable<Paper["paper_status"]>;
+                    // Collapse `assigned` into the "Marking" bucket so the dropdown has 3 sensible options.
+                    const markingValue = d.status === "assigned" ? "in_progress" : d.status;
                     return (
                       <TableRow key={d.id}>
                         <TableCell className="font-medium">
@@ -539,13 +543,51 @@ function OversightPage() {
                             {[p?.subject, p?.level, p?.stream].filter(Boolean).join(" · ")}
                           </div>
                         </TableCell>
-                        <TableCell className="text-sm">{setters || "—"}</TableCell>
-                        <TableCell className="text-sm">{d.teacher_name ?? "—"}</TableCell>
+                        <TableCell>
+                          <InlineText
+                            value={setters}
+                            placeholder="—"
+                            onSave={(v) => updateSetterName(d.paper_id, v)}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <InlineText
+                            value={d.teacher_name ?? ""}
+                            placeholder="—"
+                            onSave={(v) => updateMarkerName(d.id, v)}
+                          />
+                        </TableCell>
                         <TableCell className="text-sm">{d.class_label ?? "—"}</TableCell>
                         <TableCell className="text-right tabular-nums">{d.script_count}</TableCell>
                         <TableCell className="text-right tabular-nums">{d.marked_count}</TableCell>
                         <TableCell><Progress value={pct} /></TableCell>
-                        <TableCell><StatusBadge status={d.status} /></TableCell>
+                        <TableCell>
+                          <Select
+                            value={paperStatus}
+                            onValueChange={(v) => updatePaperStatus(p!.id, v as Paper["paper_status"])}
+                          >
+                            <SelectTrigger className="h-8 w-full"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="setting">Setting</SelectItem>
+                              <SelectItem value="editing">Editing</SelectItem>
+                              <SelectItem value="vetting">Vetting</SelectItem>
+                              <SelectItem value="cleared">Cleared</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          <Select
+                            value={markingValue}
+                            onValueChange={(v) => updateMarkingStatus(d.id, v as Deployment["status"])}
+                          >
+                            <SelectTrigger className="h-8 w-full"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="in_progress">Marking</SelectItem>
+                              <SelectItem value="marking_done">Moderating</SelectItem>
+                              <SelectItem value="moderated">Marked</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
                       </TableRow>
                     );
                   })}
