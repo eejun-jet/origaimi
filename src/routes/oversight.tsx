@@ -283,10 +283,11 @@ function OversightPage() {
   const markInProgress = markerDeploymentsForKpi.length - markCompleted;
   const markPctComplete = markerDeploymentsForKpi.length > 0
     ? Math.round((markCompleted / markerDeploymentsForKpi.length) * 100) : 0;
-  // Scripts breakdown by level
+  // Scripts breakdown by level — uses subject/year/assessment-filtered cohort
+  // (NOT the table's status filter or search) so totals stay live as statuses change.
   const byLevel = useMemo(() => {
     const m = new Map<string, { level: string; papers: Set<string>; assigned: number; marked: number; flagged: number }>();
-    for (const d of markerDeployments) {
+    for (const d of markerDeploymentsForKpi) {
       const p = paperById.get(d.paper_id);
       const level = p?.level ?? "—";
       const e = m.get(level) ?? { level, papers: new Set<string>(), assigned: 0, marked: 0, flagged: 0 };
@@ -299,10 +300,12 @@ function OversightPage() {
     return Array.from(m.values())
       .map((e) => ({ level: e.level, papers: e.papers.size, assigned: e.assigned, marked: e.marked, flagged: e.flagged }))
       .sort((a, b) => a.level.localeCompare(b.level));
-  }, [markerDeployments, paperById]);
+  }, [markerDeploymentsForKpi, paperById]);
 
-  // Per-teacher rollups — markers and setters separately (a setter doesn't necessarily mark, and vice versa)
+  // Per-teacher rollups — markers and setters separately (a setter doesn't necessarily mark, and vice versa).
+  // Uses markerDeploymentsForKpi so changing a status doesn't drop a marker out of the chart.
   const perMarker = useMemo(() => {
+    type ClassAgg = { subjects: Set<string>; papers: Set<string>; assigned: number; marked: number };
     type Entry = {
       name: string;
       assigned: number;
@@ -313,16 +316,16 @@ function OversightPage() {
       levels: Set<string>;
       subjects: Set<string>;
       papers: Set<string>;
-      byClass: Map<string, { subjects: Set<string>; papers: Set<string> }>;
+      byClass: Map<string, ClassAgg>;
     };
     const m = new Map<string, Entry>();
-    for (const d of markerDeployments) {
+    for (const d of markerDeploymentsForKpi) {
       const key = d.teacher_name ?? "Unassigned";
       const p = paperById.get(d.paper_id);
       const e = m.get(key) ?? {
         name: key, assigned: 0, marked: 0, flagged: 0, classes: 0,
         classLabels: [], levels: new Set<string>(), subjects: new Set<string>(), papers: new Set<string>(),
-        byClass: new Map<string, { subjects: Set<string>; papers: Set<string> }>(),
+        byClass: new Map<string, ClassAgg>(),
       };
       e.assigned += d.script_count;
       e.marked += d.marked_count;
@@ -333,9 +336,11 @@ function OversightPage() {
       if (p?.subject) e.subjects.add(p.subject);
       if (p?.title) e.papers.add(p.title);
       const ck = d.class_label || "—";
-      const cb = e.byClass.get(ck) ?? { subjects: new Set<string>(), papers: new Set<string>() };
+      const cb = e.byClass.get(ck) ?? { subjects: new Set<string>(), papers: new Set<string>(), assigned: 0, marked: 0 };
       if (p?.subject) cb.subjects.add(p.subject);
       if (p?.title) cb.papers.add(p.title);
+      cb.assigned += d.script_count;
+      cb.marked += d.marked_count;
       e.byClass.set(ck, cb);
       m.set(key, e);
     }
@@ -355,11 +360,14 @@ function OversightPage() {
             classLabel,
             subjects: Array.from(v.subjects).sort(),
             papers: Array.from(v.papers).sort(),
+            assigned: v.assigned,
+            marked: v.marked,
+            toMark: Math.max(0, v.assigned - v.marked),
           }))
           .sort((a, b) => a.classLabel.localeCompare(b.classLabel)),
       }))
       .sort((a, b) => b.assigned - a.assigned);
-  }, [markerDeployments, paperById]);
+  }, [markerDeploymentsForKpi, paperById]);
 
   const settingLoad = useMemo(() => {
     type Entry = {
