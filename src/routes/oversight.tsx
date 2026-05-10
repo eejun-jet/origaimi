@@ -110,10 +110,24 @@ function OversightPage() {
 
   const updateMarkingStatus = async (deploymentId: string, value: Deployment["status"]) => {
     const prev = deployments;
-    setDeployments((ds) => ds.map((d) => (d.id === deploymentId ? { ...d, status: value } : d)));
-    const { error } = await supabase.from("marking_deployments").update({ status: value }).eq("id", deploymentId);
+    // When a row becomes "Marked" (moderated), set marked_count = script_count so
+    // downstream tables (Scripts by level, per-marker chart, progress bar) reflect completion.
+    const target = deployments.find((d) => d.id === deploymentId);
+    const nextMarked =
+      value === "moderated" && target ? target.script_count : target?.marked_count ?? 0;
+    setDeployments((ds) =>
+      ds.map((d) =>
+        d.id === deploymentId
+          ? { ...d, status: value, marked_count: value === "moderated" ? d.script_count : d.marked_count }
+          : d,
+      ),
+    );
+    const patch: { status: Deployment["status"]; marked_count?: number } = { status: value };
+    if (value === "moderated" && target) patch.marked_count = target.script_count;
+    const { error } = await supabase.from("marking_deployments").update(patch).eq("id", deploymentId);
     if (error) { setDeployments(prev); toast.error(`Update failed: ${error.message}`); return; }
     toast.success("Marking status updated");
+    void nextMarked;
     void load();
   };
 
@@ -258,25 +272,22 @@ function OversightPage() {
   const paperPctComplete = (paperInProgress + paperCompleted) > 0
     ? Math.round((paperCompleted / (paperInProgress + paperCompleted)) * 100) : 0;
 
-  // Marking-status completion (excludes "assigned").
-  // Use visibleDeployments (subject/year/assessment filters only) so the KPI
-  // tile is NOT affected by the table's Status filter or search box.
+  // Marking-status completion. Use visibleDeployments (subject/year/assessment filters
+  // only) so the KPI tile is NOT affected by the table's Status filter or search box.
+  // "Marked" (internal status `moderated`) counts as completed; everything else is in progress.
   const markerDeploymentsForKpi = useMemo(
     () => visibleDeployments.filter((d) => d.role === "marker"),
     [visibleDeployments],
   );
-  const markBuckets = { in_progress: 0, marking_done: 0, moderated: 0 };
-  for (const d of markerDeploymentsForKpi) {
-    if (d.status in markBuckets) markBuckets[d.status as keyof typeof markBuckets]++;
-  }
-  const markInProgress = markBuckets.in_progress + markBuckets.marking_done;
-  const markCompleted = markBuckets.moderated;
-  const markPctComplete = (markInProgress + markCompleted) > 0
-    ? Math.round((markCompleted / (markInProgress + markCompleted)) * 100) : 0;
-  // Scripts breakdown by level
+  const markCompleted = markerDeploymentsForKpi.filter((d) => d.status === "moderated").length;
+  const markInProgress = markerDeploymentsForKpi.length - markCompleted;
+  const markPctComplete = markerDeploymentsForKpi.length > 0
+    ? Math.round((markCompleted / markerDeploymentsForKpi.length) * 100) : 0;
+  // Scripts breakdown by level — uses subject/year/assessment-filtered cohort
+  // (NOT the table's status filter or search) so totals stay live as statuses change.
   const byLevel = useMemo(() => {
     const m = new Map<string, { level: string; papers: Set<string>; assigned: number; marked: number; flagged: number }>();
-    for (const d of markerDeployments) {
+    for (const d of markerDeploymentsForKpi) {
       const p = paperById.get(d.paper_id);
       const level = p?.level ?? "—";
       const e = m.get(level) ?? { level, papers: new Set<string>(), assigned: 0, marked: 0, flagged: 0 };
@@ -289,10 +300,12 @@ function OversightPage() {
     return Array.from(m.values())
       .map((e) => ({ level: e.level, papers: e.papers.size, assigned: e.assigned, marked: e.marked, flagged: e.flagged }))
       .sort((a, b) => a.level.localeCompare(b.level));
-  }, [markerDeployments, paperById]);
+  }, [markerDeploymentsForKpi, paperById]);
 
-  // Per-teacher rollups — markers and setters separately (a setter doesn't necessarily mark, and vice versa)
+  // Per-teacher rollups — markers and setters separately (a setter doesn't necessarily mark, and vice versa).
+  // Uses markerDeploymentsForKpi so changing a status doesn't drop a marker out of the chart.
   const perMarker = useMemo(() => {
+    type ClassAgg = { subjects: Set<string>; papers: Set<string>; assigned: number; marked: number };
     type Entry = {
       name: string;
       assigned: number;
@@ -303,16 +316,16 @@ function OversightPage() {
       levels: Set<string>;
       subjects: Set<string>;
       papers: Set<string>;
-      byClass: Map<string, { subjects: Set<string>; papers: Set<string> }>;
+      byClass: Map<string, ClassAgg>;
     };
     const m = new Map<string, Entry>();
-    for (const d of markerDeployments) {
+    for (const d of markerDeploymentsForKpi) {
       const key = d.teacher_name ?? "Unassigned";
       const p = paperById.get(d.paper_id);
       const e = m.get(key) ?? {
         name: key, assigned: 0, marked: 0, flagged: 0, classes: 0,
         classLabels: [], levels: new Set<string>(), subjects: new Set<string>(), papers: new Set<string>(),
-        byClass: new Map<string, { subjects: Set<string>; papers: Set<string> }>(),
+        byClass: new Map<string, ClassAgg>(),
       };
       e.assigned += d.script_count;
       e.marked += d.marked_count;
@@ -323,9 +336,11 @@ function OversightPage() {
       if (p?.subject) e.subjects.add(p.subject);
       if (p?.title) e.papers.add(p.title);
       const ck = d.class_label || "—";
-      const cb = e.byClass.get(ck) ?? { subjects: new Set<string>(), papers: new Set<string>() };
+      const cb = e.byClass.get(ck) ?? { subjects: new Set<string>(), papers: new Set<string>(), assigned: 0, marked: 0 };
       if (p?.subject) cb.subjects.add(p.subject);
       if (p?.title) cb.papers.add(p.title);
+      cb.assigned += d.script_count;
+      cb.marked += d.marked_count;
       e.byClass.set(ck, cb);
       m.set(key, e);
     }
@@ -345,11 +360,14 @@ function OversightPage() {
             classLabel,
             subjects: Array.from(v.subjects).sort(),
             papers: Array.from(v.papers).sort(),
+            assigned: v.assigned,
+            marked: v.marked,
+            toMark: Math.max(0, v.assigned - v.marked),
           }))
           .sort((a, b) => a.classLabel.localeCompare(b.classLabel)),
       }))
       .sort((a, b) => b.assigned - a.assigned);
-  }, [markerDeployments, paperById]);
+  }, [markerDeploymentsForKpi, paperById]);
 
   const settingLoad = useMemo(() => {
     type Entry = {
@@ -361,7 +379,7 @@ function OversightPage() {
       levels: Set<string>;
       postingGroups: Set<string>;
       classLabels: Set<string>;
-      byClass: Map<string, { subjects: Set<string>; papers: Set<string> }>;
+      byClass: Map<string, { subjects: Set<string>; papers: Set<string>; assigned: number; marked: number }>;
     };
     const m = new Map<string, Entry>();
     for (const d of setterDeployments) {
@@ -372,7 +390,7 @@ function OversightPage() {
         paperIds: new Set<string>(), paperTitles: new Set<string>(),
         subjects: new Set<string>(), levels: new Set<string>(),
         postingGroups: new Set<string>(), classLabels: new Set<string>(),
-        byClass: new Map<string, { subjects: Set<string>; papers: Set<string> }>(),
+        byClass: new Map<string, { subjects: Set<string>; papers: Set<string>; assigned: number; marked: number }>(),
       };
       e.points += Number(d.points) || 0;
       e.paperIds.add(d.paper_id);
@@ -380,21 +398,26 @@ function OversightPage() {
       if (p?.subject) e.subjects.add(p.subject);
       if (p?.level) e.levels.add(p.level);
       if (p?.stream) e.postingGroups.add(p.stream);
-      const matchingMarkers = markerDeployments.filter((md) => md.paper_id === d.paper_id);
-      const classesForPaper: string[] = [];
+      // Use the unfiltered marker cohort so script counts stay live.
+      const matchingMarkers = markerDeploymentsForKpi.filter((md) => md.paper_id === d.paper_id);
+      const seenClasses = new Set<string>();
       for (const md of matchingMarkers) {
-        if (md.class_label) {
-          e.classLabels.add(md.class_label);
-          classesForPaper.push(md.class_label);
-        }
-      }
-      // If no marker class label, still record under "—" so the paper appears in the breakdown.
-      const keys = classesForPaper.length > 0 ? classesForPaper : ["—"];
-      for (const ck of keys) {
-        const cb = e.byClass.get(ck) ?? { subjects: new Set<string>(), papers: new Set<string>() };
+        const ck = md.class_label || "—";
+        seenClasses.add(ck);
+        if (md.class_label) e.classLabels.add(md.class_label);
+        const cb = e.byClass.get(ck) ?? { subjects: new Set<string>(), papers: new Set<string>(), assigned: 0, marked: 0 };
         if (p?.subject) cb.subjects.add(p.subject);
         if (p?.title) cb.papers.add(p.title);
+        cb.assigned += md.script_count;
+        cb.marked += md.marked_count;
         e.byClass.set(ck, cb);
+      }
+      // If no marker rows at all, still record the paper so it appears in the breakdown.
+      if (seenClasses.size === 0) {
+        const cb = e.byClass.get("—") ?? { subjects: new Set<string>(), papers: new Set<string>(), assigned: 0, marked: 0 };
+        if (p?.subject) cb.subjects.add(p.subject);
+        if (p?.title) cb.papers.add(p.title);
+        e.byClass.set("—", cb);
       }
       m.set(key, e);
     }
@@ -413,12 +436,15 @@ function OversightPage() {
             classLabel,
             subjects: Array.from(v.subjects).sort(),
             papers: Array.from(v.papers).sort(),
+            assigned: v.assigned,
+            marked: v.marked,
+            toMark: Math.max(0, v.assigned - v.marked),
           }))
           .sort((a, b) => a.classLabel.localeCompare(b.classLabel)),
       }))
       .filter((e) => e.points > 0)
       .sort((a, b) => b.points - a.points);
-  }, [setterDeployments, markerDeployments, paperById]);
+  }, [setterDeployments, markerDeploymentsForKpi, paperById]);
 
   // Points by teacher and role (deployment-by-points)
   const totalPoints = useMemo(
@@ -1039,7 +1065,14 @@ function TeacherCombobox({
 function ClassBreakdownTable({
   rows,
 }: {
-  rows: Array<{ classLabel: string; subjects: string[]; papers: string[] }>;
+  rows: Array<{
+    classLabel: string;
+    subjects: string[];
+    papers: string[];
+    assigned?: number;
+    marked?: number;
+    toMark?: number;
+  }>;
 }) {
   if (!rows || rows.length === 0) {
     return <div className="text-xs text-muted-foreground">No class data.</div>;
@@ -1052,22 +1085,36 @@ function ClassBreakdownTable({
             <th className="px-2 py-1 text-left font-normal">Class</th>
             <th className="px-2 py-1 text-left font-normal">Subjects</th>
             <th className="px-2 py-1 text-left font-normal">Papers</th>
+            <th className="px-2 py-1 text-right font-normal whitespace-nowrap">Scripts to mark</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => {
             const subjectsText = r.subjects.length > 0 ? r.subjects.join(", ") : "—";
             const papersText = r.papers.length > 0 ? r.papers.join(", ") : "—";
+            const assigned = r.assigned ?? 0;
+            const marked = r.marked ?? 0;
+            const toMark = r.toMark ?? Math.max(0, assigned - marked);
             return (
               <tr key={r.classLabel} className="border-t border-border align-top">
                 <td className="px-2 py-1 whitespace-nowrap">{r.classLabel}</td>
                 <td className="px-2 py-1" title={subjectsText}>
-                  <div className="line-clamp-2">{subjectsText}</div>
-                  <div className="text-muted-foreground tabular-nums">({r.subjects.length})</div>
+                  <div className="line-clamp-2">
+                    <span className="text-foreground">{subjectsText}</span>{" "}
+                    <span className="text-muted-foreground tabular-nums">({r.subjects.length})</span>
+                  </div>
                 </td>
                 <td className="px-2 py-1" title={papersText}>
-                  <div className="line-clamp-2">{papersText}</div>
-                  <div className="text-muted-foreground tabular-nums">({r.papers.length})</div>
+                  <div className="line-clamp-2">
+                    <span className="text-foreground">{papersText}</span>{" "}
+                    <span className="text-muted-foreground tabular-nums">({r.papers.length})</span>
+                  </div>
+                </td>
+                <td className="px-2 py-1 text-right whitespace-nowrap tabular-nums">
+                  <div>{toMark}</div>
+                  <div className="text-muted-foreground">
+                    {marked}/{assigned} marked
+                  </div>
                 </td>
               </tr>
             );
