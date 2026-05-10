@@ -110,10 +110,24 @@ function OversightPage() {
 
   const updateMarkingStatus = async (deploymentId: string, value: Deployment["status"]) => {
     const prev = deployments;
-    setDeployments((ds) => ds.map((d) => (d.id === deploymentId ? { ...d, status: value } : d)));
-    const { error } = await supabase.from("marking_deployments").update({ status: value }).eq("id", deploymentId);
+    // When a row becomes "Marked" (moderated), set marked_count = script_count so
+    // downstream tables (Scripts by level, per-marker chart, progress bar) reflect completion.
+    const target = deployments.find((d) => d.id === deploymentId);
+    const nextMarked =
+      value === "moderated" && target ? target.script_count : target?.marked_count ?? 0;
+    setDeployments((ds) =>
+      ds.map((d) =>
+        d.id === deploymentId
+          ? { ...d, status: value, marked_count: value === "moderated" ? d.script_count : d.marked_count }
+          : d,
+      ),
+    );
+    const patch: { status: Deployment["status"]; marked_count?: number } = { status: value };
+    if (value === "moderated" && target) patch.marked_count = target.script_count;
+    const { error } = await supabase.from("marking_deployments").update(patch).eq("id", deploymentId);
     if (error) { setDeployments(prev); toast.error(`Update failed: ${error.message}`); return; }
     toast.success("Marking status updated");
+    void nextMarked;
     void load();
   };
 
