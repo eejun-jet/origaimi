@@ -785,14 +785,12 @@ function OversightPage() {
                             <div className="col-span-3 text-right tabular-nums text-muted-foreground">{t.points.toFixed(1)} pts</div>
                           </div>
                         </TooltipTrigger>
-                        <TooltipContent side="top" align="start" className="max-w-sm space-y-1">
+                        <TooltipContent side="top" align="start" className="max-w-md space-y-2">
                           <div className="font-medium">{t.name}</div>
-                          <div>Points: <span className="tabular-nums">{t.points.toFixed(1)}</span> · Papers set: <span className="tabular-nums">{t.papers}</span></div>
-                          <div>Subjects: {t.subjects.length ? t.subjects.join(", ") : "—"}</div>
-                          <div>Levels: {t.levels.length ? t.levels.join(", ") : "—"}</div>
-                          <div>Posting groups: {t.postingGroups.length ? t.postingGroups.join(", ") : "—"}</div>
-                          <div>Classes: {t.classLabels.length ? t.classLabels.join(", ") : "—"}</div>
-                          <div>Paper titles: {t.paperTitles.length ? t.paperTitles.join("; ") : "—"}</div>
+                          <div className="text-xs">
+                            Points: <span className="tabular-nums">{t.points.toFixed(1)}</span> · Papers set: <span className="tabular-nums">{t.papers}</span>
+                          </div>
+                          <ClassBreakdownTable rows={t.classBreakdown} />
                         </TooltipContent>
                       </Tooltip>
                     ));
