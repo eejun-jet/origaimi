@@ -168,6 +168,18 @@ function OversightPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNestedRoute]);
 
+  // Realtime: refresh KPIs/tables when papers or deployments change anywhere.
+  useEffect(() => {
+    if (isNestedRoute) return;
+    const ch = supabase
+      .channel("oversight-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "marking_deployments" }, () => { void load(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "marking_papers" }, () => { void load(); })
+      .subscribe();
+    return () => { void supabase.removeChannel(ch); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNestedRoute]);
+
   const paperById = useMemo(() => {
     const m = new Map<string, Paper>();
     for (const p of papers) m.set(p.id, p);
@@ -246,9 +258,15 @@ function OversightPage() {
   const paperPctComplete = (paperInProgress + paperCompleted) > 0
     ? Math.round((paperCompleted / (paperInProgress + paperCompleted)) * 100) : 0;
 
-  // Marking-status completion (excludes "assigned")
+  // Marking-status completion (excludes "assigned").
+  // Use visibleDeployments (subject/year/assessment filters only) so the KPI
+  // tile is NOT affected by the table's Status filter or search box.
+  const markerDeploymentsForKpi = useMemo(
+    () => visibleDeployments.filter((d) => d.role === "marker"),
+    [visibleDeployments],
+  );
   const markBuckets = { in_progress: 0, marking_done: 0, moderated: 0 };
-  for (const d of markerDeployments) {
+  for (const d of markerDeploymentsForKpi) {
     if (d.status in markBuckets) markBuckets[d.status as keyof typeof markBuckets]++;
   }
   const markInProgress = markBuckets.in_progress + markBuckets.marking_done;
@@ -325,8 +343,8 @@ function OversightPage() {
         classBreakdown: Array.from(e.byClass.entries())
           .map(([classLabel, v]) => ({
             classLabel,
-            subjectCount: v.subjects.size,
-            paperCount: v.papers.size,
+            subjects: Array.from(v.subjects).sort(),
+            papers: Array.from(v.papers).sort(),
           }))
           .sort((a, b) => a.classLabel.localeCompare(b.classLabel)),
       }))
@@ -393,8 +411,8 @@ function OversightPage() {
         classBreakdown: Array.from(e.byClass.entries())
           .map(([classLabel, v]) => ({
             classLabel,
-            subjectCount: v.subjects.size,
-            paperCount: v.papers.size,
+            subjects: Array.from(v.subjects).sort(),
+            papers: Array.from(v.papers).sort(),
           }))
           .sort((a, b) => a.classLabel.localeCompare(b.classLabel)),
       }))
@@ -1021,7 +1039,7 @@ function TeacherCombobox({
 function ClassBreakdownTable({
   rows,
 }: {
-  rows: Array<{ classLabel: string; subjectCount: number; paperCount: number }>;
+  rows: Array<{ classLabel: string; subjects: string[]; papers: string[] }>;
 }) {
   if (!rows || rows.length === 0) {
     return <div className="text-xs text-muted-foreground">No class data.</div>;
@@ -1032,18 +1050,28 @@ function ClassBreakdownTable({
         <thead className="bg-muted/50 text-muted-foreground">
           <tr>
             <th className="px-2 py-1 text-left font-normal">Class</th>
-            <th className="px-2 py-1 text-right font-normal">Subjects</th>
-            <th className="px-2 py-1 text-right font-normal">Papers</th>
+            <th className="px-2 py-1 text-left font-normal">Subjects</th>
+            <th className="px-2 py-1 text-left font-normal">Papers</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
-            <tr key={r.classLabel} className="border-t border-border">
-              <td className="px-2 py-1">{r.classLabel}</td>
-              <td className="px-2 py-1 text-right tabular-nums">({r.subjectCount})</td>
-              <td className="px-2 py-1 text-right tabular-nums">({r.paperCount})</td>
-            </tr>
-          ))}
+          {rows.map((r) => {
+            const subjectsText = r.subjects.length > 0 ? r.subjects.join(", ") : "—";
+            const papersText = r.papers.length > 0 ? r.papers.join(", ") : "—";
+            return (
+              <tr key={r.classLabel} className="border-t border-border align-top">
+                <td className="px-2 py-1 whitespace-nowrap">{r.classLabel}</td>
+                <td className="px-2 py-1" title={subjectsText}>
+                  <div className="line-clamp-2">{subjectsText}</div>
+                  <div className="text-muted-foreground tabular-nums">({r.subjects.length})</div>
+                </td>
+                <td className="px-2 py-1" title={papersText}>
+                  <div className="line-clamp-2">{papersText}</div>
+                  <div className="text-muted-foreground tabular-nums">({r.papers.length})</div>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

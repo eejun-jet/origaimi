@@ -1,75 +1,93 @@
-## Goal
+## Goals
 
-Add two **"% complete"** tiles to the Marking dashboard (`/oversight`) KPI strip — one for **Paper status**, one for **Marking status** — each with two indicators ("In progress" and "Completed").
+Fix the two Dashboard (`/oversight`) issues:
 
-## Where this lives
+1. **"% complete — Marking Status" tile doesn't reflect changes** when a row's marking status flips to "Marked".
+2. **Bar-chart hover tooltips** ("Scripts assigned per marker", "Setting load (points)") show only bare numbers in `( )` per class — the user can't see *which* subjects or *which* papers those numbers belong to.
 
-`src/routes/oversight.tsx`, the KPI strip around line 498–504.
+All changes stay in `src/routes/oversight.tsx` — no schema, no business-logic rewrites.
 
-## Status mapping
+---
 
-**Paper status tile** (source: `papers[].paper_status`)
-- In progress: `setting`, `editing`, `vetting`
-- Completed: `cleared`
-- % complete = Completed / (In progress + Completed)
+## Issue 1 — Marking Status tile
 
-**Marking status tile** (source: `markerDeployments[].status`)
-- In progress: `in_progress` (Marking), `marking_done` (Moderating)
-- Completed: `moderated` (Marked)
-- % complete = Completed / (In progress + Completed)
-- (Rows with status `assigned` are excluded from the denominator since they haven't started.)
+### Root causes
 
-Both denominators respect the current filters (subject/year/assessment/search) — Paper tile uses `visiblePapers` (papers that pass `paperPasses`), Marking tile uses the existing `markerDeployments`.
+Two separate problems compound:
 
-## UI
+a. **Tile is gated by the page's Status filter.** `markBuckets` (lines 250–257) is computed off `markerDeployments`, which already filters by `statusFilter`. When the Status filter is set to e.g. "In progress", changing a row to "Marked" makes that row drop out of `markerDeployments` entirely, so both numerator and denominator shift in lockstep and the visible % barely (or doesn't) change. KPI tiles should reflect the *whole* visible cohort, not the table's status filter.
 
-Replace the single existing `% complete` Kpi at line 502 with two new tiles. Update the KPI strip from `md:grid-cols-5` to `md:grid-cols-6` to fit.
+b. **No realtime sync.** `updateMarkingStatus` does an optimistic update + `void load()`, which works for the same tab, but if the row is changed elsewhere (another tab, server-side, cron sweep) the tile stays stale until manual refresh.
 
-```text
-[ Papers ] [ Markers deployed ] [ Scripts assigned ] [ % complete (Paper status) ] [ % complete (Marking status) ] [ Overdue / Flagged ]
-```
+### Fix
 
-Each new tile renders:
-- Top: label `"% complete — Paper status"` (or `"… — Marking status"`)
-- Big value: `"{pct}%"`
-- Sub-line: `"In progress: {n} · Completed: {m}"`
-
-Use the existing `Kpi` component; pass the sub-line via the `sub` prop. Wrap the value in a `Tooltip` (already imported) showing the per-status counts:
-- Paper: Setting · Editing · Vetting · Cleared
-- Marking: Marking · Moderating · Marked
-
-## Computation (added near existing KPI calcs ~line 230)
+- Compute `markBuckets` from a new `markerDeploymentsForKpi` derived from `visibleDeployments` (subject/year/assessment + role==="marker", *no* `statusFilter`, *no* `search`). Keep the existing `markerDeployments` for the table.
+- Add a `supabase.channel('oversight-realtime')` subscription on `marking_papers` and `marking_deployments` that calls `load()` on any change. Clean up on unmount.
 
 ```ts
-// Paper status rollup (visible papers only)
-const visiblePapers = papers.filter(paperPasses);
-const paperBuckets = { setting: 0, editing: 0, vetting: 0, cleared: 0 };
-for (const p of visiblePapers) {
-  const s = p.paper_status ?? "setting";
-  paperBuckets[s]++;
-}
-const paperInProgress = paperBuckets.setting + paperBuckets.editing + paperBuckets.vetting;
-const paperCompleted = paperBuckets.cleared;
-const paperPctComplete = (paperInProgress + paperCompleted) > 0
-  ? Math.round((paperCompleted / (paperInProgress + paperCompleted)) * 100) : 0;
-
-// Marking status rollup (markers only, excludes "assigned")
-const markBuckets = { in_progress: 0, marking_done: 0, moderated: 0 };
-for (const d of markerDeployments) {
-  if (d.status in markBuckets) markBuckets[d.status as keyof typeof markBuckets]++;
-}
-const markInProgress = markBuckets.in_progress + markBuckets.marking_done;
-const markCompleted = markBuckets.moderated;
-const markPctComplete = (markInProgress + markCompleted) > 0
-  ? Math.round((markCompleted / (markInProgress + markCompleted)) * 100) : 0;
+const markerDeploymentsForKpi = useMemo(
+  () => visibleDeployments.filter((d) => d.role === "marker"),
+  [visibleDeployments],
+);
+// markBuckets / markInProgress / markCompleted use markerDeploymentsForKpi
 ```
+
+Realtime subscription (in `OversightPage`):
+```ts
+useEffect(() => {
+  const ch = supabase.channel('oversight-realtime')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'marking_deployments' }, () => load())
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'marking_papers' }, () => load())
+    .subscribe();
+  return () => { supabase.removeChannel(ch); };
+}, []);
+```
+
+A migration enables realtime on the two tables:
+```sql
+ALTER PUBLICATION supabase_realtime ADD TABLE public.marking_papers;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.marking_deployments;
+```
+
+Also apply the same fix to `paperBuckets` so the **Paper status** tile is symmetric (it already uses `visiblePapers`, which is fine — no change needed there).
+
+---
+
+## Issue 2 — Tooltip shows numbers without subjects/papers
+
+### Why it looks "random"
+
+`ClassBreakdownTable` (lines 1021–1051) currently renders only `(subjectCount)` and `(paperCount)` per class. So a row reads e.g. `4A | (2) | (3)` — there's no indication that "(2)" means "2 subjects" or which subjects, and "(3)" means "3 papers" or which papers. The user reads it as random.
+
+### Fix
+
+Carry the actual names through and render them. Update the rollups in `perMarker` (lines 277–334) and `settingLoad` (lines 336–403) so each `classBreakdown` row carries:
+
+```ts
+{ classLabel, subjects: string[], papers: string[] }
+```
+
+Then `ClassBreakdownTable` becomes:
+
+```text
+Class   | Subjects (n)              | Papers (n)
+4A      | Math, Science (2)         | P1 EOY, P2 EOY, P2 Mock (3)
+4B      | Math (1)                  | P1 Mock (1)
+```
+
+- Subject cell: comma-joined names with the count in parens at the end.
+- Paper cell: comma-joined paper titles with count in parens; truncate with `line-clamp-2` and a `title` attribute for the full list to keep the tooltip compact.
+
+For the markers' tooltip, "papers" already means the paper *titles* set/marked for that class, which is what the user asked for. For setters', same idea.
+
+---
+
+## Files touched
+
+- `src/routes/oversight.tsx` — KPI source change, realtime hook, `classBreakdown` shape, `ClassBreakdownTable` rendering.
+- One migration to enable realtime on `marking_papers` and `marking_deployments`.
 
 ## Out of scope
 
-- The existing scripts-based `% complete` (Marked / Assigned) — replaced by the two new tiles since the user asked for paper/marking-status-based indicators.
-- Any change to the deployment table, charts, or filters.
-- Schema changes — both fields already exist.
-
-## Open question
-
-The existing scripts-based `% complete` (Marked scripts / Assigned scripts) will be **removed** to make room. If you'd prefer to keep it as a third tile (3 "% complete" tiles total), let me know and I'll widen the strip to `md:grid-cols-7` instead.
+- No changes to filters, the deployment table, the `Scripts by level` table, or any data writes.
+- No new components; `ClassBreakdownTable` is updated in place.
