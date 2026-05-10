@@ -1065,7 +1065,14 @@ function TeacherCombobox({
 function ClassBreakdownTable({
   rows,
 }: {
-  rows: Array<{ classLabel: string; subjects: string[]; papers: string[] }>;
+  rows: Array<{
+    classLabel: string;
+    subjects: string[];
+    papers: string[];
+    assigned?: number;
+    marked?: number;
+    toMark?: number;
+  }>;
 }) {
   if (!rows || rows.length === 0) {
     return <div className="text-xs text-muted-foreground">No class data.</div>;
@@ -1078,22 +1085,36 @@ function ClassBreakdownTable({
             <th className="px-2 py-1 text-left font-normal">Class</th>
             <th className="px-2 py-1 text-left font-normal">Subjects</th>
             <th className="px-2 py-1 text-left font-normal">Papers</th>
+            <th className="px-2 py-1 text-right font-normal whitespace-nowrap">Scripts to mark</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => {
             const subjectsText = r.subjects.length > 0 ? r.subjects.join(", ") : "—";
             const papersText = r.papers.length > 0 ? r.papers.join(", ") : "—";
+            const assigned = r.assigned ?? 0;
+            const marked = r.marked ?? 0;
+            const toMark = r.toMark ?? Math.max(0, assigned - marked);
             return (
               <tr key={r.classLabel} className="border-t border-border align-top">
                 <td className="px-2 py-1 whitespace-nowrap">{r.classLabel}</td>
                 <td className="px-2 py-1" title={subjectsText}>
-                  <div className="line-clamp-2">{subjectsText}</div>
-                  <div className="text-muted-foreground tabular-nums">({r.subjects.length})</div>
+                  <div className="line-clamp-2">
+                    <span className="text-foreground">{subjectsText}</span>{" "}
+                    <span className="text-muted-foreground tabular-nums">({r.subjects.length})</span>
+                  </div>
                 </td>
                 <td className="px-2 py-1" title={papersText}>
-                  <div className="line-clamp-2">{papersText}</div>
-                  <div className="text-muted-foreground tabular-nums">({r.papers.length})</div>
+                  <div className="line-clamp-2">
+                    <span className="text-foreground">{papersText}</span>{" "}
+                    <span className="text-muted-foreground tabular-nums">({r.papers.length})</span>
+                  </div>
+                </td>
+                <td className="px-2 py-1 text-right whitespace-nowrap tabular-nums">
+                  <div>{toMark}</div>
+                  <div className="text-muted-foreground">
+                    {marked}/{assigned} marked
+                  </div>
                 </td>
               </tr>
             );
