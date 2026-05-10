@@ -803,7 +803,7 @@ function Kpi({ label, value, sub, tone }: { label: string; value: string | numbe
   return (
     <Card>
       <CardContent className="flex flex-col items-center justify-center p-4 text-center font-bold text-3xl">
-        <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
+        <div className="text-xs uppercase tracking-wide text-muted-foreground font-normal">{label}</div>
         <div className={`text-muted-foreground text-center text-3xl font-bold ${tone === "warn" ? "text-amber-600" : ""}`}>{value}</div>
         {sub && <div className="text-xs text-muted-foreground">{sub}</div>}
       </CardContent>
