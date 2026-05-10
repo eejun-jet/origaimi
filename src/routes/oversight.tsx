@@ -412,7 +412,7 @@ function OversightPage() {
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Marking dashboard</h1>
             <p className="text-sm text-muted-foreground">
-              Setters, markers, scripts and progress {isSl ? "across the school" : "in your department"}.
+              Setters, markers, scripts and progress across the department/school.
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
               New here? Download the sample template (15 mock rows per term), replace with your data, then upload to see your dashboard data.
