@@ -497,7 +497,7 @@ function OversightPage() {
         <Card>
           <CardHeader className="flex-row items-center justify-between">
             <CardTitle className="text-base">Marker deployments</CardTitle>
-            <span className="text-xs text-muted-foreground">{filtered.length} rows</span>
+            <span className="text-xs text-muted-foreground font-normal">{filtered.length} rows</span>
           </CardHeader>
           <CardContent className="p-0">
             {loading ? (
