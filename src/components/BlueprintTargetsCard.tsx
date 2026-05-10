@@ -182,14 +182,14 @@ export function BlueprintTargetsCard({
           // from contributing sub-codes' titles.
           const title = useBuckets && /^[A-Z]$/.test(code)
             ? (def?.title
-              ?? Array.from(
+              ?? (Array.from(
                 new Set(
                   aoDefs
                     .filter((d) => bucketOf(d.code) === code && d.code !== code)
                     .map((d) => d.title)
                     .filter((t): t is string => !!t),
                 ),
-              ).join(" · ") || `AO ${code}`)
+              ).join(" · ") || `AO ${code}`))
             : (def?.title ?? "—");
           return (
             <div
