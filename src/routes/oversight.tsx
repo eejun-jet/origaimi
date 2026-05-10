@@ -561,7 +561,7 @@ function OversightPage() {
           <Kpi label="Markers deployed" value={new Set(markerDeployments.map((d) => d.teacher_name ?? "")).size} />
           <Kpi label="Scripts assigned" value={totalAssigned} />
           <Kpi
-            label="% complete — Paper status"
+            label="% COMPLETE — PAPER STATUS"
             value={`${paperPctComplete}%`}
             sub={`In progress: ${paperInProgress} · Completed: ${paperCompleted}`}
           />
