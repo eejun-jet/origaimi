@@ -560,15 +560,17 @@ function OversightPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <InlineText
+                          <TeacherCombobox
                             value={setters}
+                            options={teacherOptions}
                             placeholder="—"
                             onSave={(v) => updateSetterName(d.paper_id, v)}
                           />
                         </TableCell>
                         <TableCell>
-                          <InlineText
+                          <TeacherCombobox
                             value={d.teacher_name ?? ""}
+                            options={teacherOptions}
                             placeholder="—"
                             onSave={(v) => updateMarkerName(d.id, v)}
                           />
