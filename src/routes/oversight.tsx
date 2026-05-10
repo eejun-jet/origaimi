@@ -989,3 +989,34 @@ function TeacherCombobox({
   );
 }
 
+function ClassBreakdownTable({
+  rows,
+}: {
+  rows: Array<{ classLabel: string; subjectCount: number; paperCount: number }>;
+}) {
+  if (!rows || rows.length === 0) {
+    return <div className="text-xs text-muted-foreground">No class data.</div>;
+  }
+  return (
+    <div className="max-h-72 overflow-auto rounded border border-border">
+      <table className="w-full text-xs">
+        <thead className="bg-muted/50 text-muted-foreground">
+          <tr>
+            <th className="px-2 py-1 text-left font-normal">Class</th>
+            <th className="px-2 py-1 text-right font-normal">Subjects</th>
+            <th className="px-2 py-1 text-right font-normal">Papers</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.classLabel} className="border-t border-border">
+              <td className="px-2 py-1">{r.classLabel}</td>
+              <td className="px-2 py-1 text-right tabular-nums">({r.subjectCount})</td>
+              <td className="px-2 py-1 text-right tabular-nums">({r.paperCount})</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
