@@ -255,10 +255,7 @@ function OversightPage() {
 
   // KPIs
   const totalAssigned = markerDeployments.reduce((a, d) => a + d.script_count, 0);
-  const totalFlagged = markerDeployments.reduce((a, d) => a + d.flagged_count, 0);
-  const overdue = markerDeployments.filter(
-    (d) => d.due_at && new Date(d.due_at) < new Date() && d.status !== "marking_done" && d.status !== "moderated",
-  ).length;
+  void markerDeployments; // (overdue/flagged tile removed)
 
   // Paper-status completion (visible papers)
   const visiblePapers = useMemo(() => papers.filter(paperPasses), [papers, paperPasses]);
