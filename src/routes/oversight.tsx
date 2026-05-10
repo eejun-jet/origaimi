@@ -95,6 +95,65 @@ function OversightPage() {
     setLoading(false);
   };
 
+  // Inline edit helpers — optimistic updates with toast feedback.
+  const updatePaperStatus = async (paperId: string, value: Paper["paper_status"]) => {
+    const prev = papers;
+    setPapers((ps) => ps.map((p) => (p.id === paperId ? { ...p, paper_status: value } : p)));
+    const { error } = await supabase.from("marking_papers").update({ paper_status: value }).eq("id", paperId);
+    if (error) { setPapers(prev); toast.error(`Update failed: ${error.message}`); return; }
+    toast.success("Paper status updated");
+  };
+
+  const updateMarkingStatus = async (deploymentId: string, value: Deployment["status"]) => {
+    const prev = deployments;
+    setDeployments((ds) => ds.map((d) => (d.id === deploymentId ? { ...d, status: value } : d)));
+    const { error } = await supabase.from("marking_deployments").update({ status: value }).eq("id", deploymentId);
+    if (error) { setDeployments(prev); toast.error(`Update failed: ${error.message}`); return; }
+    toast.success("Marking status updated");
+  };
+
+  const updateMarkerName = async (deploymentId: string, name: string) => {
+    const trimmed = name.trim();
+    const prev = deployments;
+    setDeployments((ds) => ds.map((d) => (d.id === deploymentId ? { ...d, teacher_name: trimmed || null } : d)));
+    const { error } = await supabase.from("marking_deployments").update({ teacher_name: trimmed || null }).eq("id", deploymentId);
+    if (error) { setDeployments(prev); toast.error(`Update failed: ${error.message}`); return; }
+    toast.success("Marker updated");
+  };
+
+  const updateSetterName = async (paperId: string, name: string) => {
+    const trimmed = name.trim();
+    const setterRows = deployments.filter((d) => d.paper_id === paperId && d.role === "setter");
+    const prev = deployments;
+
+    if (setterRows.length === 0) {
+      // Create a new setter deployment row.
+      const { data, error } = await supabase
+        .from("marking_deployments")
+        .insert({ paper_id: paperId, role: "setter", teacher_name: trimmed || null, status: "assigned" })
+        .select("*")
+        .single();
+      if (error || !data) { toast.error(`Update failed: ${error?.message ?? "unknown"}`); return; }
+      setDeployments((ds) => [...ds, data as Deployment]);
+      toast.success("Setter updated");
+      return;
+    }
+
+    // Collapse to a single setter row holding the new value; clear others.
+    const [keep, ...rest] = setterRows;
+    setDeployments((ds) =>
+      ds
+        .filter((d) => !rest.some((r) => r.id === d.id))
+        .map((d) => (d.id === keep.id ? { ...d, teacher_name: trimmed || null } : d)),
+    );
+    const { error } = await supabase.from("marking_deployments").update({ teacher_name: trimmed || null }).eq("id", keep.id);
+    if (error) { setDeployments(prev); toast.error(`Update failed: ${error.message}`); return; }
+    if (rest.length > 0) {
+      await supabase.from("marking_deployments").delete().in("id", rest.map((r) => r.id));
+    }
+    toast.success("Setter updated");
+  };
+
   // Reload whenever we (re)enter the dashboard, e.g. after returning from /oversight/import.
   useEffect(() => {
     if (!isNestedRoute) load();
