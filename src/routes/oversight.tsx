@@ -379,7 +379,7 @@ function OversightPage() {
       levels: Set<string>;
       postingGroups: Set<string>;
       classLabels: Set<string>;
-      byClass: Map<string, { subjects: Set<string>; papers: Set<string> }>;
+      byClass: Map<string, { subjects: Set<string>; papers: Set<string>; assigned: number; marked: number }>;
     };
     const m = new Map<string, Entry>();
     for (const d of setterDeployments) {
@@ -390,7 +390,7 @@ function OversightPage() {
         paperIds: new Set<string>(), paperTitles: new Set<string>(),
         subjects: new Set<string>(), levels: new Set<string>(),
         postingGroups: new Set<string>(), classLabels: new Set<string>(),
-        byClass: new Map<string, { subjects: Set<string>; papers: Set<string> }>(),
+        byClass: new Map<string, { subjects: Set<string>; papers: Set<string>; assigned: number; marked: number }>(),
       };
       e.points += Number(d.points) || 0;
       e.paperIds.add(d.paper_id);
@@ -398,21 +398,26 @@ function OversightPage() {
       if (p?.subject) e.subjects.add(p.subject);
       if (p?.level) e.levels.add(p.level);
       if (p?.stream) e.postingGroups.add(p.stream);
-      const matchingMarkers = markerDeployments.filter((md) => md.paper_id === d.paper_id);
-      const classesForPaper: string[] = [];
+      // Use the unfiltered marker cohort so script counts stay live.
+      const matchingMarkers = markerDeploymentsForKpi.filter((md) => md.paper_id === d.paper_id);
+      const seenClasses = new Set<string>();
       for (const md of matchingMarkers) {
-        if (md.class_label) {
-          e.classLabels.add(md.class_label);
-          classesForPaper.push(md.class_label);
-        }
-      }
-      // If no marker class label, still record under "—" so the paper appears in the breakdown.
-      const keys = classesForPaper.length > 0 ? classesForPaper : ["—"];
-      for (const ck of keys) {
-        const cb = e.byClass.get(ck) ?? { subjects: new Set<string>(), papers: new Set<string>() };
+        const ck = md.class_label || "—";
+        seenClasses.add(ck);
+        if (md.class_label) e.classLabels.add(md.class_label);
+        const cb = e.byClass.get(ck) ?? { subjects: new Set<string>(), papers: new Set<string>(), assigned: 0, marked: 0 };
         if (p?.subject) cb.subjects.add(p.subject);
         if (p?.title) cb.papers.add(p.title);
+        cb.assigned += md.script_count;
+        cb.marked += md.marked_count;
         e.byClass.set(ck, cb);
+      }
+      // If no marker rows at all, still record the paper so it appears in the breakdown.
+      if (seenClasses.size === 0) {
+        const cb = e.byClass.get("—") ?? { subjects: new Set<string>(), papers: new Set<string>(), assigned: 0, marked: 0 };
+        if (p?.subject) cb.subjects.add(p.subject);
+        if (p?.title) cb.papers.add(p.title);
+        e.byClass.set("—", cb);
       }
       m.set(key, e);
     }
@@ -431,12 +436,15 @@ function OversightPage() {
             classLabel,
             subjects: Array.from(v.subjects).sort(),
             papers: Array.from(v.papers).sort(),
+            assigned: v.assigned,
+            marked: v.marked,
+            toMark: Math.max(0, v.assigned - v.marked),
           }))
           .sort((a, b) => a.classLabel.localeCompare(b.classLabel)),
       }))
       .filter((e) => e.points > 0)
       .sort((a, b) => b.points - a.points);
-  }, [setterDeployments, markerDeployments, paperById]);
+  }, [setterDeployments, markerDeploymentsForKpi, paperById]);
 
   // Points by teacher and role (deployment-by-points)
   const totalPoints = useMemo(
