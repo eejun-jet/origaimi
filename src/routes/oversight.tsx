@@ -1039,7 +1039,7 @@ function TeacherCombobox({
 function ClassBreakdownTable({
   rows,
 }: {
-  rows: Array<{ classLabel: string; subjectCount: number; paperCount: number }>;
+  rows: Array<{ classLabel: string; subjects: string[]; papers: string[] }>;
 }) {
   if (!rows || rows.length === 0) {
     return <div className="text-xs text-muted-foreground">No class data.</div>;
@@ -1050,18 +1050,28 @@ function ClassBreakdownTable({
         <thead className="bg-muted/50 text-muted-foreground">
           <tr>
             <th className="px-2 py-1 text-left font-normal">Class</th>
-            <th className="px-2 py-1 text-right font-normal">Subjects</th>
-            <th className="px-2 py-1 text-right font-normal">Papers</th>
+            <th className="px-2 py-1 text-left font-normal">Subjects</th>
+            <th className="px-2 py-1 text-left font-normal">Papers</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
-            <tr key={r.classLabel} className="border-t border-border">
-              <td className="px-2 py-1">{r.classLabel}</td>
-              <td className="px-2 py-1 text-right tabular-nums">({r.subjectCount})</td>
-              <td className="px-2 py-1 text-right tabular-nums">({r.paperCount})</td>
-            </tr>
-          ))}
+          {rows.map((r) => {
+            const subjectsText = r.subjects.length > 0 ? r.subjects.join(", ") : "—";
+            const papersText = r.papers.length > 0 ? r.papers.join(", ") : "—";
+            return (
+              <tr key={r.classLabel} className="border-t border-border align-top">
+                <td className="px-2 py-1 whitespace-nowrap">{r.classLabel}</td>
+                <td className="px-2 py-1" title={subjectsText}>
+                  <div className="line-clamp-2">{subjectsText}</div>
+                  <div className="text-muted-foreground tabular-nums">({r.subjects.length})</div>
+                </td>
+                <td className="px-2 py-1" title={papersText}>
+                  <div className="line-clamp-2">{papersText}</div>
+                  <div className="text-muted-foreground tabular-nums">({r.papers.length})</div>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
