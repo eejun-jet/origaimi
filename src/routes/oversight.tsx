@@ -392,36 +392,36 @@ function OversightPage() {
         </div>
 
         {/* Filters */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
           <Input
             placeholder="Search paper, teacher, class…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="max-w-xs"
+            className="w-full"
           />
           <Select value={subjectFilter} onValueChange={setSubjectFilter}>
-            <SelectTrigger className="w-44"><SelectValue placeholder="Subject" /></SelectTrigger>
+            <SelectTrigger className="w-full"><SelectValue placeholder="Subject" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All subjects</SelectItem>
               {subjects.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={yearFilter} onValueChange={setYearFilter}>
-            <SelectTrigger className="w-32"><SelectValue placeholder="Year" /></SelectTrigger>
+            <SelectTrigger className="w-full"><SelectValue placeholder="Year" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All years</SelectItem>
               {years.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={assessmentFilter} onValueChange={setAssessmentFilter}>
-            <SelectTrigger className="w-40"><SelectValue placeholder="Assessment" /></SelectTrigger>
+            <SelectTrigger className="w-full"><SelectValue placeholder="Assessment" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All assessments</SelectItem>
               {assessments.map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-40"><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectTrigger className="w-full"><SelectValue placeholder="Status" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All statuses</SelectItem>
               <SelectItem value="assigned">Assigned</SelectItem>
