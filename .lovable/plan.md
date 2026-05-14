@@ -1,33 +1,32 @@
-# Why the analysis came back empty
+# Real root cause
 
-I traced your "Year 2024 P1 Comb Sci Phy Chem" analysis (`assessments.fa8e85ce…`). Every row in `assessment_questions` has empty `ao_codes`, `learning_outcomes`, `knowledge_outcomes` and `topic` — that's why the Coverage Explorer can't render anything (it pivots on those fields against the syllabus).
+`parse-paper` is the bug. It computes classifications correctly (the log even shows `40/40 classified, 0 failed batches`), but it **never merges them back into `past_papers.questions_json`** before saving — it writes the raw `questions` array.
 
-The reason isn't the analyser — it's the **upstream parse**. `analysePastPaper` (in `src/lib/analyse-past-paper.ts`) just copies the AO / KO / LO arrays straight from `past_papers.questions_json` into the new assessment rows. If those arrays were empty on the paper, the assessment is empty too.
+Concretely, in `supabase/functions/parse-paper/index.ts`:
 
-For comparison, your other recent paper "Sc(Phy) Prelims 2025 P2" parsed cleanly — its analysis has full AO codes, LOs and topic codes. That paper just happened to get a working classifier batch; the Comb Sci paper didn't.
+- Line 395: `classifications = outcome.classifications` — populated.
+- Lines 408–420: `classifications` is fed into `buildBankRows` (so `question_bank_items` rows get AO/LO/KO).
+- Line 456: `questions_json: questions` — saves the **un-merged** array.
 
-**What goes wrong during parse:** `parse-paper` calls `classifyQuestionsBatched` against the matching syllabus (`Sciences` / `Sec 4` exists — `8df0320d…`). When the LLM batch times out or returns a malformed JSON, the function silently writes empty arrays for that batch's questions. We already have a recovery edge function — `reclassify-paper` — but it's only wired into the **Paper Sets** page (`src/routes/paper-set.$id.tsx`), not the **Papers** list, so you had no way to trigger it from where you were.
+So every freshly-parsed paper has empty `ao_codes`, `learning_outcomes`, `knowledge_outcomes`, `topic_code` inside `questions_json`. `reclassify-paper` happens to write them correctly (it does the merge), which is why papers you'd previously reclassified looked fine and the new "2024 Comb Sci P1 (Phy Chem)" upload didn't.
 
-Side note: `knowledge_outcomes` is empty even on the working Phy P2 paper. That's a separate, pre-existing gap in the classifier prompt — KO inference isn't being produced. Worth flagging but not part of this fix unless you want it tackled now.
+The auto-heal I added in `analyse-past-paper.ts` would have fixed it, but it never ran for the latest attempt — the edge function logs show no `reclassify-paper` calls. Most likely the new client bundle hadn't loaded yet when you re-analysed within seconds of upload. Even so, fixing the source bug is the right place to land this.
 
 # Plan
 
-1. **Surface a "Reclassify" action on the Papers page** (`src/routes/papers.tsx`)
-   - Per-row button (icon + tooltip) that calls `supabase.functions.invoke("reclassify-paper", { body: { paper_id } })`.
-   - Show a toast with the result (`classified / total`, `via_ai`, `failed_batches`).
-   - Reuse the same loading/disabled pattern already in `paper-set.$id.tsx` (`reclassifying` state).
+1. **Fix `parse-paper` to merge classifications into `questions_json`**
+   - Before line 456 (`await supabase.from("past_papers").update(...)`), build `questionsWithClassifications = questions.map((q) => { const cls = classifications[q.number]; return cls ? { ...q, topic_code, topic, bloom_level, ao_codes, learning_outcomes, knowledge_outcomes } : q; })`.
+   - Save that merged array as `questions_json` instead.
+   - Mirror the same merge logic `reclassify-paper` already uses, so the two paths produce identical shapes.
 
-2. **Auto-heal on Analyse** (`src/lib/analyse-past-paper.ts`)
-   - Before building rows, check whether ≥50% of questions have empty `ao_codes` AND empty `learning_outcomes`.
-   - If so, invoke `reclassify-paper` once, then re-fetch `questions_json` and continue.
-   - This means future analyses of an under-classified paper recover automatically instead of producing an empty Coverage Explorer.
+2. **Heal already-broken papers in the DB**
+   - Use the existing `Reclassify` button I added to the Papers page to fix the broken "2024 Comb Sci P1 (Phy Chem)" paper.
+   - Re-run **Analyse paper** afterwards. The Coverage Explorer will populate.
+   - (Optional, ask before doing) Run a one-shot script that loops over all `past_papers` where every question has empty `ao_codes` and invokes `reclassify-paper` so older imports get healed automatically.
 
-3. **Friendly empty-state in the analysis view** (`src/routes/assessment.$id.tsx`, Coverage tab)
-   - When all questions have empty AO/LO arrays, render a small banner: "This paper hasn't been classified yet — open it from Papers and click Reclassify, then re-run Analyse."
-   - Pure presentation; no logic change to coverage math.
+3. **Keep the safety net**
+   - Leave the auto-heal in `analyse-past-paper.ts` and the empty-state banner in the Coverage tab. They become belt-and-braces once parse-paper writes correctly.
 
-4. **Recover your current bad analysis**
-   - The source paper (`past_papers.7fe84350…`) is no longer in the database, so the failed analysis can't be re-healed in place. Easiest path is to re-upload that PDF; with step 2 in place the next Analyse will populate AO/LO automatically.
-
-## Out of scope (flag only)
-- Fixing the empty `knowledge_outcomes` across all parsed papers (classifier prompt change in `supabase/functions/_shared/classify.ts`). Happy to do this as a follow-up if you want.
+## Out of scope (flag only, don't touch unless asked)
+- The classifier still produces empty `knowledge_outcomes` for almost every question. Separate prompt fix in `supabase/functions/_shared/classify.ts`.
+- Older `past_papers` rows uploaded before this fix will keep their empty `questions_json` until reclassified.
