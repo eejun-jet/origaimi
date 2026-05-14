@@ -403,6 +403,17 @@ function PaperCard({
         {paper.parse_status === "ready" && (
           <Button
             size="sm" variant="ghost"
+            onClick={reclassify}
+            disabled={busy || analysing}
+            className="gap-1"
+            title="Re-run AO/KO/LO classification against the syllabus"
+          >
+            <Tags className="h-3.5 w-3.5" /> Reclassify
+          </Button>
+        )}
+        {paper.parse_status === "ready" && (
+          <Button
+            size="sm" variant="ghost"
             onClick={() => supabase.functions.invoke("render-paper-figures", { body: { paperId: paper.id } })}
             className="gap-1"
             title="Re-render diagrams in the background"
