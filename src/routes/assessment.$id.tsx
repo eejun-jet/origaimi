@@ -633,7 +633,34 @@ function EditorPage() {
     );
   }
 
-  const sectionedBlueprint = toSectioned(assessment.blueprint);
+  const rawBlueprint = toSectioned(assessment.blueprint);
+  // Heal: past-paper analyses (and any legacy assessment) may have an empty
+  // blueprint.sections. Without a topic_pool the Coverage Explorer KO/LO
+  // tiling and Map view collapse to "No Learning Outcomes targeted." Synthesize
+  // a single virtual section from the linked syllabus_topics so coverage can
+  // still group LOs under their syllabus KO/strand.
+  const sectionedBlueprint: SectionedBlueprint = (() => {
+    if (rawBlueprint.sections.length > 0) return rawBlueprint;
+    if (syllabusTopicPool.length === 0) return rawBlueprint;
+    const totalMarks = questions.reduce((s, q) => s + (q.marks || 0), 0);
+    const aoCodes = Array.from(new Set(syllabusTopicPool.flatMap((t) => t.ao_codes ?? [])));
+    const kos = Array.from(new Set(syllabusTopicPool.flatMap((t) => t.outcome_categories ?? [])));
+    const los = Array.from(new Set(syllabusTopicPool.flatMap((t) => t.learning_outcomes ?? [])));
+    const synthetic: Section = {
+      id: makeSectionId(),
+      letter: "A",
+      name: "All questions",
+      question_type: "structured",
+      marks: totalMarks,
+      num_questions: Math.max(questions.length, 1),
+      bloom: "Apply",
+      topic_pool: syllabusTopicPool,
+      ao_codes: aoCodes,
+      knowledge_outcomes: kos,
+      learning_outcomes: los,
+    };
+    return { sections: [synthetic] };
+  })();
 
   // Read teacher-saved AO target overrides + confirmation flag from the
   // assessment's blueprint (set by BlueprintTargetsCard for past-paper
