@@ -22,7 +22,7 @@ import {
 import { ArrowLeft, Loader2, RefreshCw, Trash2, BookmarkPlus, Sparkles, ChevronUp, ChevronDown, X, Download, Image as ImageIcon, Wand2, MessageCircle, UserPlus, AlertTriangle, Info, CheckCircle2, Pencil, Maximize2, MoreHorizontal, ListChecks, ArrowUp, ArrowDown, ArrowUpToLine, ArrowDownToLine, MoveVertical, Tag } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { BLOOMS } from "@/lib/syllabus";
-import { toSectioned, sectionAtPosition, getSbqSkill, KNOWLEDGE_OUTCOMES, isHumanitiesSubject, isScienceSubject, type Section } from "@/lib/sections";
+import { toSectioned, sectionAtPosition, getSbqSkill, KNOWLEDGE_OUTCOMES, isHumanitiesSubject, isScienceSubject, makeSectionId, type Section, type SectionTopic, type SectionedBlueprint } from "@/lib/sections";
 import { expandQuestionTags } from "@/lib/coverage-infer";
 import { bucketOf, bucketTargets, bucketsFromDefs } from "@/lib/ao-rollup";
 import {
@@ -146,6 +146,10 @@ function EditorPage() {
   const [sidebarTab, setSidebarTab] = useState<"coverage" | "comments">("coverage");
   const [retagBusy, setRetagBusy] = useState(false);
   const [paperInfo, setPaperInfo] = useState<SyllabusPaperInfo | null>(null);
+  // Fallback syllabus topic pool — used when an assessment (e.g. a past-paper
+  // analysis) has an empty blueprint but is linked to a syllabus_doc_id, so the
+  // Coverage Explorer can still group LOs under their syllabus KO/strand.
+  const [syllabusTopicPool, setSyllabusTopicPool] = useState<SectionTopic[]>([]);
 
   const loadAll = async () => {
     const { data: a } = await supabase.from("assessments").select("*").eq("id", id).single();
@@ -154,14 +158,44 @@ function EditorPage() {
     const { data: q } = await supabase.from("assessment_questions").select("*").eq("assessment_id", id).order("position");
     setQuestions((q as Question[]) ?? []);
     if (asm?.syllabus_doc_id) {
-      const { data: aos } = await supabase
-        .from("syllabus_assessment_objectives")
-        .select("code,title,weighting_percent")
-        .eq("source_doc_id", asm.syllabus_doc_id)
-        .order("position");
+      const [{ data: aos }, { data: tps }] = await Promise.all([
+        supabase
+          .from("syllabus_assessment_objectives")
+          .select("code,title,weighting_percent")
+          .eq("source_doc_id", asm.syllabus_doc_id)
+          .order("position"),
+        supabase
+          .from("syllabus_topics")
+          .select("topic_code,title,learning_outcomes,ao_codes,outcome_categories,section,strand,sub_strand,learning_outcome_code")
+          .eq("source_doc_id", asm.syllabus_doc_id)
+          .order("position"),
+      ]);
       setAoDefs((aos as AODef[]) ?? []);
+      const pool: SectionTopic[] = ((tps as Array<{
+        topic_code: string | null;
+        title: string;
+        learning_outcomes: string[] | null;
+        ao_codes: string[] | null;
+        outcome_categories: string[] | null;
+        section: string | null;
+        strand: string | null;
+        sub_strand: string | null;
+        learning_outcome_code: string | null;
+      }> | null) ?? []).map((t) => ({
+        topic: t.title,
+        topic_code: t.topic_code,
+        learning_outcomes: t.learning_outcomes ?? [],
+        ao_codes: t.ao_codes ?? [],
+        outcome_categories: t.outcome_categories ?? [],
+        section: t.section,
+        strand: t.strand,
+        sub_strand: t.sub_strand,
+        learning_outcome_code: t.learning_outcome_code,
+      }));
+      setSyllabusTopicPool(pool);
     } else {
       setAoDefs([]);
+      setSyllabusTopicPool([]);
     }
     if (asm?.syllabus_paper_id) {
       const { data: pp } = await supabase
@@ -599,7 +633,34 @@ function EditorPage() {
     );
   }
 
-  const sectionedBlueprint = toSectioned(assessment.blueprint);
+  const rawBlueprint = toSectioned(assessment.blueprint);
+  // Heal: past-paper analyses (and any legacy assessment) may have an empty
+  // blueprint.sections. Without a topic_pool the Coverage Explorer KO/LO
+  // tiling and Map view collapse to "No Learning Outcomes targeted." Synthesize
+  // a single virtual section from the linked syllabus_topics so coverage can
+  // still group LOs under their syllabus KO/strand.
+  const sectionedBlueprint: SectionedBlueprint = (() => {
+    if (rawBlueprint.sections.length > 0) return rawBlueprint;
+    if (syllabusTopicPool.length === 0) return rawBlueprint;
+    const totalMarks = questions.reduce((s, q) => s + (q.marks || 0), 0);
+    const aoCodes = Array.from(new Set(syllabusTopicPool.flatMap((t) => t.ao_codes ?? [])));
+    const kos = Array.from(new Set(syllabusTopicPool.flatMap((t) => t.outcome_categories ?? [])));
+    const los = Array.from(new Set(syllabusTopicPool.flatMap((t) => t.learning_outcomes ?? [])));
+    const synthetic: Section = {
+      id: makeSectionId(),
+      letter: "A",
+      name: "All questions",
+      question_type: "structured",
+      marks: totalMarks,
+      num_questions: Math.max(questions.length, 1),
+      bloom: "Apply",
+      topic_pool: syllabusTopicPool,
+      ao_codes: aoCodes,
+      knowledge_outcomes: kos,
+      learning_outcomes: los,
+    };
+    return { sections: [synthetic] };
+  })();
 
   // Read teacher-saved AO target overrides + confirmation flag from the
   // assessment's blueprint (set by BlueprintTargetsCard for past-paper
