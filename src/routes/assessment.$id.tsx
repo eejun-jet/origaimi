@@ -3465,12 +3465,98 @@ function CoveragePanel({
           />
         )}
         {paper.los.length > 0 && isScience && loView === "map" && (
-          <TopicsMapView
-            map={topicsMap}
-            remarkCount={remarkCount}
-            setTarget={setTarget}
-            paperLOs={paper.los}
-          />
+          <div className="mt-3 space-y-4">
+            {(() => {
+              const byDisc = new Map<string, typeof koLoGroups>();
+              for (const g of koLoGroups) {
+                const d = g.discipline || "General";
+                if (!byDisc.has(d)) byDisc.set(d, [] as typeof koLoGroups);
+                byDisc.get(d)!.push(g);
+              }
+              const order = ["Physics", "Chemistry", "Biology", "Practical", "General"];
+              const discNames = Array.from(byDisc.keys()).sort((a, b) => {
+                const ai = order.indexOf(a);
+                const bi = order.indexOf(b);
+                if (ai === -1 && bi === -1) return a.localeCompare(b);
+                if (ai === -1) return 1;
+                if (bi === -1) return -1;
+                return ai - bi;
+              });
+              return discNames.map((dname) => {
+                const ds = disciplineStyle(dname);
+                const groups = byDisc.get(dname)!;
+                return (
+                  <div key={dname}>
+                    <div
+                      className="mb-2 flex items-center justify-between rounded-md px-2 py-1"
+                      style={{ background: ds.tint, borderLeft: `3px solid ${ds.border}` }}
+                    >
+                      <h4 className="text-xs font-semibold uppercase tracking-wider" style={{ color: ds.chipFg }}>{dname}</h4>
+                      <span className="text-[10px] tabular-nums text-muted-foreground">
+                        {groups.reduce((s, g) => s + g.coveredLOs, 0)} / {groups.reduce((s, g) => s + g.totalLOs, 0)} LOs
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {groups.map((g) => {
+                        const meta = STATUS_META[g.status];
+                        return (
+                          <Collapsible key={`${dname}::${g.name}`} defaultOpen={g.coveredLOs < g.totalLOs}>
+                            <div className={`rounded-lg border-2 bg-card ${meta.ring}`} style={{ borderColor: ds.border }}>
+                              <CollapsibleTrigger className="group flex w-full items-start gap-2 p-2.5 text-left hover:bg-muted/30">
+                                <ChevronRight className="mt-1 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
+                                <CoverageDonut covered={g.coveredLOs} total={g.totalLOs} />
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-start justify-between gap-1.5">
+                                    <span className="line-clamp-2 text-[11px] font-semibold leading-snug" title={g.name}>{g.name}</span>
+                                    <span className={`shrink-0 rounded border px-1 py-0 text-[9px] font-medium ${meta.chip}`}>{meta.label}</span>
+                                  </div>
+                                  <div className="mt-1 flex items-center justify-between gap-2">
+                                    <span className="text-[10px] tabular-nums text-muted-foreground">
+                                      {g.coveredLOs}/{g.totalLOs} LOs{g.actualMarks ? ` · ${g.actualMarks}m` : ""}
+                                    </span>
+                                    <DensityBar los={g.los} />
+                                  </div>
+                                </div>
+                              </CollapsibleTrigger>
+                              <CollapsibleContent>
+                                <div className="space-y-2 border-t border-border/60 px-2.5 py-2">
+                                  {g.contents.map((content) => (
+                                    <div key={content.name}>
+                                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{content.name}</div>
+                                      <div className="space-y-0.5">
+                                        {content.los.map((lo) => {
+                                          const fullStat = paper.los.find((l) => l.text === lo.text);
+                                          const count = remarkCount("lo", lo.text);
+                                          return (
+                                            <button
+                                              key={lo.text}
+                                              type="button"
+                                              onClick={() => fullStat && setTarget({ kind: "lo", ...fullStat })}
+                                              className={`flex w-full items-start gap-1.5 rounded px-1.5 py-0.5 text-left text-[11px] leading-snug transition hover:bg-muted/50 ${lo.covered ? "text-foreground" : "text-muted-foreground"}`}
+                                            >
+                                              <span className={`mt-0.5 shrink-0 ${lo.covered ? "text-success" : "text-destructive"}`}>{lo.covered ? "✓" : "○"}</span>
+                                              {lo.code && <span className="mt-0.5 shrink-0 rounded bg-muted px-1 text-[9px] font-medium text-muted-foreground">{lo.code}</span>}
+                                              <span className="flex-1">{lo.text}</span>
+                                              {lo.actual > 1 && <span className="shrink-0 text-[9px] text-muted-foreground">×{lo.actual}</span>}
+                                              {count > 0 && <RemarkPill count={count} />}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </CollapsibleContent>
+                            </div>
+                          </Collapsible>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              });
+            })()}
+          </div>
         )}
         {paper.los.length > 0 && (!isScience || loView === "list") && (
           <div className="mt-3 space-y-1.5">
