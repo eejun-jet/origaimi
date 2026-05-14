@@ -200,7 +200,7 @@ export async function analysePastPaper(opts: {
       syllabus_paper_id: syllabusPaperId,
       instructions: `Imported from past paper "${paper.title}".`,
       topics: [],
-      blueprint,
+      blueprint: blueprint as never,
       item_sources: [{ kind: "past_paper", paper_id: paper.id, paper_title: paper.title }],
       question_types: [],
     })
