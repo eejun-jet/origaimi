@@ -3075,7 +3075,6 @@ function CoveragePanel({
       hasCodes: boolean;
     };
 
-    const loStat = new Map(paper.los.map((l) => [l.text, l] as const));
     // ko -> content -> LO key -> entry (preserves first-seen order)
     const ko = new Map<string, Map<string, Map<string, LoEntry>>>();
     // Track first-seen discipline per KO so we can colour-code subjects.
@@ -3085,7 +3084,46 @@ function CoveragePanel({
     // Normalised LO text -> {ko, content, code} for fuzzy re-mapping of orphans.
     const normaliseLo = (s: string) =>
       s.toLowerCase().replace(/\s+/g, " ").replace(/[.;:,!?\s]+$/g, "").trim();
-    const normIndex = new Map<string, { ko: string; content: string; code: string | null }>();
+    const normIndex = new Map<string, { ko: string; content: string; code: string | null; text: string }>();
+    const sameLo = (a: string, b: string) => {
+      const an = normaliseLo(a);
+      const bn = normaliseLo(b);
+      if (!an || !bn) return false;
+      if (an === bn) return true;
+      // Several analysed past-paper LO tags are truncated copies of the
+      // syllabus LO. Treat a long prefix as the same LO so coverage lands under
+      // the real syllabus KO instead of a generic fallback bucket.
+      return Math.min(an.length, bn.length) >= 28 && (an.startsWith(bn) || bn.startsWith(an));
+    };
+    const combinedStatFor = (loText: string) => {
+      let found = false;
+      let target = 0;
+      let actual = 0;
+      for (const row of paper.los) {
+        if (!sameLo(row.text, loText)) continue;
+        found = true;
+        target = Math.max(target, row.target);
+        actual += row.actual;
+      }
+      return found ? { target, actual, covered: actual > 0 } : null;
+    };
+    const matchedPaperLoNorms = new Set<string>();
+    const markMatched = (loText: string) => {
+      matchedPaperLoNorms.add(normaliseLo(loText));
+      for (const row of paper.los) {
+        if (sameLo(row.text, loText)) matchedPaperLoNorms.add(normaliseLo(row.text));
+      }
+    };
+    const findSyllabusMeta = (loText: string) => {
+      const norm = normaliseLo(loText);
+      const exact = normIndex.get(norm);
+      if (exact) return exact;
+      if (norm.length < 28) return null;
+      for (const [candidate, meta] of normIndex.entries()) {
+        if (candidate.startsWith(norm) || norm.startsWith(candidate)) return meta;
+      }
+      return null;
+    };
 
     const ensureKo = (name: string) => {
       if (!ko.has(name)) ko.set(name, new Map());
@@ -3117,7 +3155,8 @@ function CoveragePanel({
             : null;
           if (!seen.has(loText)) {
             seen.add(loText);
-            const stat = loStat.get(loText);
+            const stat = combinedStatFor(loText);
+            markMatched(loText);
             bucket.set(loText, {
               code,
               text: loText,
@@ -3127,7 +3166,7 @@ function CoveragePanel({
           }
           const norm = normaliseLo(loText);
           if (norm && !normIndex.has(norm)) {
-            normIndex.set(norm, { ko: koName, content: contentName, code });
+            normIndex.set(norm, { ko: koName, content: contentName, code, text: loText });
           }
         });
       }
@@ -3161,14 +3200,15 @@ function CoveragePanel({
     }
 
     for (const l of paper.los) {
-      if (seen.has(l.text)) continue;
-      const norm = normaliseLo(l.text);
-      const hit = norm ? normIndex.get(norm) : null;
+      if (seen.has(l.text) || matchedPaperLoNorms.has(normaliseLo(l.text))) continue;
+      const hit = findSyllabusMeta(l.text);
       if (hit) {
         const bucket = ensureContent(hit.ko, hit.content);
-        if (!bucket.has(l.text)) {
-          bucket.set(l.text, { code: hit.code, text: l.text, covered: l.covered, actual: l.actual });
-          seen.add(l.text);
+        if (!bucket.has(hit.text)) {
+          const stat = combinedStatFor(hit.text) ?? l;
+          bucket.set(hit.text, { code: hit.code, text: hit.text, covered: stat.covered, actual: stat.actual });
+          seen.add(hit.text);
+          markMatched(hit.text);
         }
         continue;
       }
