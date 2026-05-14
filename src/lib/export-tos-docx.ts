@@ -17,7 +17,7 @@ import {
   PageOrientation,
   ShadingType,
 } from "docx";
-import { saveAs } from "file-saver";
+import * as FileSaver from "file-saver";
 import type {
   TosAssessmentMeta,
   TosCoverage,
@@ -26,6 +26,8 @@ import type {
   TosTopicIndexEntry,
 } from "@/lib/export-tos-xlsx";
 import { buildKoLoGrouping } from "@/lib/export-tos-xlsx";
+
+const { saveAs } = FileSaver;
 
 const ARIAL = "Arial";
 
