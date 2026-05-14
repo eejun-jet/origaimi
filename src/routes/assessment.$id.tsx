@@ -3200,14 +3200,15 @@ function CoveragePanel({
     }
 
     for (const l of paper.los) {
-      if (seen.has(l.text)) continue;
-      const norm = normaliseLo(l.text);
-      const hit = norm ? normIndex.get(norm) : null;
+      if (seen.has(l.text) || matchedPaperLoNorms.has(normaliseLo(l.text))) continue;
+      const hit = findSyllabusMeta(l.text);
       if (hit) {
         const bucket = ensureContent(hit.ko, hit.content);
-        if (!bucket.has(l.text)) {
-          bucket.set(l.text, { code: hit.code, text: l.text, covered: l.covered, actual: l.actual });
-          seen.add(l.text);
+        if (!bucket.has(hit.text)) {
+          const stat = combinedStatFor(hit.text) ?? l;
+          bucket.set(hit.text, { code: hit.code, text: hit.text, covered: stat.covered, actual: stat.actual });
+          seen.add(hit.text);
+          markMatched(hit.text);
         }
         continue;
       }
