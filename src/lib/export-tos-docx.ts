@@ -17,7 +17,7 @@ import {
   PageOrientation,
   ShadingType,
 } from "docx";
-import * as FileSaver from "file-saver";
+import FileSaver from "file-saver";
 import type {
   TosAssessmentMeta,
   TosCoverage,

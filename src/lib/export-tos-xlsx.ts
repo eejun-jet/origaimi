@@ -4,7 +4,7 @@
 // installed in the project.
 
 import * as XLSX from "xlsx";
-import * as FileSaver from "file-saver";
+import FileSaver from "file-saver";
 import { normaliseDiscipline } from "./discipline-scope";
 
 const { saveAs } = FileSaver;
