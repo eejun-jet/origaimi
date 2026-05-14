@@ -449,11 +449,28 @@ async function runParse(paperId: string): Promise<void> {
       paper_number: paperNumber,
     });
 
+    // Merge classifier output back into the parsed questions so downstream
+    // consumers (analyse-past-paper, Coverage Explorer, paper-set review) can
+    // read AO / LO / KO / topic_code straight off questions_json.
+    const questionsWithClassifications = questions.map((q) => {
+      const cls = classifications[q.number];
+      if (!cls) return q;
+      return {
+        ...q,
+        topic_code: cls.topic_code || (q as { topic_code?: string | null }).topic_code || null,
+        topic: cls.topic_code || (q as { topic?: string | null }).topic || null,
+        bloom_level: cls.bloom_level ?? (q as { bloom_level?: string | null }).bloom_level ?? null,
+        ao_codes: cls.ao_codes ?? [],
+        learning_outcomes: cls.learning_outcomes ?? [],
+        knowledge_outcomes: cls.knowledge_outcomes ?? [],
+      };
+    });
+
     await supabase.from("past_papers").update({
       parse_status: "ready",
       page_count: pageCount,
       topics: topicsOverall,
-      questions_json: questions,
+      questions_json: questionsWithClassifications,
       style_summary: styleSummary,
       difficulty_fingerprint: difficultyFingerprint,
     }).eq("id", paperId);
