@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SUBJECTS, LEVELS } from "@/lib/syllabus";
-import { Loader2, Upload, FileText, Trash2, RefreshCw, Sparkles } from "lucide-react";
+import { Loader2, Upload, FileText, Trash2, RefreshCw, Sparkles, Tags } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
 import { analysePastPaper } from "@/lib/analyse-past-paper";
@@ -315,6 +315,25 @@ function PaperCard({
     }
   };
 
+  const reclassify = async () => {
+    setBusy(true);
+    try {
+      toast.message(`Reclassifying ${paper.title}…`);
+      const { data, error } = await supabase.functions.invoke("reclassify-paper", { body: { paper_id: paper.id } });
+      if (error) throw new Error(error.message);
+      const r = data as { classified?: number; total?: number; via_ai?: number; failed_batches?: number } | null;
+      toast.success(
+        `Reclassified ${r?.classified ?? 0}/${r?.total ?? 0}` +
+          (r?.failed_batches ? ` · ${r.failed_batches} batch(es) failed` : ""),
+      );
+      onChanged();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`Reclassify failed: ${msg}`);
+    } finally {
+      setBusy(false);
+    }
+  };
   const analyse = async () => {
     if (!user) { toast.error("Please sign in"); return; }
     setAnalysing(true);
@@ -381,6 +400,17 @@ function PaperCard({
         <Button size="sm" variant="ghost" onClick={reparse} disabled={busy || analysing} className="gap-1">
           <RefreshCw className="h-3.5 w-3.5" /> Re-parse
         </Button>
+        {paper.parse_status === "ready" && (
+          <Button
+            size="sm" variant="ghost"
+            onClick={reclassify}
+            disabled={busy || analysing}
+            className="gap-1"
+            title="Re-run AO/KO/LO classification against the syllabus"
+          >
+            <Tags className="h-3.5 w-3.5" /> Reclassify
+          </Button>
+        )}
         {paper.parse_status === "ready" && (
           <Button
             size="sm" variant="ghost"

@@ -1174,6 +1174,15 @@ function EditorPage() {
                       onSaved={() => loadAll()}
                     />
                   )}
+                  {questions.length > 0 &&
+                    questions.every(
+                      (q) => (q.ao_codes ?? []).length === 0 && (q.learning_outcomes ?? []).length === 0,
+                    ) && (
+                      <div className="mb-3 rounded-lg border border-amber-300/50 bg-amber-50/60 p-3 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                        This paper hasn't been classified against the syllabus yet, so the Coverage Explorer is empty.
+                        Open it from <strong>Papers</strong>, click <strong>Reclassify</strong>, then re-run <strong>Analyse paper</strong>.
+                      </div>
+                    )}
                   <CoveragePanel
                     assessmentId={id}
                     coverage={coverage}

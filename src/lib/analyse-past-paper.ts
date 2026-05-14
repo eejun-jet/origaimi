@@ -44,15 +44,35 @@ export async function analysePastPaper(opts: {
 }): Promise<string> {
   const { paperId, userId } = opts;
 
-  const { data: paper, error: paperErr } = await supabase
-    .from("past_papers")
-    .select("id, title, subject, level, year, paper_number, exam_board, questions_json")
-    .eq("id", paperId)
-    .single();
-  if (paperErr || !paper) throw new Error(paperErr?.message ?? "Paper not found");
+  const fetchPaper = async () => {
+    const { data, error } = await supabase
+      .from("past_papers")
+      .select("id, title, subject, level, year, paper_number, exam_board, questions_json")
+      .eq("id", paperId)
+      .single();
+    if (error || !data) throw new Error(error?.message ?? "Paper not found");
+    return data;
+  };
 
-  const questions = (Array.isArray(paper.questions_json) ? paper.questions_json : []) as ParsedQuestion[];
+  let paper = await fetchPaper();
+  let questions = (Array.isArray(paper.questions_json) ? paper.questions_json : []) as ParsedQuestion[];
   if (questions.length === 0) throw new Error("This paper has no parsed questions yet — re-parse first.");
+
+  // Auto-heal: if most questions have empty AO/LO arrays, the parse-paper
+  // classifier batch failed/timed out. Try reclassify-paper once before
+  // building an empty assessment that breaks the Coverage Explorer.
+  const emptyClassification = questions.filter(
+    (q) => (q.ao_codes ?? []).length === 0 && (q.learning_outcomes ?? []).length === 0,
+  ).length;
+  if (emptyClassification / questions.length >= 0.5) {
+    try {
+      await supabase.functions.invoke("reclassify-paper", { body: { paper_id: paperId } });
+      paper = await fetchPaper();
+      questions = (Array.isArray(paper.questions_json) ? paper.questions_json : []) as ParsedQuestion[];
+    } catch (e) {
+      console.warn("[analysePastPaper] reclassify-paper auto-heal failed", e);
+    }
+  }
 
   // Try to match the syllabus paper for duration / linkage.
   let syllabusDocId: string | null = null;
