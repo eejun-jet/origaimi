@@ -4,8 +4,10 @@
 // installed in the project.
 
 import * as XLSX from "xlsx";
-import { saveAs } from "file-saver";
+import FileSaver from "file-saver";
 import { normaliseDiscipline } from "./discipline-scope";
+
+const { saveAs } = FileSaver;
 
 export type TosAssessmentMeta = {
   title: string;
