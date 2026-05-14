@@ -315,6 +315,25 @@ function PaperCard({
     }
   };
 
+  const reclassify = async () => {
+    setBusy(true);
+    try {
+      toast.message(`Reclassifying ${paper.title}…`);
+      const { data, error } = await supabase.functions.invoke("reclassify-paper", { body: { paper_id: paper.id } });
+      if (error) throw new Error(error.message);
+      const r = data as { classified?: number; total?: number; via_ai?: number; failed_batches?: number } | null;
+      toast.success(
+        `Reclassified ${r?.classified ?? 0}/${r?.total ?? 0}` +
+          (r?.failed_batches ? ` · ${r.failed_batches} batch(es) failed` : ""),
+      );
+      onChanged();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`Reclassify failed: ${msg}`);
+    } finally {
+      setBusy(false);
+    }
+  };
   const analyse = async () => {
     if (!user) { toast.error("Please sign in"); return; }
     setAnalysing(true);
