@@ -101,6 +101,48 @@ export async function analysePastPaper(opts: {
     }
   }
 
+  // Fetch syllabus topic pool so the new assessment's blueprint carries the
+  // KO/strand/LO mapping needed by the Coverage Explorer KO tiling + Map view.
+  let syllabusTopicPool: Array<{
+    topic: string;
+    topic_code: string | null;
+    learning_outcomes: string[];
+    ao_codes: string[];
+    outcome_categories: string[];
+    section: string | null;
+    strand: string | null;
+    sub_strand: string | null;
+    learning_outcome_code: string | null;
+  }> = [];
+  if (syllabusDocId) {
+    const { data: tps } = await supabase
+      .from("syllabus_topics")
+      .select("topic_code,title,learning_outcomes,ao_codes,outcome_categories,section,strand,sub_strand,learning_outcome_code")
+      .eq("source_doc_id", syllabusDocId)
+      .order("position");
+    syllabusTopicPool = ((tps as Array<{
+      topic_code: string | null;
+      title: string;
+      learning_outcomes: string[] | null;
+      ao_codes: string[] | null;
+      outcome_categories: string[] | null;
+      section: string | null;
+      strand: string | null;
+      sub_strand: string | null;
+      learning_outcome_code: string | null;
+    }> | null) ?? []).map((t) => ({
+      topic: t.title,
+      topic_code: t.topic_code,
+      learning_outcomes: t.learning_outcomes ?? [],
+      ao_codes: t.ao_codes ?? [],
+      outcome_categories: t.outcome_categories ?? [],
+      section: t.section,
+      strand: t.strand,
+      sub_strand: t.sub_strand,
+      learning_outcome_code: t.learning_outcome_code,
+    }));
+  }
+
   // Fetch diagrams attached to this paper so we can wire the first one to
   // each parsed question's `diagram_url`.
   const { data: diagRows } = await supabase
@@ -116,6 +158,31 @@ export async function analysePastPaper(opts: {
   }, 0);
 
   const title = `Analysis · ${paper.title}`;
+
+  // Build a single virtual "All questions" section that carries the syllabus
+  // topic pool. The Coverage Explorer reads `blueprint.sections[].topic_pool`
+  // to derive its KO (strand) → Content (sub-strand) → LO hierarchy, so an
+  // empty `sections: []` (the previous shape) silently broke the KO tiling.
+  const blueprint: Record<string, unknown> =
+    syllabusTopicPool.length > 0
+      ? {
+          sections: [
+            {
+              id: Math.random().toString(36).slice(2, 10),
+              letter: "A",
+              name: "All questions",
+              question_type: "structured",
+              marks: sumMarks,
+              num_questions: questions.length,
+              bloom: "Apply",
+              topic_pool: syllabusTopicPool,
+              ao_codes: Array.from(new Set(syllabusTopicPool.flatMap((t) => t.ao_codes))),
+              knowledge_outcomes: Array.from(new Set(syllabusTopicPool.flatMap((t) => t.outcome_categories))),
+              learning_outcomes: Array.from(new Set(syllabusTopicPool.flatMap((t) => t.learning_outcomes))),
+            },
+          ],
+        }
+      : { sections: [] };
 
   // 1. Create the assessment row.
   const { data: created, error: aErr } = await supabase
@@ -133,7 +200,7 @@ export async function analysePastPaper(opts: {
       syllabus_paper_id: syllabusPaperId,
       instructions: `Imported from past paper "${paper.title}".`,
       topics: [],
-      blueprint: { sections: [] },
+      blueprint,
       item_sources: [{ kind: "past_paper", paper_id: paper.id, paper_title: paper.title }],
       question_types: [],
     })
