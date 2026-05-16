@@ -562,6 +562,9 @@ type SsSubIssueBundle = {
   subIssue: string;
   assertion: string;
   inquiryQuestion: string;
+  /** ~80-120 word paragraph that contextualises the KO/LO issue for students BEFORE
+   *  they read the sources. Rendered above the source pool in the paper. */
+  contextWriteUp: string;
   triggers: RegExp;
   sources: GroundedSource[];
 };
