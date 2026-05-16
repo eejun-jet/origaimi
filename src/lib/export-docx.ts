@@ -398,6 +398,17 @@ export async function exportAssessmentDocx(
     const isSbq = section?.question_type === "source_based";
     const firstWithSrc = isSbq ? items.find((q) => !!q.source_excerpt) : null;
     if (firstWithSrc?.source_excerpt) {
+      const ctx = parseExportSbqContext(firstWithSrc.source_excerpt);
+      if (ctx) {
+        body.push(new Paragraph({
+          spacing: { before: 120, after: 80 },
+          children: [new TextRun({ text: "BACKGROUND TO THIS ISSUE", bold: true, size: 22, font: ARIAL })],
+        }));
+        body.push(new Paragraph({
+          spacing: { after: 160 },
+          children: [new TextRun({ text: ctx, size: 22, font: ARIAL })],
+        }));
+      }
       const parsed = parseExportSourcePool(firstWithSrc.source_excerpt);
       sourceParagraphs(parsed).forEach((para) => body.push(para));
       body.push(new Paragraph({ spacing: { after: 200 }, children: [new TextRun({ text: "" })] }));
