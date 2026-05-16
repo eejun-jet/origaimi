@@ -1314,6 +1314,10 @@ function buildSectionUserPrompt(opts: {
   groundedSources: (GroundedSource | null)[][]; // [questionIdx][sourceIdx]
   sharedSourcePool?: GroundedSource[]; // For humanities SBQ: ONE shared pool A–E
   sharedImageSources?: GroundedImageSource[]; // Optional pictorial sources appended to the pool
+  /** Curated inquiry-question + assertion for SBQ sections (SS sub-issue or
+   *  History curated bundle). When present, the SBQ preamble injects the
+   *  explicit key inquiry question instead of telling the model to invent one. */
+  sbqInquiry?: SbqInquiryBundle | null;
   subjectKind?: "humanities" | "english" | null;
   instructions?: string;
   /** Per-question difficulty targets for THIS chunk (length === section.num_questions). */
