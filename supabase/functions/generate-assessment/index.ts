@@ -611,6 +611,7 @@ const SS_SUB_ISSUE_BUNDLES: SsSubIssueBundle[] = [
     issue: 2,
     subIssue: "managing race and religion in everyday Singapore",
     assertion: "State-led management of race and religion has done more for harmony in Singapore than organic inter-group contact.",
+    contextWriteUp: "This SBQ examines whether Singapore's racial and religious harmony is the product of deliberate state policy or of everyday social mixing between communities. Policies such as the Ethnic Integration Policy in HDB blocks and the Maintenance of Religious Harmony Act actively shape inter-group contact and set legal limits on religious speech. Decisions like the 2021 lifting of the tudung restriction for public-sector nurses show how the state mediates religious accommodation. International comparisons, such as Quebec's Bill 21 banning religious symbols, highlight how diverse societies can disagree on what neutrality requires. Weigh the sources to judge how far harmony rests on state management or on routine social mixing.",
     inquiryQuestion: "How far is Singapore's racial and religious harmony the product of deliberate state policy rather than everyday social mixing?",
     triggers: /(racial|race|religion|religious|harmony|tudung|mrha|maintenance of religious|eip|enclave)/i,
     sources: [
