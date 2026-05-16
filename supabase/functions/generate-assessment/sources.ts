@@ -907,10 +907,13 @@ export async function fetchGroundedImageSources(
   const localImageHosts = new Set<string>();
   const picked: GroundedImageSource[] = [];
   const pickedCategories = new Set<VisualCategory>();
-  // Single pass only — we previously had 3 passes (strict / relaxed / final)
-  // which combined with 7 query angles could fire 21 image searches per
-  // section. That was the dominant cost in History SBQ generation.
-  const passes: Array<"strict" | "relaxed" | "final"> = ["strict"];
+  // Staged passes: strict (allow-list + positive score), then relaxed
+  // (allow-list, score > -3), then final (drop allow-list, score > -3).
+  // Each subsequent pass only runs if we still haven't picked anything AND
+  // there is wall-clock budget left, so latency stays bounded but we no
+  // longer silently ship a pictorial-less SBQ section just because the
+  // image descriptions had weak keyword overlap.
+  const passes: Array<"strict" | "relaxed" | "final"> = ["strict", "relaxed", "final"];
 
   for (const pass of passes) {
     if (picked.length >= count) break;
