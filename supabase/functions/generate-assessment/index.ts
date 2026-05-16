@@ -1016,9 +1016,9 @@ function buildDeterministicSbqQuestions(
     : Array.from(new Set(section.topic_pool.flatMap((tp) => tp.learning_outcomes ?? [])));
   // SS: use the sub-issue framing so {T} is concrete (e.g. "housing inequality
   // and Singaporean identity") instead of generic LO/Issue text.
-  const topicNoun = ssBundle ? ssBundle.subIssue : deriveTopicNoun(rawTopic, sectionLOs);
+  const topicNoun = sectionBundle ? sectionBundle.subIssue : deriveTopicNoun(rawTopic, sectionLOs);
   const topicTag = stripCodePrefix(rawTopic).replace(/\*+$/, "").trim() || topicNoun;
-  const inquiry = ssBundle ? ssBundle.inquiryQuestion : buildInquiryQuestion(topicNoun, skills);
+  const inquiry = sectionBundle ? sectionBundle.inquiryQuestion : buildInquiryQuestion(topicNoun, skills);
 
   const perQMarks = Math.floor(section.marks / Math.max(1, section.num_questions));
   const remainder = section.marks - perQMarks * section.num_questions;
@@ -1043,8 +1043,8 @@ function buildDeterministicSbqQuestions(
       .replace(/\{ALL\}/g, allLabels)
       .replace(/\{T\}/g, topicNoun)
       .replace(/\{P\}/g, part);
-    if (ssBundle && skillId === "assertion") {
-      prompt = `Study Sources ${allLabels}. (${part}) "${ssBundle.assertion}" How far do Sources ${allLabels} support this assertion? Use ALL the sources and your own knowledge to explain your answer.`;
+    if (sectionBundle && skillId === "assertion") {
+      prompt = `Study Sources ${allLabels}. (${part}) "${sectionBundle.assertion}" How far do Sources ${allLabels} support this assertion? Use ALL the sources and your own knowledge to explain your answer.`;
     }
 
     // Pull a short snippet from the bound source(s) so the deterministic
