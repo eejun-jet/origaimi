@@ -2066,11 +2066,40 @@ Deno.serve(async (req) => {
                 section.id ?? section.letter ?? sectionTopic.topic,
               )
             : null;
-          const curatedAll: GroundedSource[] = ssSubIssueForSection
-            ? ssSubIssueForSection.sources.slice()
-            : curatedHumanitiesSourcePool(sectionTopic.topic, sectionTopic.learning_outcomes ?? [], section.knowledge_outcomes ?? []);
+          // History: pick the most-specific curated bundle so we can surface
+          // its inquiryQuestion + assertion to both the LLM and the
+          // deterministic builder (mirrors the SS path above).
+          let historyBundleForSection: CuratedBundle | null = null;
+          let curatedAll: GroundedSource[];
           if (ssSubIssueForSection) {
-            console.log(`[generate] section ${section.letter}: SS sub-issue "${ssSubIssueForSection.subIssue}" (Issue ${ssSubIssueForSection.issue})`);
+            curatedAll = ssSubIssueForSection.sources.slice();
+            sectionBundleForSection = {
+              subIssue: ssSubIssueForSection.subIssue,
+              inquiryQuestion: ssSubIssueForSection.inquiryQuestion,
+              assertion: ssSubIssueForSection.assertion,
+            };
+          } else {
+            const picked = pickHumanitiesBundle(
+              sectionTopic.topic,
+              sectionTopic.learning_outcomes ?? [],
+              section.knowledge_outcomes ?? [],
+            );
+            historyBundleForSection = picked.bundle;
+            curatedAll = picked.sources.length > 0
+              ? picked.sources
+              : curatedHumanitiesSourcePool(sectionTopic.topic, sectionTopic.learning_outcomes ?? [], section.knowledge_outcomes ?? []);
+            if (historyBundleForSection) {
+              sectionBundleForSection = {
+                subIssue: historyBundleForSection.subIssue,
+                inquiryQuestion: historyBundleForSection.inquiryQuestion,
+                assertion: historyBundleForSection.assertion,
+              };
+            }
+          }
+          if (ssSubIssueForSection) {
+            console.log(`[generate] section ${section.letter}: SS sub-issue "${ssSubIssueForSection.subIssue}" → "${ssSubIssueForSection.inquiryQuestion}"`);
+          } else if (historyBundleForSection) {
+            console.log(`[generate] section ${section.letter}: History bundle "${historyBundleForSection.subIssue}" → "${historyBundleForSection.inquiryQuestion}"`);
           }
           const curatedSeed: typeof curatedAll = [];
           const seenSeedHosts = new Set<string>();
