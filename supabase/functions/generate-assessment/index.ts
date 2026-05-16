@@ -1390,15 +1390,22 @@ function buildSectionUserPrompt(opts: {
     const concatenatedExcerpt = pool
       .map((s, i) => `Source ${labels[i]}: ${s.excerpt}`)
       .join("\\n\\n");
+    const inq = opts.sbqInquiry ?? null;
+    const inquiryLine = inq
+      ? `  - KEY INQUIRY QUESTION (USE THIS EXACT QUESTION VERBATIM as the opener — do NOT invent your own, do NOT paraphrase):\n      "${inq.inquiryQuestion}"\n  - SUB-ISSUE FOCUS: this SBQ section investigates ${inq.subIssue}. Every sub-part (a)–(${String.fromCharCode(96 + section.num_questions)}) MUST interrogate this same sub-issue using the shared sources.`
+      : `  - The ENTIRE section is ONE single source-based question, structured around ONE KEY LINE OF INQUIRY about "${sectionTopic}".`;
+    const assertionLine = inq
+      ? `  - ASSERTION SUB-PART: the Q5 / assertion sub-part MUST use this EXACT hypothesis verbatim (do NOT paraphrase): "${inq.assertion}" — the stem must read \`"${inq.assertion}" How far do Sources ${labelList} support this assertion? Use ALL the sources and your own knowledge to explain your answer.\``
+      : "";
     sbqSectionPreamble = `
 
 THIS IS A SOURCE-BASED QUESTION (SBQ) SECTION — SEAB / MOE FORMAT:
 
 STRUCTURE — READ CAREFULLY:
-  - The ENTIRE section is ONE single source-based question, structured around ONE KEY LINE OF INQUIRY about "${sectionTopic}".
+${inquiryLine}
   - That single question has up to ${section.num_questions} parts: (a), (b), (c), (d), (e) — all investigating the SAME line of inquiry.
-  - You MUST open the FIRST part's stem with a clear KEY INQUIRY QUESTION (a debatable, analytical line of inquiry — e.g. "How far was X responsible for Y?", "To what extent did X cause Y?", "Why did X happen?"), then a blank line, then the (a) sub-question.
-  - Sub-parts (b), (c), (d), (e) do NOT repeat the inquiry question; they are simply further parts of the same investigation.
+  - You MUST open the FIRST part's stem with the KEY INQUIRY QUESTION above (verbatim if provided, otherwise a clear debatable analytical question — e.g. "How far was X responsible for Y?", "To what extent did X cause Y?", "Why did X happen?"), then a blank line, then the (a) sub-question.
+  - Sub-parts (b), (c), (d), (e) do NOT repeat the inquiry question; they are simply further parts of the same investigation.${assertionLine ? `\n${assertionLine}` : ""}
 
 ABSOLUTE BAN ON CONTENT-RECALL STEMS (CRITICAL — non-negotiable):
   - Every SBQ sub-part MUST require, at minimum, an INFERENCE — a reading of the source that goes BEYOND what is literally stated.
