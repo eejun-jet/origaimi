@@ -634,6 +634,8 @@ const SS_SUB_ISSUE_BUNDLES: SsSubIssueBundle[] = [
       { excerpt: `The OECD's Indicators of Immigrant Integration 2023 report compared how migrants fare across member economies on jobs, housing, language, civic participation and social acceptance. It found that integration outcomes were strongest where receiving societies combined active settlement programmes — language classes, mentorship, recognised qualifications — with measurable rises in personal contact between immigrants and the native-born. Where contact remained limited to the workplace, immigrants achieved economic inclusion but lower civic trust and a weaker sense of belonging. The report concluded that integration is not produced by policy alone, but by everyday encounters that policy can either enable or obstruct.`, source_url: "https://www.oecd.org/migration/indicators-of-immigrant-integration-2023-1d5020a6-en.htm", source_title: "OECD Indicators of Immigrant Integration, 2023", publisher: "OECD" },
     ],
   },
+  {
+    issue: 3,
     subIssue: "free trade, jobs and Singapore workers",
     assertion: "Singapore's open economy benefits the country as a whole more than it benefits ordinary Singaporean workers.",
     inquiryQuestion: "How far does Singapore's open economy serve the interests of ordinary Singaporean workers?",
