@@ -981,11 +981,21 @@ const SBQ_SKILL_AO: Record<string, string> = {
   assertion: "AO3.7",
 };
 
+/** Generic SBQ-inquiry bundle shape. Both SS sub-issue bundles and the
+ *  History curated bundles satisfy this shape (subIssue + inquiryQuestion +
+ *  assertion), so the deterministic builder and the LLM prompt can treat them
+ *  uniformly. */
+type SbqInquiryBundle = {
+  subIssue: string;
+  inquiryQuestion: string;
+  assertion: string;
+};
+
 function buildDeterministicSbqQuestions(
   section: Section,
   sources: GroundedSource[],
   skills: (SbqSkillDef | null)[],
-  ssBundle?: SsSubIssueBundle | null,
+  sectionBundle?: SbqInquiryBundle | null,
 ): any[] {
   const rawTopic = section.topic_pool[0]?.topic ?? "";
   const sectionLOs = section.topic_pool[0]?.learning_outcomes
