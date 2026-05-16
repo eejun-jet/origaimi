@@ -997,6 +997,7 @@ type SbqInquiryBundle = {
   subIssue: string;
   inquiryQuestion: string;
   assertion: string;
+  contextWriteUp: string;
 };
 
 function buildDeterministicSbqQuestions(
