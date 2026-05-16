@@ -596,6 +596,7 @@ const SS_SUB_ISSUE_BUNDLES: SsSubIssueBundle[] = [
     issue: 1,
     subIssue: "civic participation and the limits of dissent in Singapore",
     assertion: "Singapore's model of citizenship gives citizens a real voice but on terms set by the state.",
+    contextWriteUp: "This SBQ examines how far citizens in Singapore have a real voice in shaping public policy. The Singapore Pledge frames citizenship as an active commitment, and the Government has run wide consultations such as Forward Singapore involving over 200,000 participants. At the same time, Article 14 of the Constitution and the Public Order Act allow Parliament to restrict speech, assembly and protest in the interest of stability, with public political gatherings confined to Speakers' Corner. International comparisons — from Hong Kong's 2019 extradition-bill protests to OECD findings on trust in government — sharpen the debate. Weigh the sources to judge how far Singapore's model gives citizens genuine influence over policy.",
     inquiryQuestion: "How far does Singapore's approach to civic participation give citizens genuine influence over public policy?",
     triggers: /(civic|participation|dissent|protest|consultation|forward singapore|speakers' corner|public order)/i,
     sources: [
