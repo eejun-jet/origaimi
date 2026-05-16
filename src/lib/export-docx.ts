@@ -46,10 +46,16 @@ type ParsedExportSource =
   | { label: string; kind: "text"; text: string; provenance?: string; sourceUrl?: string }
   | { label: string; kind: "image"; caption: string; imageUrl: string; provenance?: string; sourceUrl?: string };
 
+function parseExportSbqContext(excerpt: string): string | null {
+  const m = excerpt.match(/^\s*\[CONTEXT\]\s*([\s\S]*?)\s*\[\/CONTEXT\]\s*/);
+  return m ? m[1].trim() : null;
+}
+
 function parseExportSourcePool(excerpt: string): ParsedExportSource[] {
-  const matches = [...excerpt.matchAll(/Source\s+([A-F])\s*:\s*([\s\S]*?)(?=\n\s*Source\s+[A-F]\s*:|$)/g)];
+  const body = excerpt.replace(/^\s*\[CONTEXT\][\s\S]*?\[\/CONTEXT\]\s*/, "");
+  const matches = [...body.matchAll(/Source\s+([A-F])\s*:\s*([\s\S]*?)(?=\n\s*Source\s+[A-F]\s*:|$)/g)];
   const raw = matches.length === 0
-    ? [{ label: "A", text: excerpt.trim() }]
+    ? [{ label: "A", text: body.trim() }]
     : matches.map((m) => ({ label: m[1], text: m[2].trim() }));
   return raw.map((entry): ParsedExportSource => {
     const imgMeta = entry.text.match(/^\[IMAGE\]\s*([\s\S]*?)\s+—\s+(https?:\/\/\S+?)\s+\[PROV\]\s*([\s\S]*?)\s+\[URL\]\s*(\S+)\s*$/);
