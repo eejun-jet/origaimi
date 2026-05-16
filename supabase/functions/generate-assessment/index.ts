@@ -783,7 +783,71 @@ function curatedHumanitiesSourcePool(
   return matched;
 }
 
-function normalizeMatchText(s: string): string {
+/** Like curatedHumanitiesSourcePool, but ALSO returns the WINNING bundle so
+ *  the SBQ can use its subIssue / inquiryQuestion / assertion (mirroring
+ *  pickSsSubIssueBundle). When multiple bundles match, picks the one whose
+ *  trigger has the most distinct keyword hits against (topic + LOs + KOs). */
+function pickHumanitiesBundle(
+  topic: string,
+  learningOutcomes: string[] = [],
+  knowledgeOutcomes: string[] = [],
+): { bundle: CuratedBundle | null; sources: GroundedSource[] } {
+  const topicGroup = topicGroupOf(topic);
+  const fullBlob = [topic, ...learningOutcomes, ...knowledgeOutcomes].join(" ");
+
+  const scoreBundle = (b: CuratedBundle, hay: string): number => {
+    const altSrc = b.trigger.source.replace(/^\(|\)$/g, "");
+    const alts = altSrc.split("|");
+    let hits = 0;
+    for (const alt of alts) {
+      try {
+        if (new RegExp(alt, "i").test(hay)) hits++;
+      } catch {
+        /* skip malformed sub-pattern */
+      }
+    }
+    return hits;
+  };
+
+  let candidates = CURATED_HUMANITIES_BUNDLES.filter((b) => b.trigger.test(topic));
+
+  if (candidates.length === 0) {
+    const fallbackBlob = [...learningOutcomes, ...knowledgeOutcomes].join(" ");
+    candidates = CURATED_HUMANITIES_BUNDLES.filter((b) => {
+      if (!b.trigger.test(fallbackBlob)) return false;
+      const bundleGroup =
+        topicGroupOf(b.sources.map((s) => s.source_title).join(" ")) ??
+        topicGroupOf(b.trigger.source);
+      if (topicGroup && bundleGroup && bundleGroup !== topicGroup) return false;
+      return true;
+    });
+  }
+
+  if (candidates.length === 0) return { bundle: null, sources: [] };
+
+  let best = candidates[0];
+  let bestScore = scoreBundle(best, fullBlob);
+  for (const c of candidates.slice(1)) {
+    const s = scoreBundle(c, fullBlob);
+    if (s > bestScore) { best = c; bestScore = s; }
+  }
+
+  const seenUrls = new Set<string>();
+  const sources: GroundedSource[] = [];
+  for (const src of best.sources) {
+    if (!seenUrls.has(src.source_url)) { seenUrls.add(src.source_url); sources.push(src); }
+  }
+  for (const c of candidates) {
+    if (c === best) continue;
+    for (const src of c.sources) {
+      if (!seenUrls.has(src.source_url)) { seenUrls.add(src.source_url); sources.push(src); }
+    }
+  }
+
+  return { bundle: best, sources };
+}
+
+
   return s.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
