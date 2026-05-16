@@ -1465,7 +1465,7 @@ function parseSharedSourcePool(excerpt: string): ParsedSource[] {
   const body = stripSbqContext(excerpt);
   const matches = [...body.matchAll(/Source\s+([A-F])\s*:\s*([\s\S]*?)(?=\n\s*Source\s+[A-F]\s*:|$)/g)];
   const raw = matches.length === 0
-    ? [{ label: "A", text: excerpt.trim() }]
+    ? [{ label: "A", text: body.trim() }]
     : matches.map((m) => ({ label: m[1], text: m[2].trim() }));
   return raw.map((entry): ParsedSource => {
     // Image (new format with provenance + URL markers)
