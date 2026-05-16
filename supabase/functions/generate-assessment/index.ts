@@ -2012,6 +2012,7 @@ Deno.serve(async (req) => {
       const sharedImageSources: GroundedImageSource[] = [];
       const sourcesForSection: (GroundedSource | null)[][] = [];
       let ssSubIssueForSection: SsSubIssueBundle | null = null;
+      let sectionBundleForSection: SbqInquiryBundle | null = null;
       let humanitiesAnchorTopic: SectionTopic | null = null;
 
       if (isHumanitiesSBQ) {
