@@ -2335,7 +2335,7 @@ Deno.serve(async (req) => {
         const deterministicSection = humanitiesAnchorTopic
           ? { ...section, topic_pool: [humanitiesAnchorTopic, ...section.topic_pool.filter((t) => t !== humanitiesAnchorTopic)] }
           : section;
-        questions = buildDeterministicSbqQuestions(deterministicSection, sharedSourcePool, perQSkillsForFetch, ssSubIssueForSection);
+        questions = buildDeterministicSbqQuestions(deterministicSection, sharedSourcePool, perQSkillsForFetch, sectionBundleForSection);
       } else if (isSSPaper && section.question_type === "long") {
         console.log(`[generate] section ${section.letter}: using deterministic SS SRQ builder to avoid AI timeout`);
         questions = buildDeterministicSsSrqQuestions(section);
