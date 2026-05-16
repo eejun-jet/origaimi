@@ -419,6 +419,13 @@ const SBQ_STEM_TEMPLATES: Record<string, string[]> = {
  *  multiply (e.g. "Cold War" + "decolonisation") and are merged. */
 type CuratedBundle = {
   trigger: RegExp;
+  /** Short noun phrase naming the concrete issue, e.g. "the outbreak of the Korean War". */
+  subIssue: string;
+  /** Debatable opening question for the SBQ, e.g. "How far was the US responsible for the outbreak of the Korean War?". */
+  inquiryQuestion: string;
+  /** Testable hypothesis used by the Q5 assertion sub-part — every source in the bundle must
+   *  plausibly support OR challenge it. */
+  assertion: string;
   sources: GroundedSource[];
 };
 
@@ -426,6 +433,9 @@ const CURATED_HUMANITIES_BUNDLES: CuratedBundle[] = [
   // --- WWII outbreak / appeasement ---
   {
     trigger: /(world war ii|wwii|second world war|outbreak of war|appeasement|munich|league of nations|abyssinia|rhineland|anschluss|non-aggression pact|invasion of poland)/i,
+    subIssue: "the outbreak of the Second World War",
+    inquiryQuestion: "How far was the policy of appeasement responsible for the outbreak of the Second World War?",
+    assertion: "Appeasement, more than Hitler's ambitions, was the main reason that war broke out in 1939.",
     sources: [
       { excerpt: `In September 1938, the British Prime Minister Neville Chamberlain returned from Munich and told the public that the agreement over Czechoslovakia had brought "peace for our time". He argued that Britain had avoided a war for which many ordinary people were not ready, and that disputes between nations should be settled by negotiation rather than force. To supporters, the agreement showed that statesmen could prevent another catastrophe like the First World War. To critics, it showed that Britain and France had accepted Hitler's demands and encouraged further aggression by sacrificing Czechoslovakia without its full consent.`, source_url: "https://avalon.law.yale.edu/imt/munich1.asp", source_title: "Munich Agreement, 1938", publisher: "Avalon Project" },
       { excerpt: `In March 1936, German troops entered the Rhineland, an area that Germany had agreed to keep demilitarised under the Treaty of Versailles and the Locarno Treaties. Hitler presented the move as Germany merely entering its own territory and claimed that Germany wanted peace with its neighbours. The remilitarisation was popular in Germany because it appeared to restore national pride after Versailles. Britain and France protested but did not use force. The lack of military response made Germany's position stronger and suggested that treaty restrictions could be challenged without immediate consequences.`, source_url: "https://www.nationalarchives.gov.uk/education/resources/interwar/", source_title: "German remilitarisation of the Rhineland", publisher: "UK National Archives" },
@@ -438,6 +448,9 @@ const CURATED_HUMANITIES_BUNDLES: CuratedBundle[] = [
   // --- Rise of Nazism / Weimar Germany / authoritarian rule in Germany ---
   {
     trigger: /(nazi|nazism|hitler|weimar|reichstag|enabling act|third reich|nuremberg laws|authoritarian.*germany|rise of authoritarian(?!.*(japan|militarist|soviet|russia))|fascis)/i,
+    subIssue: "the rise of authoritarian rule in Nazi Germany",
+    inquiryQuestion: "How far did Hitler rise to power because of the weaknesses of the Weimar Republic rather than the strengths of the Nazi Party?",
+    assertion: "Nazi rule was established more by exploiting legal channels than by intimidation and violence.",
     sources: [
       { excerpt: `On 30 January 1933, President Paul von Hindenburg appointed Adolf Hitler as Chancellor of Germany. Hitler led the largest party in the Reichstag but did not have a majority. Conservative politicians around Hindenburg believed they could control Hitler by surrounding him with non-Nazi ministers. The appointment came after months of political deadlock and a series of short-lived governments. Many Germans hoped a Hitler-led coalition would restore stability after years of economic depression and political violence; others warned that handing the chancellorship to the Nazi leader was a dangerous gamble.`, source_url: "https://encyclopedia.ushmm.org/content/en/article/the-nazi-rise-to-power", source_title: "Hindenburg appoints Hitler Chancellor, January 1933", publisher: "United States Holocaust Memorial Museum" },
       { excerpt: `On the night of 27 February 1933, the German Reichstag building was destroyed by fire. The Nazi government blamed a communist conspiracy. The next day, President Hindenburg signed the Decree of the Reich President for the Protection of People and State, suspending most civil liberties guaranteed by the Weimar Constitution, including freedom of the press, freedom of assembly, and protection from arbitrary arrest. The decree allowed the Nazi regime to arrest political opponents, especially communists, and to silence opposition newspapers in the weeks before the March 1933 election.`, source_url: "https://encyclopedia.ushmm.org/content/en/article/the-reichstag-fire", source_title: "Reichstag Fire Decree, 28 February 1933", publisher: "United States Holocaust Memorial Museum" },
@@ -451,6 +464,9 @@ const CURATED_HUMANITIES_BUNDLES: CuratedBundle[] = [
   // --- Militarist Japan / authoritarian rule in Japan, 1920s–1930s ---
   {
     trigger: /(militarist japan|militarism.*japan|japan.*militaris|imperial japan|tojo|hirohito|manchuria|mukden|kwantung|showa restoration|february 26|2-26 incident|kokutai|greater east asia|authoritarian.*japan)/i,
+    subIssue: "the rise of militarist rule in Japan",
+    inquiryQuestion: "How far was the rise of militarism in 1930s Japan the result of the army acting independently of civilian government?",
+    assertion: "Militarist rule in Japan was driven more by the army's defiance of civilian leaders than by genuine popular support.",
     sources: [
       { excerpt: `On the night of 18 September 1931, officers of the Japanese Kwantung Army staged an explosion on the South Manchurian Railway near Mukden and blamed Chinese troops. Within hours, Japanese forces moved to occupy the surrounding cities and within months had taken control of all of Manchuria. The civilian government in Tokyo had not authorised the operation in advance but accepted it after the fact. The Mukden Incident showed that the army could act independently of elected politicians and shifted real political initiative towards the military.`, source_url: "https://www.britannica.com/event/Mukden-Incident", source_title: "The Mukden Incident, September 1931", publisher: "Encyclopaedia Britannica" },
       { excerpt: `In February 1932, the Japanese army established the puppet state of Manchukuo in occupied Manchuria, installing the former Chinese emperor Puyi as its head. The League of Nations sent the Lytton Commission, which concluded in 1932 that Japan had been the aggressor and that Manchukuo was not a genuinely independent state. When the League adopted the report in February 1933, the Japanese delegation walked out of the assembly. Japan formally withdrew from the League the next month, marking a decisive break with the post-1919 international order.`, source_url: "https://history.state.gov/milestones/1921-1936/mukden-incident", source_title: "Japan, the Lytton Report, and withdrawal from the League of Nations", publisher: "US Department of State, Office of the Historian" },
@@ -463,6 +479,9 @@ const CURATED_HUMANITIES_BUNDLES: CuratedBundle[] = [
   // --- Stalinist USSR / authoritarian rule in the Soviet Union ---
   {
     trigger: /(stalin|soviet union|ussr|five-year plan|collectivisation|collectivization|gulag|great purge|show trial|authoritarian.*soviet|authoritarian.*russia|bolshevik)/i,
+    subIssue: "Stalin's consolidation of authoritarian rule in the USSR",
+    inquiryQuestion: "How far was Stalin's authoritarian rule maintained by terror rather than by genuine support?",
+    assertion: "Stalin's grip on the Soviet Union rested more on fear and the secret police than on the economic gains of the Five-Year Plans.",
     sources: [
       { excerpt: `In January 1933, Stalin told the Central Committee of the Communist Party that the First Five-Year Plan had been completed in four years and three months. He claimed that the Soviet Union had been transformed from an agrarian into an industrial country. Steel, coal and electricity output had risen sharply, and entire new industrial cities such as Magnitogorsk had been built from nothing. Stalin presented these results as proof that planned socialist industry could outperform capitalism, especially during the Great Depression. He did not mention the famine then unfolding in Ukraine and other grain-producing regions.`, source_url: "https://www.marxists.org/reference/archive/stalin/works/1933/01/07.htm", source_title: "Stalin: Results of the First Five-Year Plan, 1933", publisher: "Marxists Internet Archive" },
       { excerpt: `Collectivisation, launched in 1929, forced Soviet peasants to give up their land, animals and tools and join state-controlled collective farms (kolkhozy). Peasants who resisted, especially better-off farmers labelled "kulaks", were arrested, deported to Siberia or shot. Grain was requisitioned to feed cities and to export for industrial machinery. In 1932–33, requisitioning combined with poor harvests produced a famine in which several million people died, particularly in Ukraine, the North Caucasus and Kazakhstan. The state denied the famine and continued to export grain throughout the crisis.`, source_url: "https://www.britannica.com/event/Soviet-famine-of-1932-33", source_title: "The Soviet Famine of 1932–33", publisher: "Encyclopaedia Britannica" },
@@ -475,6 +494,9 @@ const CURATED_HUMANITIES_BUNDLES: CuratedBundle[] = [
   // --- Cold War origins ---
   {
     trigger: /(cold war|truman doctrine|marshall plan|long telegram|iron curtain|berlin blockade|berlin airlift|nato|warsaw pact|containment|ideological polari|superpower rivalry)/i,
+    subIssue: "the origins of the Cold War",
+    inquiryQuestion: "How far was the United States responsible for the outbreak of the Cold War?",
+    assertion: "The Cold War was caused more by American actions to contain communism than by Soviet expansion in Europe.",
     sources: [
       { excerpt: `In February 1946, George Kennan, the American chargé d'affaires in Moscow, sent an 8,000-word telegram to Washington. He argued that Soviet leaders believed in an unending struggle between capitalism and communism, and that the USSR would expand its influence wherever it could without risking war. Kennan recommended that the United States respond with "long-term, patient but firm and vigilant containment of Russian expansive tendencies". The telegram became the intellectual foundation of US Cold War policy.`, source_url: "https://www.trumanlibrary.gov/library/research-files/telegram-george-kennan-james-byrnes-long-telegram", source_title: "Kennan's Long Telegram, February 1946", publisher: "Truman Library" },
       { excerpt: `Speaking at Westminster College in Fulton, Missouri, in March 1946, Winston Churchill declared: "From Stettin in the Baltic to Trieste in the Adriatic, an iron curtain has descended across the Continent. Behind that line lie all the capitals of the ancient states of Central and Eastern Europe... all are subject in one form or another, not only to Soviet influence but to a very high and, in some cases, increasing measure of control from Moscow." The speech publicly framed Europe as already divided into two hostile blocs.`, source_url: "https://winstonchurchill.org/resources/speeches/1946-1963-elder-statesman/the-sinews-of-peace/", source_title: "Churchill's 'Iron Curtain' speech, March 1946", publisher: "International Churchill Society" },
@@ -488,6 +510,9 @@ const CURATED_HUMANITIES_BUNDLES: CuratedBundle[] = [
   // --- End of the Cold War / collapse of the USSR ---
   {
     trigger: /(end of the cold war|gorbachev|perestroika|glasnost|reagan|tear down this wall|fall of the berlin wall|collapse of the (ussr|soviet union)|decline of the (ussr|soviet union)|arms race|reykjavik|inf treaty)/i,
+    subIssue: "the end of the Cold War and the collapse of the USSR",
+    inquiryQuestion: "How far was Gorbachev's leadership responsible for the end of the Cold War?",
+    assertion: "The Cold War ended because Gorbachev's reforms unintentionally dismantled Soviet power, not because the West won an arms race.",
     sources: [
       { excerpt: `Speaking to the 27th Party Congress in Moscow in February 1986, Mikhail Gorbachev called for "radical reform" of the Soviet economy. He admitted that growth had stalled and that Soviet industry lagged badly behind Western technology. The reforms he proposed — perestroika (restructuring) and uskorenie (acceleration) — sought to make state enterprises more responsive to consumer demand and to reduce central planning. Critics inside the party warned that loosening controls might unravel the socialist system; supporters argued that reform was the only way to preserve it.`, source_url: "https://digitalarchive.wilsoncenter.org/document/gorbachev-political-report-27th-congress", source_title: "Gorbachev's report to the 27th Party Congress, 1986", publisher: "Wilson Center Digital Archive" },
       { excerpt: `Standing at the Brandenburg Gate in West Berlin on 12 June 1987, US President Ronald Reagan addressed the Soviet leadership directly: "General Secretary Gorbachev, if you seek peace, if you seek prosperity for the Soviet Union and Eastern Europe, if you seek liberalisation: come here to this gate. Mr Gorbachev, open this gate. Mr Gorbachev, tear down this wall!" The speech framed the Berlin Wall as the visible symbol of an unfree system and put public pressure on the Soviet Union to match its rhetoric of openness with action.`, source_url: "https://www.reaganlibrary.gov/archives/speech/remarks-east-west-relations-brandenburg-gate-west-berlin", source_title: "Reagan at the Brandenburg Gate, June 1987", publisher: "Ronald Reagan Presidential Library" },
@@ -500,6 +525,9 @@ const CURATED_HUMANITIES_BUNDLES: CuratedBundle[] = [
   // --- Decolonisation in Southeast Asia / Singapore independence ---
   {
     trigger: /(decolonisation|decolonization|singapore|merger|separation|lee kuan yew|malaysia|self-government|british withdrawal|konfrontasi|federation of malaya)/i,
+    subIssue: "Singapore's path from merger to separation",
+    inquiryQuestion: "How far was Singapore's separation from Malaysia in 1965 the result of irreconcilable political differences rather than economic disagreements?",
+    assertion: "Separation in 1965 was driven more by political and racial conflict with Kuala Lumpur than by any economic failure of the merger.",
     sources: [
       { excerpt: `Announcing the merger of Singapore, Malaya, Sabah and Sarawak on 16 September 1963, Tunku Abdul Rahman declared the formation of Malaysia. The merger was presented as the natural decolonisation outcome for the region: it would end British colonial rule in the territories, provide Singapore with a wider economic hinterland, and combine the populations of the Federation, Singapore and the Borneo states in a single multi-racial state. The British government supported merger as a way of withdrawing from its remaining Southeast Asian responsibilities while keeping the region out of communist control.`, source_url: "https://www.nas.gov.sg/archivesonline/speeches/record-details/7269b6e6-115d-11e3-83d5-0050568939ad", source_title: "Tunku Abdul Rahman on the formation of Malaysia, 1963", publisher: "National Archives of Singapore" },
       { excerpt: `In a televised press conference on 9 August 1965, Prime Minister Lee Kuan Yew announced Singapore's separation from Malaysia: "For me, it is a moment of anguish. All my life, my whole adult life, I have believed in merger and the unity of these two territories." He explained that political and racial differences with the central government in Kuala Lumpur had become impossible to resolve. Singapore was now an independent and sovereign nation, responsible for its own defence, economy and survival.`, source_url: "https://www.nas.gov.sg/archivesonline/speeches/record-details/7314e57c-115d-11e3-83d5-0050568939ad", source_title: "Lee Kuan Yew's Separation press conference, 9 August 1965", publisher: "National Archives of Singapore" },
@@ -590,6 +618,20 @@ const SS_SUB_ISSUE_BUNDLES: SsSubIssueBundle[] = [
       { excerpt: `TWC2 (Transient Workers Count Too), a Singapore NGO, reports that the most common cases its volunteers handle involve unpaid wages, injury claims and abrupt repatriation. Its 2022 review noted that workers' visas remain tied to a single employer, that filing a complaint usually means losing the right to work elsewhere while the case is investigated, and that workers without income during this period rely on NGO-run free meals. TWC2 argues legal entitlements alone do not secure belonging without a route to stable employment and community.`, source_url: "https://twc2.org.sg/2022/12/30/2022-the-year-in-review/", source_title: "TWC2 Annual Review, 2022", publisher: "Transient Workers Count Too, Singapore" },
       { excerpt: `The International Labour Organization's 2021 Global Estimates on International Migrant Workers reported 169 million international migrant workers globally, with a US$702 billion remittance flow back to origin countries. The ILO documents both gains — household incomes raised, education funded — and risks: wage theft, restricted labour rights, exposure during downturns. The report urges receiving states to extend "decent work" protections to migrant workers on the same terms as nationals, arguing economic inclusion without legal and social inclusion is unsustainable.`, source_url: "https://www.ilo.org/global/topics/labour-migration/publications/WCMS_808935/lang--en/index.htm", source_title: "ILO Global Estimates on International Migrant Workers, 2021", publisher: "International Labour Organization" },
       { excerpt: `An IPS-Channel NewsAsia survey on attitudes towards migrant workers (2021) found that 71% of Singapore citizens agreed migrant workers had been "treated unfairly" during the COVID-19 outbreak, while only 44% supported integrating dormitories into HDB estates. The authors argued the gap reveals a sympathetic-but-distanced model of inclusion: citizens recognise migrant workers' contributions and unfair treatment, but draw the line at sharing residential space. They warn that diversity without daily contact tends to harden into permanent social separation.`, source_url: "https://lkyspp.nus.edu.sg/ips/publications/details/ips-cna-survey-on-attitudes-towards-migrant-workers-2021", source_title: "IPS-CNA Survey on Migrant Workers, 2021", publisher: "Lee Kuan Yew School of Public Policy, NUS" },
+    ],
+  },
+  {
+    issue: 2,
+    subIssue: "foreign immigrants and integration into Singaporean way of life",
+    assertion: "Singapore's social fabric is being strained by the difficulty of integrating new immigrants into the local way of life.",
+    inquiryQuestion: "How far are foreign immigrants able to integrate into Singapore's way of life?",
+    triggers: /(foreign immigrant|new citizen|new immigrant|integration|integrate|assimilat|naturalisation|naturalization|prc|filipino|indian national|expat|permanent resident|pr\b)/i,
+    sources: [
+      { excerpt: `The 2013 Population White Paper, A Sustainable Population for a Dynamic Singapore, projected that without continued immigration the citizen population would begin to shrink from around 2025, and proposed taking in 15,000–25,000 new citizens and about 30,000 new permanent residents each year to keep the workforce and society viable. The paper acknowledged public anxiety about pace and integration, and committed the Government to "carefully calibrate" immigration so that newcomers had time to adapt to Singapore's norms and Singaporeans had time to absorb them. Public reaction was unusually sharp: a protest at Hong Lim Park drew several thousand attendees, the largest such gathering in years.`, source_url: "https://www.strategygroup.gov.sg/files/media-centre/publications/population-white-paper.pdf", source_title: "A Sustainable Population for a Dynamic Singapore (Population White Paper), 2013", publisher: "Strategy Group, Prime Minister's Office, Singapore" },
+      { excerpt: `The National Integration Council, established by the Government in 2009, funds the Community Integration Fund and runs programmes such as the Singapore Citizenship Journey, in which new citizens visit national institutions, attend community sessions and complete an online course before receiving their pink IC. The Council frames integration as a "two-way process": new immigrants are expected to learn Singapore's history, multiracial norms and shared spaces such as HDB estates and hawker centres, while existing Singaporeans are urged to be open to newcomers. Officials concede that programmes can introduce newcomers to Singapore but cannot, by themselves, produce belonging.`, source_url: "https://www.nic.gov.sg/about-us/", source_title: "National Integration Council and the Singapore Citizenship Journey", publisher: "National Integration Council, Singapore" },
+      { excerpt: `An IPS-OnePeople.sg survey on race, religion and immigration (2019) found that 51% of Singapore citizens agreed "new immigrants are not making enough effort to integrate", while only 33% of new citizens and PRs reported having a close Singaporean friend outside their own ethnic or national group. The authors argued the gap exposed a "perception–contact mismatch": locals judged integration largely by whether newcomers adopted local accents, food habits and National Service commitments, while newcomers measured it by workplace acceptance and freedom to keep home-country ties. Without shared definitions, both sides could feel the other was not trying.`, source_url: "https://lkyspp.nus.edu.sg/ips/publications/details/ips-onepeoplesg-indicators-of-racial-and-religious-harmony-survey-2018-2019", source_title: "IPS-OnePeople.sg Indicators of Racial and Religious Harmony, 2019", publisher: "Institute of Policy Studies, Singapore" },
+      { excerpt: `In a 2022 Channel NewsAsia commentary, sociologist Terence Chong argued that complaints about new immigrants in Singapore — that they cluster on social media, speak in their home languages on the MRT, or send their children to international schools — reflect what he called "the everyday friction of integration", not a failure of policy. He noted similar tensions exist in every immigrant-receiving society and that integration is best understood as a generational process, with the children of new citizens — born in Singapore, going through national schools and NS — being the ones for whom belonging is finally settled. Critics replied that this asks a great deal of social patience.`, source_url: "https://www.channelnewsasia.com/commentary/new-singaporeans-immigrants-integration-society-belonging-2855421", source_title: "CNA Commentary: integration of new Singaporeans, 2022", publisher: "Channel NewsAsia" },
+      { excerpt: `The OECD's Indicators of Immigrant Integration 2023 report compared how migrants fare across member economies on jobs, housing, language, civic participation and social acceptance. It found that integration outcomes were strongest where receiving societies combined active settlement programmes — language classes, mentorship, recognised qualifications — with measurable rises in personal contact between immigrants and the native-born. Where contact remained limited to the workplace, immigrants achieved economic inclusion but lower civic trust and a weaker sense of belonging. The report concluded that integration is not produced by policy alone, but by everyday encounters that policy can either enable or obstruct.`, source_url: "https://www.oecd.org/migration/indicators-of-immigrant-integration-2023-1d5020a6-en.htm", source_title: "OECD Indicators of Immigrant Integration, 2023", publisher: "OECD" },
     ],
   },
   {
@@ -743,6 +785,70 @@ function curatedHumanitiesSourcePool(
   return matched;
 }
 
+/** Like curatedHumanitiesSourcePool, but ALSO returns the WINNING bundle so
+ *  the SBQ can use its subIssue / inquiryQuestion / assertion (mirroring
+ *  pickSsSubIssueBundle). When multiple bundles match, picks the one whose
+ *  trigger has the most distinct keyword hits against (topic + LOs + KOs). */
+function pickHumanitiesBundle(
+  topic: string,
+  learningOutcomes: string[] = [],
+  knowledgeOutcomes: string[] = [],
+): { bundle: CuratedBundle | null; sources: GroundedSource[] } {
+  const topicGroup = topicGroupOf(topic);
+  const fullBlob = [topic, ...learningOutcomes, ...knowledgeOutcomes].join(" ");
+
+  const scoreBundle = (b: CuratedBundle, hay: string): number => {
+    const altSrc = b.trigger.source.replace(/^\(|\)$/g, "");
+    const alts = altSrc.split("|");
+    let hits = 0;
+    for (const alt of alts) {
+      try {
+        if (new RegExp(alt, "i").test(hay)) hits++;
+      } catch {
+        /* skip malformed sub-pattern */
+      }
+    }
+    return hits;
+  };
+
+  let candidates = CURATED_HUMANITIES_BUNDLES.filter((b) => b.trigger.test(topic));
+
+  if (candidates.length === 0) {
+    const fallbackBlob = [...learningOutcomes, ...knowledgeOutcomes].join(" ");
+    candidates = CURATED_HUMANITIES_BUNDLES.filter((b) => {
+      if (!b.trigger.test(fallbackBlob)) return false;
+      const bundleGroup =
+        topicGroupOf(b.sources.map((s) => s.source_title).join(" ")) ??
+        topicGroupOf(b.trigger.source);
+      if (topicGroup && bundleGroup && bundleGroup !== topicGroup) return false;
+      return true;
+    });
+  }
+
+  if (candidates.length === 0) return { bundle: null, sources: [] };
+
+  let best = candidates[0];
+  let bestScore = scoreBundle(best, fullBlob);
+  for (const c of candidates.slice(1)) {
+    const s = scoreBundle(c, fullBlob);
+    if (s > bestScore) { best = c; bestScore = s; }
+  }
+
+  const seenUrls = new Set<string>();
+  const sources: GroundedSource[] = [];
+  for (const src of best.sources) {
+    if (!seenUrls.has(src.source_url)) { seenUrls.add(src.source_url); sources.push(src); }
+  }
+  for (const c of candidates) {
+    if (c === best) continue;
+    for (const src of c.sources) {
+      if (!seenUrls.has(src.source_url)) { seenUrls.add(src.source_url); sources.push(src); }
+    }
+  }
+
+  return { bundle: best, sources };
+}
+
 function normalizeMatchText(s: string): string {
   return s.toLowerCase().replace(/\s+/g, " ").trim();
 }
@@ -877,11 +983,21 @@ const SBQ_SKILL_AO: Record<string, string> = {
   assertion: "AO3.7",
 };
 
+/** Generic SBQ-inquiry bundle shape. Both SS sub-issue bundles and the
+ *  History curated bundles satisfy this shape (subIssue + inquiryQuestion +
+ *  assertion), so the deterministic builder and the LLM prompt can treat them
+ *  uniformly. */
+type SbqInquiryBundle = {
+  subIssue: string;
+  inquiryQuestion: string;
+  assertion: string;
+};
+
 function buildDeterministicSbqQuestions(
   section: Section,
   sources: GroundedSource[],
   skills: (SbqSkillDef | null)[],
-  ssBundle?: SsSubIssueBundle | null,
+  sectionBundle?: SbqInquiryBundle | null,
 ): any[] {
   const rawTopic = section.topic_pool[0]?.topic ?? "";
   const sectionLOs = section.topic_pool[0]?.learning_outcomes
@@ -902,9 +1018,9 @@ function buildDeterministicSbqQuestions(
     : Array.from(new Set(section.topic_pool.flatMap((tp) => tp.learning_outcomes ?? [])));
   // SS: use the sub-issue framing so {T} is concrete (e.g. "housing inequality
   // and Singaporean identity") instead of generic LO/Issue text.
-  const topicNoun = ssBundle ? ssBundle.subIssue : deriveTopicNoun(rawTopic, sectionLOs);
+  const topicNoun = sectionBundle ? sectionBundle.subIssue : deriveTopicNoun(rawTopic, sectionLOs);
   const topicTag = stripCodePrefix(rawTopic).replace(/\*+$/, "").trim() || topicNoun;
-  const inquiry = ssBundle ? ssBundle.inquiryQuestion : buildInquiryQuestion(topicNoun, skills);
+  const inquiry = sectionBundle ? sectionBundle.inquiryQuestion : buildInquiryQuestion(topicNoun, skills);
 
   const perQMarks = Math.floor(section.marks / Math.max(1, section.num_questions));
   const remainder = section.marks - perQMarks * section.num_questions;
@@ -929,8 +1045,8 @@ function buildDeterministicSbqQuestions(
       .replace(/\{ALL\}/g, allLabels)
       .replace(/\{T\}/g, topicNoun)
       .replace(/\{P\}/g, part);
-    if (ssBundle && skillId === "assertion") {
-      prompt = `Study Sources ${allLabels}. (${part}) "${ssBundle.assertion}" How far do Sources ${allLabels} support this assertion? Use ALL the sources and your own knowledge to explain your answer.`;
+    if (sectionBundle && skillId === "assertion") {
+      prompt = `Study Sources ${allLabels}. (${part}) "${sectionBundle.assertion}" How far do Sources ${allLabels} support this assertion? Use ALL the sources and your own knowledge to explain your answer.`;
     }
 
     // Pull a short snippet from the bound source(s) so the deterministic
@@ -1200,6 +1316,10 @@ function buildSectionUserPrompt(opts: {
   groundedSources: (GroundedSource | null)[][]; // [questionIdx][sourceIdx]
   sharedSourcePool?: GroundedSource[]; // For humanities SBQ: ONE shared pool A–E
   sharedImageSources?: GroundedImageSource[]; // Optional pictorial sources appended to the pool
+  /** Curated inquiry-question + assertion for SBQ sections (SS sub-issue or
+   *  History curated bundle). When present, the SBQ preamble injects the
+   *  explicit key inquiry question instead of telling the model to invent one. */
+  sbqInquiry?: SbqInquiryBundle | null;
   subjectKind?: "humanities" | "english" | null;
   instructions?: string;
   /** Per-question difficulty targets for THIS chunk (length === section.num_questions). */
@@ -1272,15 +1392,22 @@ function buildSectionUserPrompt(opts: {
     const concatenatedExcerpt = pool
       .map((s, i) => `Source ${labels[i]}: ${s.excerpt}`)
       .join("\\n\\n");
+    const inq = opts.sbqInquiry ?? null;
+    const inquiryLine = inq
+      ? `  - KEY INQUIRY QUESTION (USE THIS EXACT QUESTION VERBATIM as the opener — do NOT invent your own, do NOT paraphrase):\n      "${inq.inquiryQuestion}"\n  - SUB-ISSUE FOCUS: this SBQ section investigates ${inq.subIssue}. Every sub-part (a)–(${String.fromCharCode(96 + section.num_questions)}) MUST interrogate this same sub-issue using the shared sources.`
+      : `  - The ENTIRE section is ONE single source-based question, structured around ONE KEY LINE OF INQUIRY about "${sectionTopic}".`;
+    const assertionLine = inq
+      ? `  - ASSERTION SUB-PART: the Q5 / assertion sub-part MUST use this EXACT hypothesis verbatim (do NOT paraphrase): "${inq.assertion}" — the stem must read \`"${inq.assertion}" How far do Sources ${labelList} support this assertion? Use ALL the sources and your own knowledge to explain your answer.\``
+      : "";
     sbqSectionPreamble = `
 
 THIS IS A SOURCE-BASED QUESTION (SBQ) SECTION — SEAB / MOE FORMAT:
 
 STRUCTURE — READ CAREFULLY:
-  - The ENTIRE section is ONE single source-based question, structured around ONE KEY LINE OF INQUIRY about "${sectionTopic}".
+${inquiryLine}
   - That single question has up to ${section.num_questions} parts: (a), (b), (c), (d), (e) — all investigating the SAME line of inquiry.
-  - You MUST open the FIRST part's stem with a clear KEY INQUIRY QUESTION (a debatable, analytical line of inquiry — e.g. "How far was X responsible for Y?", "To what extent did X cause Y?", "Why did X happen?"), then a blank line, then the (a) sub-question.
-  - Sub-parts (b), (c), (d), (e) do NOT repeat the inquiry question; they are simply further parts of the same investigation.
+  - You MUST open the FIRST part's stem with the KEY INQUIRY QUESTION above (verbatim if provided, otherwise a clear debatable analytical question — e.g. "How far was X responsible for Y?", "To what extent did X cause Y?", "Why did X happen?"), then a blank line, then the (a) sub-question.
+  - Sub-parts (b), (c), (d), (e) do NOT repeat the inquiry question; they are simply further parts of the same investigation.${assertionLine ? `\n${assertionLine}` : ""}
 
 ABSOLUTE BAN ON CONTENT-RECALL STEMS (CRITICAL — non-negotiable):
   - Every SBQ sub-part MUST require, at minimum, an INFERENCE — a reading of the source that goes BEYOND what is literally stated.
@@ -1887,6 +2014,7 @@ Deno.serve(async (req) => {
       const sharedImageSources: GroundedImageSource[] = [];
       const sourcesForSection: (GroundedSource | null)[][] = [];
       let ssSubIssueForSection: SsSubIssueBundle | null = null;
+      let sectionBundleForSection: SbqInquiryBundle | null = null;
       let humanitiesAnchorTopic: SectionTopic | null = null;
 
       if (isHumanitiesSBQ) {
@@ -1940,11 +2068,40 @@ Deno.serve(async (req) => {
                 section.id ?? section.letter ?? sectionTopic.topic,
               )
             : null;
-          const curatedAll: GroundedSource[] = ssSubIssueForSection
-            ? ssSubIssueForSection.sources.slice()
-            : curatedHumanitiesSourcePool(sectionTopic.topic, sectionTopic.learning_outcomes ?? [], section.knowledge_outcomes ?? []);
+          // History: pick the most-specific curated bundle so we can surface
+          // its inquiryQuestion + assertion to both the LLM and the
+          // deterministic builder (mirrors the SS path above).
+          let historyBundleForSection: CuratedBundle | null = null;
+          let curatedAll: GroundedSource[];
           if (ssSubIssueForSection) {
-            console.log(`[generate] section ${section.letter}: SS sub-issue "${ssSubIssueForSection.subIssue}" (Issue ${ssSubIssueForSection.issue})`);
+            curatedAll = ssSubIssueForSection.sources.slice();
+            sectionBundleForSection = {
+              subIssue: ssSubIssueForSection.subIssue,
+              inquiryQuestion: ssSubIssueForSection.inquiryQuestion,
+              assertion: ssSubIssueForSection.assertion,
+            };
+          } else {
+            const picked = pickHumanitiesBundle(
+              sectionTopic.topic,
+              sectionTopic.learning_outcomes ?? [],
+              section.knowledge_outcomes ?? [],
+            );
+            historyBundleForSection = picked.bundle;
+            curatedAll = picked.sources.length > 0
+              ? picked.sources
+              : curatedHumanitiesSourcePool(sectionTopic.topic, sectionTopic.learning_outcomes ?? [], section.knowledge_outcomes ?? []);
+            if (historyBundleForSection) {
+              sectionBundleForSection = {
+                subIssue: historyBundleForSection.subIssue,
+                inquiryQuestion: historyBundleForSection.inquiryQuestion,
+                assertion: historyBundleForSection.assertion,
+              };
+            }
+          }
+          if (ssSubIssueForSection) {
+            console.log(`[generate] section ${section.letter}: SS sub-issue "${ssSubIssueForSection.subIssue}" → "${ssSubIssueForSection.inquiryQuestion}"`);
+          } else if (historyBundleForSection) {
+            console.log(`[generate] section ${section.letter}: History bundle "${historyBundleForSection.subIssue}" → "${historyBundleForSection.inquiryQuestion}"`);
           }
           const curatedSeed: typeof curatedAll = [];
           const seenSeedHosts = new Set<string>();
@@ -2076,11 +2233,11 @@ Deno.serve(async (req) => {
           // illuminates the same concrete tension as the text sources,
           // rather than a generic topic-keyword image.
           {
-            const imageTopic = ssSubIssueForSection
-              ? ssSubIssueForSection.subIssue
+            const imageTopic = sectionBundleForSection
+              ? sectionBundleForSection.subIssue
               : sectionTopic.topic;
-            const imageLOs = ssSubIssueForSection
-              ? [ssSubIssueForSection.inquiryQuestion, ssSubIssueForSection.assertion, ...(sectionTopic.learning_outcomes ?? [])]
+            const imageLOs = sectionBundleForSection
+              ? [sectionBundleForSection.inquiryQuestion, sectionBundleForSection.assertion, ...(sectionTopic.learning_outcomes ?? [])]
               : (sectionTopic.learning_outcomes ?? []);
             const imgStart = Date.now();
             try {
@@ -2180,7 +2337,7 @@ Deno.serve(async (req) => {
         const deterministicSection = humanitiesAnchorTopic
           ? { ...section, topic_pool: [humanitiesAnchorTopic, ...section.topic_pool.filter((t) => t !== humanitiesAnchorTopic)] }
           : section;
-        questions = buildDeterministicSbqQuestions(deterministicSection, sharedSourcePool, perQSkillsForFetch, ssSubIssueForSection);
+        questions = buildDeterministicSbqQuestions(deterministicSection, sharedSourcePool, perQSkillsForFetch, sectionBundleForSection);
       } else if (isSSPaper && section.question_type === "long") {
         console.log(`[generate] section ${section.letter}: using deterministic SS SRQ builder to avoid AI timeout`);
         questions = buildDeterministicSsSrqQuestions(section);
@@ -2243,6 +2400,7 @@ Deno.serve(async (req) => {
               syllabusCode, paperCode, groundedSources: chunkSources,
               sharedSourcePool: isHumanitiesSBQ ? sharedSourcePool : undefined,
               sharedImageSources: isHumanitiesSBQ ? sharedImageSources : [],
+              sbqInquiry: isHumanitiesSBQ ? sectionBundleForSection : null,
               subjectKind, instructions,
               difficultyTargets: chunkDifficultyTargets,
             }),

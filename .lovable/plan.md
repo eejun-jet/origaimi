@@ -1,63 +1,67 @@
-# Why pictorial sources are missing from SS / History papers
+# Anchor every SBQ section on a single KO/LO-driven inquiry question
 
-There are two distinct root causes in `supabase/functions/generate-assessment/index.ts` and `sources.ts`. Together they explain why both subjects currently ship SBQ sections with zero images.
+## What's already there
 
-## Root cause 1 — Social Studies skips the image fetch entirely
+- **Social Studies** uses `SS_SUB_ISSUE_BUNDLES` (index.ts ~538). Each bundle ships 5 sources + a `subIssue`, `inquiryQuestion`, and `assertion`. The deterministic builder already uses `ssBundle.inquiryQuestion` as the opening line and `ssBundle.assertion` as the Q5 hypothesis.
+- **History** uses `CURATED_HUMANITIES_BUNDLES` (index.ts ~425). Each bundle ships sources only — **no `inquiryQuestion`, no `assertion`, no `subIssue`**. The opener falls back to `buildInquiryQuestion(topicNoun, skills)`, which emits a generic skill-shaped stem ("How far was X shaped by the actions of the major actors involved?") with no real argumentative bite, and the LLM prompt at index.ts ~1280 just tells the model to invent a key inquiry on its own.
 
-`supabase/functions/generate-assessment/index.ts` lines 2073–2098:
-
-```ts
-if (ssSubIssueForSection) {
-  console.log(`… skipping pictorial fetch — SS sub-issue uses curated text-only bundle`);
-} else {
-  // … fetchGroundedImageSources(...)
-}
-```
-
-Whenever a Social Studies paper matches one of the curated `SS_SUB_ISSUE_BUNDLES` (which is the normal/happy path for SS Combined Humanities P1), the pictorial fetch is **explicitly bypassed**. The curated bundle ships 5 text excerpts and 0 images, so the generated section has no pictorial source.
-
-This was originally added because a generic topic-keyword image search returned off-topic pictures. The fix is not to skip — it is to (a) prefer a curated pictorial attached to the bundle when available, and (b) fall back to a tightly-scoped Tavily image search using the bundle's sub-issue keywords rather than the broad topic.
-
-## Root cause 2 — History fetch only runs the "strict" pass
-
-`supabase/functions/generate-assessment/sources.ts` lines 910–913:
-
-```ts
-// Single pass only — we previously had 3 passes (strict / relaxed / final)…
-const passes: Array<"strict" | "relaxed" | "final"> = ["strict"];
-```
-
-The relaxed and final fallback passes were removed for latency. The strict pass requires:
-
-- Tavily image result on the humanities allow-list
-- positive score (Tier‑1 host bonus or keyword overlap in the image description)
-- within a 6s deadline
-
-If keyword overlap is weak (very common — Tavily image descriptions are short and noisy) or the only matches sit outside the allow-list, the function returns `[]`, and the caller logs `"no pictorial source found (continuing without)"`. The History SBQ then ships text-only.
+So the gap is real for History, and for SS we only need one missing sub-issue (the user's "foreign immigrants integrating into Singapore's way of life" example).
 
 ## The fix
 
-Two surgical changes, both inside `supabase/functions/generate-assessment/`:
+### 1. Extend the History bundle shape
 
-1. **`index.ts` (~line 2078)** — stop skipping the pictorial fetch for SS sub-issues. Instead:
-   - If `ssSubIssueForSection` has an attached curated pictorial (new optional `image` field on `SsSubIssueBundle`), use it directly.
-   - Otherwise call `fetchGroundedImageSources` with the bundle's `subIssue` string as the topic and the bundle's `triggers`-derived keywords as the LO seed, so the image search is bound to the actual inquiry rather than the broad paper topic.
+In `supabase/functions/generate-assessment/index.ts`:
 
-2. **`sources.ts` `fetchGroundedImageSources` (~line 913)** — restore the staged fallback so the function does not silently return zero:
-   - Pass 1 `strict` — current behaviour (allow-list + positive score).
-   - Pass 2 `relaxed` — same allow-list, accept any score > −3 (drop only obvious logos/icons).
-   - Pass 3 `final` — drop the allow-list (still drop DENY_DOMAINS), accept score > −3.
-   - Keep the existing 6s wall-clock so latency stays bounded; the extra passes only run if no image has been picked yet and there is budget left.
-   - Keep the per-host de-dupe so the chosen image still comes from a distinct publisher.
+```ts
+type CuratedBundle = {
+  trigger: RegExp;
+  subIssue: string;            // short tag, e.g. "the outbreak of the Korean War"
+  inquiryQuestion: string;     // debatable, e.g. "How far was the US responsible for the outbreak of the Korean War?"
+  assertion: string;           // testable hypothesis used by the assertion sub-part
+  sources: GroundedSource[];
+};
+```
 
-3. **Light hardening** — at the section assembly site, if after both fixes `sharedImageSources.length === 0`, log a `WARN [pictorial-miss]` with the section letter, topic, and elapsed ms so future misses are observable in edge-function logs without changing the user-visible behaviour.
+Author `subIssue` / `inquiryQuestion` / `assertion` for each of the 7 existing History bundles (WWII outbreak, Nazism, Militarist Japan, Stalinist USSR, Cold War origins, end of Cold War, Singapore decolonisation/merger/separation). Each inquiry must be debatable, anchored on a real cause/role/consequence question that the bundle's 5 sources can support AND challenge.
 
-## Out of scope
+### 2. Expose the winning bundle, not just its sources
 
-- No DB schema changes.
-- No UI changes — the existing renderer already shows pictorial sources when present.
-- Not adding a "regenerate just the image" button (separate request if you want it).
+Replace `curatedHumanitiesSourcePool(...)` with `pickHumanitiesBundle(...)` that returns `{ bundle: CuratedBundle | null, sources: GroundedSource[] }`, mirroring `pickSsSubIssueBundle`. When multiple bundles match the topic group, pick the highest-specificity match (longest unique trigger hit on the topic string, falling back to LO/KO). Keep the existing topic-group guard so Cold War sources don't leak into a WWII section.
 
-## Verification after implementation
+### 3. Generalise the "section bundle" handle
 
-- Generate one History SBQ paper and one SS Combined Humanities P1, check edge-function logs for `pictorial source <url>` per section, and confirm the rendered paper shows at least one image-anchored sub-part per SBQ section.
+In the SBQ section-assembly block (index.ts ~1889 onwards), replace the SS-only `ssSubIssueForSection: SsSubIssueBundle | null` with a unified `sectionBundle: { subIssue: string; inquiryQuestion: string; assertion: string } | null` populated from EITHER `pickSsSubIssueBundle` (SS) or `pickHumanitiesBundle` (History). Use it for:
+
+- The LLM prompt (`sbqSectionPreamble`, line ~1275): replace the "ONE KEY LINE OF INQUIRY about `${sectionTopic}`" sentence with the explicit `KEY INQUIRY QUESTION: "${sectionBundle.inquiryQuestion}"` plus a rule that EVERY sub-part must investigate this question. Inject `sectionBundle.assertion` directly into the assertion sub-part guidance so the model doesn't paraphrase or invent one.
+- The deterministic fallback builder (`buildDeterministicSbqQuestions`, line ~880): pass the unified bundle (instead of the SS-only `ssBundle` arg). Use its `inquiryQuestion` as the opener and its `assertion` as the Q5 hypothesis for both subjects.
+- The image-fetch scope (index.ts ~2080): already uses `ssSubIssueForSection.subIssue` as the image topic — extend to use `sectionBundle.subIssue` for History too, so pictorial sources are scoped to e.g. "the outbreak of the Korean War" rather than the broad chapter title.
+
+### 4. Add one missing SS bundle
+
+Add a `SS_SUB_ISSUE_BUNDLES` entry under Issue 2 (Diversity) with:
+
+- `subIssue`: "foreign immigrants and integration into Singaporean way of life"
+- `inquiryQuestion`: "How far are foreign immigrants able to integrate into Singapore's way of life?"
+- `assertion`: "Singapore's social fabric is being strained by the difficulty of integrating new immigrants."
+- `triggers`: `/(foreign immigrant|new citizen|new immigrant|integration|assimilation|naturalisation|naturalization|prc|filipino|indian national|expat)/i`
+- 5 curated sources (mix of: ICA / Population White Paper extract, IPS or CNA survey on social acceptance, a SG government press release on integration programmes, an academic/journal excerpt on assimilation barriers, an OECD/global comparator on immigrant integration).
+
+This is the only new content authoring needed; everything else is structural plumbing.
+
+### 5. Tighten the generic fallback
+
+When no curated bundle matches (rare — only for unusual topics), keep the existing `buildInquiryQuestion` fallback, but feed it the KO string when available so the inquiry says e.g. "How far was nationalism responsible for the outbreak of war?" rather than only using the topic noun. Strictly a small upgrade so the fallback path is at least KO-aware.
+
+## What stays out of scope
+
+- No DB / UI changes — this is all inside `supabase/functions/generate-assessment/`.
+- Not rewriting the SBQ skill assignment logic (Inference / Comparison / Reliability / Assertion mapping is unchanged).
+- Not changing how text + image sources are selected/ranked (the previous pictorial-source fix stands).
+
+## Verification
+
+- Generate a Combined Humanities P1 SS paper whose KO matches the new "foreign immigrants integration" bundle → SBQ opens with that exact inquiry question; Q5 uses its assertion verbatim.
+- Generate a History SBQ paper on the Korean War / Cold War origins → SBQ opens with the bundle's explicit `inquiryQuestion`, not the generic "How far was the cold war shaped by the actions of the major actors involved?" template.
+- For both, every sub-part stem visibly cites the shared sources A–E and the model answer's reasoning refers back to the inquiry question.
+- Edge-function logs include `[generate] section X: bundle "<subIssue>" → "<inquiryQuestion>"` once per SBQ section.
