@@ -2071,17 +2071,22 @@ Deno.serve(async (req) => {
           }
 
           // Pictorial primary source: at most ONE, on a tight time budget.
-          // SKIP this for SS sub-issue bundles — the curated 5 text sources
-          // are already coherent around the sub-issue, and a generic
-          // topic-keyword image search routinely returned pictures that
-          // had nothing to do with the bundle's specific inquiry.
-          if (ssSubIssueForSection) {
-            console.log(`[generate] section ${section.letter}: skipping pictorial fetch — SS sub-issue uses curated text-only bundle`);
-          } else {
+          // For SS sub-issue bundles we scope the image search to the
+          // bundle's sub-issue string + curated LOs so the picture
+          // illuminates the same concrete tension as the text sources,
+          // rather than a generic topic-keyword image.
+          {
+            const imageTopic = ssSubIssueForSection
+              ? ssSubIssueForSection.subIssue
+              : sectionTopic.topic;
+            const imageLOs = ssSubIssueForSection
+              ? [ssSubIssueForSection.inquiryQuestion, ssSubIssueForSection.assertion, ...(sectionTopic.learning_outcomes ?? [])]
+              : (sectionTopic.learning_outcomes ?? []);
+            const imgStart = Date.now();
             try {
               const imgs = await fetchGroundedImageSources(
-                sectionTopic.topic,
-                sectionTopic.learning_outcomes ?? [],
+                imageTopic,
+                imageLOs,
                 MAX_IMAGE_SOURCES,
                 usedHosts,
               );
@@ -2090,10 +2095,10 @@ Deno.serve(async (req) => {
                 console.log(`[generate] section ${section.letter}: pictorial source ${img.image_url} from ${img.publisher}`);
               }
               if (imgs.length === 0) {
-                console.log(`[generate] section ${section.letter}: no pictorial source found (continuing without)`);
+                console.warn(`[generate] [pictorial-miss] section ${section.letter}: no pictorial source for "${imageTopic}" after ${Date.now() - imgStart}ms (continuing without)`);
               }
             } catch (e) {
-              console.warn(`[generate] section ${section.letter}: image source fetch failed`, (e as Error).message);
+              console.warn(`[generate] [pictorial-miss] section ${section.letter}: image source fetch failed after ${Date.now() - imgStart}ms`, (e as Error).message);
             }
           }
         }
