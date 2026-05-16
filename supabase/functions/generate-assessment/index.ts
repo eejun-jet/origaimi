@@ -641,6 +641,7 @@ const SS_SUB_ISSUE_BUNDLES: SsSubIssueBundle[] = [
     issue: 2,
     subIssue: "foreign immigrants and integration into Singaporean way of life",
     assertion: "Singapore's social fabric is being strained by the difficulty of integrating new immigrants into the local way of life.",
+    contextWriteUp: "This SBQ examines how far foreign immigrants are able to integrate into Singapore's way of life. The 2013 Population White Paper warned that without continued immigration the citizen population would begin to shrink from around 2025, and proposed taking in tens of thousands of new citizens and PRs each year — provoking the largest public protest in years. The Government runs programmes like the Singapore Citizenship Journey, but IPS surveys show locals and newcomers disagree on what integration means: language and accent, National Service, workplace contact, or close cross-cultural friendship. Weigh the sources to judge how far immigrants can genuinely integrate into Singapore's way of life.",
     inquiryQuestion: "How far are foreign immigrants able to integrate into Singapore's way of life?",
     triggers: /(foreign immigrant|new citizen|new immigrant|integration|integrate|assimilat|naturalisation|naturalization|prc|filipino|indian national|expat|permanent resident|pr\b)/i,
     sources: [
