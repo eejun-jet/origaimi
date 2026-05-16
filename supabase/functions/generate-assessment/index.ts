@@ -626,6 +626,7 @@ const SS_SUB_ISSUE_BUNDLES: SsSubIssueBundle[] = [
     issue: 2,
     subIssue: "migrant workers and belonging in Singapore",
     assertion: "Singapore's diverse society includes migrant workers economically but excludes them socially.",
+    contextWriteUp: "This SBQ examines how far migrant workers belong to the diverse society they help to build. About 1.5 million foreign workers live in Singapore; most are Work Permit holders in construction, marine and process sectors, tied to a single employer and housed in dedicated dormitories. The COVID-19 outbreaks of 2020 exposed dormitory conditions and prompted reforms, while NGOs like TWC2 continue to report unpaid wages and injury claims. International data from the ILO and IPS surveys frame the wider tension between economic inclusion and social exclusion. Weigh the sources to judge how far migrant workers are accepted as part of Singapore's diverse society or remain socially apart.",
     inquiryQuestion: "How far do migrant workers belong to the diverse society they help to build?",
     triggers: /(migrant|foreign worker|dormitory|covid|belonging|work permit|twc2)/i,
     sources: [
