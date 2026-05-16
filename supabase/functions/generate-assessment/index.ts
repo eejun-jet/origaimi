@@ -847,7 +847,7 @@ function pickHumanitiesBundle(
   return { bundle: best, sources };
 }
 
-
+function normalizeMatchText(s: string): string {
   return s.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
