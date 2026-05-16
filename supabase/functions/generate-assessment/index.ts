@@ -656,6 +656,7 @@ const SS_SUB_ISSUE_BUNDLES: SsSubIssueBundle[] = [
     issue: 3,
     subIssue: "free trade, jobs and Singapore workers",
     assertion: "Singapore's open economy benefits the country as a whole more than it benefits ordinary Singaporean workers.",
+    contextWriteUp: "This SBQ examines whether Singapore's open economy genuinely serves the interests of ordinary Singaporean workers. External trade is around 3.5 times Singapore's GDP, and the country has signed 27 free-trade agreements; this openness has driven growth and investment but also exposes workers to global competition and supply-chain shocks. SkillsFuture and Workfare are presented as the safeguards that make the model work, while the falling Gini coefficient depends heavily on government transfers. International cases like Brexit show what happens when voters feel left behind by integration. Weigh the sources to judge how far the open economy serves ordinary Singaporean workers.",
     inquiryQuestion: "How far does Singapore's open economy serve the interests of ordinary Singaporean workers?",
     triggers: /(free trade|fta|wto|asean|rcep|trade|jobs|workers|outsourcing|supply chain|skillsfuture|wages|gini|inequality)/i,
     sources: [
