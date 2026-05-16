@@ -426,6 +426,9 @@ type CuratedBundle = {
   /** Testable hypothesis used by the Q5 assertion sub-part — every source in the bundle must
    *  plausibly support OR challenge it. */
   assertion: string;
+  /** ~80-120 word paragraph that contextualises the KO/LO issue for students BEFORE
+   *  they read the sources. Rendered above the source pool in the paper. */
+  contextWriteUp: string;
   sources: GroundedSource[];
 };
 
