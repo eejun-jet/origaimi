@@ -671,6 +671,7 @@ const SS_SUB_ISSUE_BUNDLES: SsSubIssueBundle[] = [
     issue: 3,
     subIssue: "globalisation and Singaporean cultural identity",
     assertion: "Globalisation is eroding a distinct Singaporean cultural identity faster than it is enriching it.",
+    contextWriteUp: "This SBQ examines how globalisation is reshaping what counts as Singaporean culture. Government campaigns like Speak Good English and active investment in heritage and local arts try to maintain a distinct Singaporean voice in a world where streaming platforms, K-pop and Hollywood dominate young people's media diet. Scholars argue Singaporean culture has always been a 'consciously hybrid' mix of Chinese, Malay, Indian and Western influences, expressed in hawker centres, void-deck life and code-switched speech. UNESCO warns smaller markets risk becoming consumers rather than producers of culture. Weigh the sources to judge how far globalisation enriches or erodes Singaporean identity.",
     inquiryQuestion: "How far is globalisation reshaping what counts as Singaporean culture?",
     triggers: /(culture|identity|heritage|singlish|language|hybrid|k-pop|hollywood|streaming|media)/i,
     sources: [
