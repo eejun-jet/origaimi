@@ -2398,6 +2398,7 @@ Deno.serve(async (req) => {
               syllabusCode, paperCode, groundedSources: chunkSources,
               sharedSourcePool: isHumanitiesSBQ ? sharedSourcePool : undefined,
               sharedImageSources: isHumanitiesSBQ ? sharedImageSources : [],
+              sbqInquiry: isHumanitiesSBQ ? sectionBundleForSection : null,
               subjectKind, instructions,
               difficultyTargets: chunkDifficultyTargets,
             }),
