@@ -1060,6 +1060,9 @@ function EditorPage() {
                 const sectionSources = isSbqSection && q.source_excerpt
                   ? parseSharedSourcePool(q.source_excerpt)
                   : null;
+                const sectionContext = isSbqSection && q.source_excerpt
+                  ? parseSbqContext(q.source_excerpt)
+                  : null;
                 return (
                   <div key={q.id} id={`q-${q.id}`} className="space-y-3 scroll-mt-24">
                     {showHeader && sec && (
@@ -1073,6 +1076,16 @@ function EditorPage() {
                             {sec.num_questions} question{sec.num_questions === 1 ? "" : "s"} · {sec.marks} marks
                           </p>
                         </div>
+                        {sectionContext && (
+                          <div className="rounded-xl border border-primary/30 bg-primary-soft/10 p-5">
+                            <p className="text-xs font-semibold uppercase tracking-wider text-primary">
+                              Background to this issue
+                            </p>
+                            <p className="mt-2 font-paper text-sm leading-relaxed text-foreground whitespace-pre-wrap">
+                              {sectionContext}
+                            </p>
+                          </div>
+                        )}
                         {sectionSources && sectionSources.length > 0 && (() => {
                           const textSources = sectionSources.filter((s) => s.kind === "text");
                           const imageSources = sectionSources.filter((s) => s.kind === "image");
@@ -1450,10 +1463,22 @@ type ParsedSource =
  *      "Source A: [IMAGE] caption — imageUrl" (no provenance)
  *  Falls back to a single "A" entry when the excerpt does not match the
  *  multi-source pattern. */
+/** Pull the curated background paragraph (if present) out of an SBQ excerpt.
+ *  Returns null when no [CONTEXT]…[/CONTEXT] envelope is present. */
+function parseSbqContext(excerpt: string): string | null {
+  const m = excerpt.match(/^\s*\[CONTEXT\]\s*([\s\S]*?)\s*\[\/CONTEXT\]\s*/);
+  return m ? m[1].trim() : null;
+}
+
+function stripSbqContext(excerpt: string): string {
+  return excerpt.replace(/^\s*\[CONTEXT\][\s\S]*?\[\/CONTEXT\]\s*/, "");
+}
+
 function parseSharedSourcePool(excerpt: string): ParsedSource[] {
-  const matches = [...excerpt.matchAll(/Source\s+([A-F])\s*:\s*([\s\S]*?)(?=\n\s*Source\s+[A-F]\s*:|$)/g)];
+  const body = stripSbqContext(excerpt);
+  const matches = [...body.matchAll(/Source\s+([A-F])\s*:\s*([\s\S]*?)(?=\n\s*Source\s+[A-F]\s*:|$)/g)];
   const raw = matches.length === 0
-    ? [{ label: "A", text: excerpt.trim() }]
+    ? [{ label: "A", text: body.trim() }]
     : matches.map((m) => ({ label: m[1], text: m[2].trim() }));
   return raw.map((entry): ParsedSource => {
     // Image (new format with provenance + URL markers)
