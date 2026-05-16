@@ -2559,7 +2559,14 @@ Deno.serve(async (req) => {
               `Source ${imgLabel}: [IMAGE] ${caption} — ${img.image_url} [PROV] ${prov} [URL] ${url}`,
             );
           });
-          source_excerpt = textBlocks.join("\n\n");
+          const joinedSources = textBlocks.join("\n\n");
+          // Prepend the curated background paragraph so the UI/export can
+          // render a "Background to this issue" block above the sources.
+          // Parsers in src/routes/assessment.$id.tsx and src/lib/export-docx.ts
+          // strip this [CONTEXT]…[/CONTEXT] envelope before parsing sources.
+          source_excerpt = sectionBundleForSection?.contextWriteUp
+            ? `[CONTEXT] ${sectionBundleForSection.contextWriteUp.replace(/\[(CONTEXT|\/CONTEXT)\]/g, "")} [/CONTEXT]\n\n${joinedSources}`
+            : joinedSources;
           source_url = sharedSourcePool[0].source_url;
           groundedCount++;
         } else if (needsSourcePerQ) {
