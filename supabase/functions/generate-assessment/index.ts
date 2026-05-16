@@ -2231,11 +2231,11 @@ Deno.serve(async (req) => {
           // illuminates the same concrete tension as the text sources,
           // rather than a generic topic-keyword image.
           {
-            const imageTopic = ssSubIssueForSection
-              ? ssSubIssueForSection.subIssue
+            const imageTopic = sectionBundleForSection
+              ? sectionBundleForSection.subIssue
               : sectionTopic.topic;
-            const imageLOs = ssSubIssueForSection
-              ? [ssSubIssueForSection.inquiryQuestion, ssSubIssueForSection.assertion, ...(sectionTopic.learning_outcomes ?? [])]
+            const imageLOs = sectionBundleForSection
+              ? [sectionBundleForSection.inquiryQuestion, sectionBundleForSection.assertion, ...(sectionTopic.learning_outcomes ?? [])]
               : (sectionTopic.learning_outcomes ?? []);
             const imgStart = Date.now();
             try {
