@@ -1060,6 +1060,9 @@ function EditorPage() {
                 const sectionSources = isSbqSection && q.source_excerpt
                   ? parseSharedSourcePool(q.source_excerpt)
                   : null;
+                const sectionContext = isSbqSection && q.source_excerpt
+                  ? parseSbqContext(q.source_excerpt)
+                  : null;
                 return (
                   <div key={q.id} id={`q-${q.id}`} className="space-y-3 scroll-mt-24">
                     {showHeader && sec && (
