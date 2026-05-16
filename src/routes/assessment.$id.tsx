@@ -1450,8 +1450,20 @@ type ParsedSource =
  *      "Source A: [IMAGE] caption — imageUrl" (no provenance)
  *  Falls back to a single "A" entry when the excerpt does not match the
  *  multi-source pattern. */
+/** Pull the curated background paragraph (if present) out of an SBQ excerpt.
+ *  Returns null when no [CONTEXT]…[/CONTEXT] envelope is present. */
+function parseSbqContext(excerpt: string): string | null {
+  const m = excerpt.match(/^\s*\[CONTEXT\]\s*([\s\S]*?)\s*\[\/CONTEXT\]\s*/);
+  return m ? m[1].trim() : null;
+}
+
+function stripSbqContext(excerpt: string): string {
+  return excerpt.replace(/^\s*\[CONTEXT\][\s\S]*?\[\/CONTEXT\]\s*/, "");
+}
+
 function parseSharedSourcePool(excerpt: string): ParsedSource[] {
-  const matches = [...excerpt.matchAll(/Source\s+([A-F])\s*:\s*([\s\S]*?)(?=\n\s*Source\s+[A-F]\s*:|$)/g)];
+  const body = stripSbqContext(excerpt);
+  const matches = [...body.matchAll(/Source\s+([A-F])\s*:\s*([\s\S]*?)(?=\n\s*Source\s+[A-F]\s*:|$)/g)];
   const raw = matches.length === 0
     ? [{ label: "A", text: excerpt.trim() }]
     : matches.map((m) => ({ label: m[1], text: m[2].trim() }));
