@@ -1076,6 +1076,16 @@ function EditorPage() {
                             {sec.num_questions} question{sec.num_questions === 1 ? "" : "s"} · {sec.marks} marks
                           </p>
                         </div>
+                        {sectionContext && (
+                          <div className="rounded-xl border border-primary/30 bg-primary-soft/10 p-5">
+                            <p className="text-xs font-semibold uppercase tracking-wider text-primary">
+                              Background to this issue
+                            </p>
+                            <p className="mt-2 font-paper text-sm leading-relaxed text-foreground whitespace-pre-wrap">
+                              {sectionContext}
+                            </p>
+                          </div>
+                        )}
                         {sectionSources && sectionSources.length > 0 && (() => {
                           const textSources = sectionSources.filter((s) => s.kind === "text");
                           const imageSources = sectionSources.filter((s) => s.kind === "image");
