@@ -898,8 +898,9 @@ export async function fetchGroundedImageSources(
   ];
 
   const topicVocab = syllabusKeywordsFor(topic, learningOutcomes);
-  // Hard wall-clock cap: pictorial fetches must never spend more than ~6s.
-  const deadline = Date.now() + 6000;
+  // Hard wall-clock cap: pictorial fetches must never spend more than ~9s
+  // total across all passes (strict → relaxed → final).
+  const deadline = Date.now() + 9000;
   // We track image-host usage SEPARATELY from text-source hosts. A pictorial
   // and a text source from the same publisher (e.g. BBC, Britannica) is
   // perfectly fine and should NOT block the image. We still de-dupe images
@@ -907,10 +908,13 @@ export async function fetchGroundedImageSources(
   const localImageHosts = new Set<string>();
   const picked: GroundedImageSource[] = [];
   const pickedCategories = new Set<VisualCategory>();
-  // Single pass only — we previously had 3 passes (strict / relaxed / final)
-  // which combined with 7 query angles could fire 21 image searches per
-  // section. That was the dominant cost in History SBQ generation.
-  const passes: Array<"strict" | "relaxed" | "final"> = ["strict"];
+  // Staged passes: strict (allow-list + positive score), then relaxed
+  // (allow-list, score > -3), then final (drop allow-list, score > -3).
+  // Each subsequent pass only runs if we still haven't picked anything AND
+  // there is wall-clock budget left, so latency stays bounded but we no
+  // longer silently ship a pictorial-less SBQ section just because the
+  // image descriptions had weak keyword overlap.
+  const passes: Array<"strict" | "relaxed" | "final"> = ["strict", "relaxed", "final"];
 
   for (const pass of passes) {
     if (picked.length >= count) break;
