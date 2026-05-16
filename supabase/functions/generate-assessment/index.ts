@@ -581,6 +581,7 @@ const SS_SUB_ISSUE_BUNDLES: SsSubIssueBundle[] = [
     issue: 1,
     subIssue: "housing inequality and Singaporean identity",
     assertion: "Widening housing inequality is undermining a shared sense of Singaporean citizenship.",
+    contextWriteUp: "This SBQ examines whether widening housing inequality is reshaping what it means to be a Singaporean citizen. Since 1960, the HDB programme has been the cornerstone of nation-building: over 80% of residents live in HDB flats and about 90% own their homes. But the resale market has produced record numbers of million-dollar flats, BTO waiting times have lengthened, and IPS research suggests class divisions are now sharper than racial divisions in everyday social networks. Policy responses such as the new Plus and Prime classification aim to keep public housing accessible. Weigh the sources to judge how far housing now divides Singaporean citizenship rather than uniting it.",
     inquiryQuestion: "How far is rising housing inequality reshaping what it means to be a citizen of Singapore?",
     triggers: /(housing|hdb|inequality|haves|have-nots|class|wealth|million-dollar)/i,
     sources: [
