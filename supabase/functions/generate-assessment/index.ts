@@ -419,6 +419,13 @@ const SBQ_STEM_TEMPLATES: Record<string, string[]> = {
  *  multiply (e.g. "Cold War" + "decolonisation") and are merged. */
 type CuratedBundle = {
   trigger: RegExp;
+  /** Short noun phrase naming the concrete issue, e.g. "the outbreak of the Korean War". */
+  subIssue: string;
+  /** Debatable opening question for the SBQ, e.g. "How far was the US responsible for the outbreak of the Korean War?". */
+  inquiryQuestion: string;
+  /** Testable hypothesis used by the Q5 assertion sub-part — every source in the bundle must
+   *  plausibly support OR challenge it. */
+  assertion: string;
   sources: GroundedSource[];
 };
 
