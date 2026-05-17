@@ -1797,6 +1797,14 @@ async function callAI(
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+  // Hard wall-clock budget for the section phase. Supabase edge functions are
+  // killed at ~200s; we cap section work at 150s so we always have time to
+  // insert rows + run the (already-budgeted) diagram phase + write the final
+  // status. Without this, slow Tavily/AI calls leave the assessment stuck in
+  // `generating` forever (see SS Test 2, 2026-05-17).
+  const FUNCTION_START_MS = Date.now();
+  const SECTION_PHASE_BUDGET_MS = 150_000;
+
   let statusAssessmentId: string | null = null;
   // deno-lint-ignore no-explicit-any
   let statusClient: any = null;
@@ -2005,9 +2013,17 @@ Deno.serve(async (req) => {
       return plan[qIdx] ?? s.topic_pool[qIdx % s.topic_pool.length];
     };
 
+    let phaseBudgetExhausted = false;
+    let sectionsSkippedAfterDeadline = 0;
     for (let si = 0; si < sections.length; si++) {
+      if (Date.now() - FUNCTION_START_MS > SECTION_PHASE_BUDGET_MS) {
+        phaseBudgetExhausted = true;
+        sectionsSkippedAfterDeadline = sections.length - si;
+        console.warn(`[generate] section phase budget exhausted at section ${si + 1}/${sections.length} — skipping ${sectionsSkippedAfterDeadline} section(s) and persisting what we have`);
+        break;
+      }
       const section = sections[si];
-      console.log(`[generate] section ${section.letter} (${section.question_type}) — ${section.num_questions} questions, ${section.marks} marks`);
+      console.log(`[generate] section ${section.letter} (${section.question_type}) — ${section.num_questions} questions, ${section.marks} marks (elapsed ${Math.round((Date.now() - FUNCTION_START_MS) / 1000)}s)`);
 
       // Decide which questions in this section need a grounded source.
       // Humanities + non-essay = always; English + (source_based|comprehension) = always; otherwise none.
@@ -2808,7 +2824,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error, droppedNoSource, sectionFailures }), { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    await markAssessmentStatus(droppedNoSource > 0 || sectionFailures > 0 ? "draft_partial" : "draft");
+    await markAssessmentStatus(droppedNoSource > 0 || sectionFailures > 0 || phaseBudgetExhausted ? "draft_partial" : "draft");
 
     return new Response(JSON.stringify({
       ok: true,

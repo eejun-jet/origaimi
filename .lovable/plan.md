@@ -1,63 +1,50 @@
-## Problem
+## What happened to "SS Test 2"
 
-For both Social Studies and History SBQ papers, students need a short (1-paragraph) write-up that contextualises the issue derived from the KO/LO BEFORE they read the sources. The most recent SS paper had no such write-up, and the sources didn't visibly align to the inquiry question — they read like a generic dump on the topic rather than evidence on the specific sub-issue.
+The assessment row exists (id `6185080b…`) but is stuck in `status = 'generating'` with **0 questions saved**. Edge function logs show it booted at **03:04:20** and was killed at **03:07:40 — exactly ~200 seconds later**. That's the Supabase edge function wall-clock limit. The worker was force-terminated *before*:
+- any question rows were inserted,
+- the final `markAssessmentStatus("draft")` call ran,
+- the outer `catch` block could set `generation_failed`.
 
-## What to build
+So the row sits forever in "generating" and the UI shows "Loading assessment…" indefinitely.
 
-### 1. Add a `contextWriteUp` field to every curated humanities bundle
-File: `supabase/functions/generate-assessment/index.ts`
+## Why it timed out
 
-- Extend `CuratedBundle` (History, line ~425) and the SS bundle type (line ~561) with a required `contextWriteUp: string` field (~80–120 words).
-- Extend `SbqInquiryBundle` (line ~992) with `contextWriteUp: string` so it flows alongside `subIssue / inquiryQuestion / assertion`.
-- Author one paragraph per bundle that:
-  - Names the KO/LO the section is testing in plain language.
-  - States the real-world tension the inquiry question hinges on (e.g. for "How far are foreign immigrants able to integrate into Singapore's way of life?" — note the post-2010 inflow, CMIO framework, points of friction like housing/transport/national service, and government integration efforts).
-  - Ends by pointing students to the inquiry question + sources.
-- 8 SS bundles + 7 History bundles = 15 paragraphs to author.
+SS / Combined Humanities papers run a heavy per-section pipeline (curated seed → live Tavily text fetches → pictorial image fetch → LLM section build), and the section loop at `index.ts:2008` runs **sequentially** (`for (let si = 0; si < sections.length; si++)`). With 3+ SBQ sections each spending 8s per Tavily call × multiple fetches + image search + LLM, the total stacks past the 200s budget. The recent `contextWriteUp` additions didn't change runtime, but the pipeline was already on the edge.
 
-### 2. Surface the write-up on the section
-- In `generate-assessment/index.ts` where the section is emitted (around the `saveSection` / question persistence near line ~2400), attach the bundle's `contextWriteUp` as `section.intro` (new optional string column on `assessment_sections`) OR — to avoid a migration — stash it as the first line of the first question's `notes` with a `[SECTION_CONTEXT]` sentinel.
-- Recommended: add `intro text` to `assessment_sections` via migration; cleaner contract.
+## Plan
 
-### 3. Lock sources to the issue (alignment fix)
-File: `supabase/functions/generate-assessment/index.ts` (section A seeding, ~2120–2180)
+### 1. Unstick the existing row
+Migration (one-off SQL): flip `SS Test 2` from `generating` → `generation_failed` so the user can either delete it or retry. (No data to keep — 0 questions.)
 
-- When a curated bundle is matched, the 5 curated sources already align — but the live backfill path can pull off-topic material. Tighten:
-  - Pass `bundle.subIssue + bundle.inquiryQuestion` (not just the topic noun) as the Tavily query when backfilling.
-  - Reject any backfill candidate whose extract does not contain at least one bundle keyword (derived from `subIssue` + `inquiryQuestion`, stop-words stripped).
-  - Log `[generate] section A: rejected backfill X — off-issue` so we can audit.
-- If after rejection the pool is < 4 sources, prefer fewer-but-aligned over more-but-drifted (current code already tolerates 4).
-- The pictorial fetch query is already scoped to `sectionBundle.subIssue` — verify it stays that way.
+### 2. Parallelise the per-section pipeline
+`supabase/functions/generate-assessment/index.ts` line ~2008:
 
-### 4. Render the write-up in the assessment view
-File: `src/routes/assessment.$id.tsx` (around line 1075, just above the "Sources for this section" card)
+- Replace the sequential `for (let si …)` loop with a bounded-concurrency runner (concurrency = 2, since sections share `usedHosts` / `usedUrls` / `sharedSourcePool`-equivalent state — we'll snapshot per section and merge results back deterministically).
+- Each section's work returns `{ rows, sectionFailures, droppedNoSource, usedHostsDelta, usedUrlsDelta }`; the merge step is single-threaded.
 
-- Read `sec.intro` (or parse the sentinel out of the first question's notes).
-- Render a new panel above the sources block:
-  - Label: "Background to this issue"
-  - Body: the paragraph, font-paper, muted border.
-  - Followed (italicised) by: "Key inquiry question: {inquiryQuestion}"
+Expected impact: 3 SBQ sections in ~the time of one → halves the wall clock on combined humanities.
 
-### 5. Include the write-up in exports
-Files: `src/lib/export-tos-docx.ts` (and the paper export pathway, not the ToS)
+### 3. Hard wall-clock guard around the section phase
+Wrap the section phase in a budget (e.g. `SECTION_PHASE_BUDGET_MS = 150_000`, same pattern already used for the diagram phase at line 2738):
 
-- Verify which export file produces the actual paper DOCX (likely `src/lib/export-docx.ts`).
-- For each SBQ section, emit the contextual paragraph + inquiry question as a styled block immediately after the section header and before "Sources for this section".
+- As soon as the deadline passes, stop scheduling new sections and **insert whatever `allRows` we have** + call `markAssessmentStatus("draft_partial")` with a `[generate] section phase budget exhausted` warning.
+- This guarantees we *always* reach a terminal status before the worker is killed, even if a Tavily call hangs.
+
+### 4. Tighten the per-fetch timeouts that bloat the loop
+- `PER_FETCH_TIMEOUT_MS` (line 2161) is 8s × `FETCH_TARGET` fetches in parallel — fine. But the curated/backfill block + pictorial fetch run *after* and don't share a budget. Add a per-section deadline (~40s) that short-circuits remaining sub-steps once exceeded.
+
+### 5. Client-side: handle `generation_failed` and stuck `generating` cleanly
+`src/routes/assessment.$id.tsx`:
+- If status is `generation_failed` or `generating` AND `updated_at` is older than 4 minutes, show an inline "Generation timed out — Retry" panel instead of the perpetual "Loading assessment…" spinner.
+- Retry invokes the edge function again with the same blueprint payload (already stored on the row).
+
+### Out of scope
+- No changes to bundle content, source curation, or the new `contextWriteUp` field.
+- No webhook/async architecture rewrite (the stack-overflow-style fix). Parallel + budget should bring well-formed runs under 90s; we revisit async only if that proves insufficient.
 
 ## Verification
 
-1. Generate a fresh Combined Humanities SS paper on Issue 2 (Diversity) whose KO matches the "foreign immigrants integration" bundle. Expected:
-   - Section A opens with the new write-up paragraph naming CMIO, integration policies, and points of friction.
-   - The inquiry question appears verbatim.
-   - All 5 sources visibly reference foreign-born residents / integration / new citizens — not generic "diversity" material.
-2. Generate a History SBQ on Cold War. Expected:
-   - Write-up paragraph on US–USSR origins of the Cold War, naming Truman Doctrine / Marshall Plan / Berlin.
-   - Sources all bear on US responsibility specifically.
-3. Inspect edge function logs for `[generate] section A: rejected backfill` lines — confirms the off-issue filter is firing when live backfill triggers.
-4. DOCX export contains the write-up paragraph above the sources for each SBQ section.
-
-## Out of scope
-
-- No change to non-humanities sections.
-- No new bundles (the 8 SS + 7 History bundles already added in the previous turn remain the set; we only add `contextWriteUp` to each).
-- No change to the deterministic question builder's stems — those already use the bundle's inquiry question and assertion verbatim.
+1. Run the unstick migration → confirm `SS Test 2` row now shows `generation_failed`, retry button appears in UI.
+2. Generate a fresh SS Combined Humanities paper end-to-end → completes in <120s, status reaches `draft`, all SBQ sections have the `[CONTEXT]…[/CONTEXT]` write-up.
+3. Force a slow path (e.g. set `PER_FETCH_TIMEOUT_MS=20000` locally) and confirm the section-phase budget kicks in, partial rows are inserted, status is `draft_partial`, no stuck `generating`.
+4. Inspect edge logs for the new `[generate] section phase budget exhausted` warning when triggered.
