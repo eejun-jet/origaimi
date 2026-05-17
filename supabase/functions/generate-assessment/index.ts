@@ -789,6 +789,11 @@ function pickSsSubIssueBundle(
               "should","would","could","will","into","from","over","under",
               "their","there","what","when","how","more","most","some","any",
               "singapore","singaporean",
+              // generic SBQ/civics vocabulary — too broad to anchor a match by themselves
+              "topic","case","study","background","paper","question","questions",
+              "serving","serve","roles","role","responsibility","responsibilities",
+              "identity","citizenship","citizen","citizens","society","social",
+              "policy","policies","government","national",
             ].includes(t),
           ),
       ),
@@ -813,10 +818,22 @@ function pickSsSubIssueBundle(
       const scored = SS_SUB_ISSUE_BUNDLES.map((b) => ({ b, s: scoreBundle(b) }))
         .sort((a, b) => b.s - a.s);
       const best = scored[0];
-      // Threshold: trigger hit (>=5) OR at least 2 keyword overlaps.
-      if (best && best.s >= 2) {
+      const runnerUp = scored[1];
+      const lead = runnerUp ? best.s - runnerUp.s : best.s;
+      // Strict threshold: only count as "matched" when EITHER the bundle's
+      // trigger regex fires directly on the focus text (score >= 5), OR
+      // keyword overlap is strong AND clearly beats the runner-up (avoids
+      // picking HDB for an NS prompt just because "national/citizenship"
+      // tokens are everywhere in the HDB excerpts).
+      const triggerHit = best && best.s >= 5;
+      const strongOverlap = best && best.s >= 3 && lead >= 2;
+      if (triggerHit || strongOverlap) {
+        console.log(`[generate] SS focus "${cleanFocus}" matched bundle "${best.b.subIssue}" (score=${best.s}, lead=${lead})`);
         return { bundle: best.b, focusMatched: true };
       }
+      // No confident match — log the top 3 so we can debug from edge logs.
+      const top3 = scored.slice(0, 3).map((x) => `${x.b.subIssue}=${x.s}`).join(", ");
+      console.warn(`[generate] SS focus "${cleanFocus}" did NOT confidently match; top scores: ${top3}`);
     }
   }
 
