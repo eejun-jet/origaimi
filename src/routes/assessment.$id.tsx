@@ -118,6 +118,7 @@ type Assessment = {
   syllabus_paper_id?: string | null;
   assessment_type?: string | null;
   scoped_disciplines?: string[] | null;
+  updated_at?: string | null;
 };
 
 type SyllabusPaperInfo = { paper_number: string | null; paper_code: string | null };
@@ -1011,16 +1012,20 @@ function EditorPage() {
 
             {questions.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border bg-card/50 p-12 text-center">
-                {assessment.status === "generating" ? (
+                {assessment.status === "generating" ? (() => {
+                  const updatedMs = assessment.updated_at ? new Date(assessment.updated_at).getTime() : 0;
+                  const ageMs = updatedMs ? Date.now() - updatedMs : 0;
+                  const isStale = ageMs > 4 * 60 * 1000;
+                  return (
                   <>
                     <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
                     <p className="mt-3 text-sm font-medium text-foreground">
-                      Drafting your paper…
+                      {isStale ? "Generation appears to have stalled" : "Drafting your paper…"}
                     </p>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      Source-grounded items can take 2–4 minutes. Questions will
-                      appear here as soon as they are ready — you don't need to
-                      refresh.
+                      {isStale
+                        ? "No update in over 4 minutes — the source-fetching step likely timed out. Mark this as failed and start a fresh paper (try a narrower topic or fewer SBQ sections)."
+                        : "Source-grounded items can take 2–4 minutes. Questions will appear here as soon as they are ready — you don't need to refresh."}
                     </p>
                     <div className="mt-4 flex items-center justify-center gap-2">
                       <Button size="sm" variant="outline" onClick={() => loadAll()} className="gap-1.5">
@@ -1028,15 +1033,16 @@ function EditorPage() {
                       </Button>
                       <Button
                         size="sm"
-                        variant="ghost"
-                        className="text-muted-foreground"
+                        variant={isStale ? "default" : "ghost"}
+                        className={isStale ? undefined : "text-muted-foreground"}
                         onClick={() => setStatus("generation_failed")}
                       >
-                        Stop and mark as failed
+                        {isStale ? "Mark as failed" : "Stop and mark as failed"}
                       </Button>
                     </div>
                   </>
-                ) : (
+                  );
+                })() : (
                   <>
                     <Sparkles className="mx-auto h-8 w-8 text-primary" />
                     <p className="mt-3 text-sm text-muted-foreground">
