@@ -716,13 +716,19 @@ function parseSsIssueFromKos(knowledgeOutcomes: string[]): (1 | 2 | 3)[] {
 
 /** Pick exactly ONE sub-issue bundle for an SS SBQ section. Selection is
  *  deterministic per `seed` (typically the section id) so re-runs are
- *  stable, but a hash rotates which sub-issue different sections land on. */
+ *  stable, but a hash rotates which sub-issue different sections land on.
+ *  When `focusText` is provided (teacher's free-text focus from blueprint
+ *  instructions or section instructions), bundles are scored against it and
+ *  the highest-scoring bundle is picked when the score clears a threshold —
+ *  this lets a teacher steer the SBQ towards e.g. "HDB and Singaporean
+ *  identity" instead of getting whichever bundle the seed-hash lands on. */
 function pickSsSubIssueBundle(
   topic: string,
   learningOutcomes: string[],
   knowledgeOutcomes: string[],
   seed: string,
-): SsSubIssueBundle | null {
+  focusText?: string | null,
+): { bundle: SsSubIssueBundle; focusMatched: boolean } | null {
   let candidates: SsSubIssueBundle[] = [];
 
   const issues = parseSsIssueFromKos(knowledgeOutcomes);
@@ -746,10 +752,63 @@ function pickSsSubIssueBundle(
   }
 
   if (candidates.length === 0) return null;
+
+  // Focus-aware scoring: if the teacher provided a focus, search the FULL
+  // bundle list (not just the issue-filtered candidates) so a strong focus
+  // can override a weak/empty KO signal. A hit on the trigger regex weighs
+  // most; keyword overlap with the sub-issue label / inquiry / assertion /
+  // source titles adds support.
+  const cleanFocus = (focusText ?? "").trim();
+  if (cleanFocus.length > 0) {
+    const focusLower = cleanFocus.toLowerCase();
+    const focusTokens = Array.from(
+      new Set(
+        focusLower
+          .split(/[^a-z0-9]+/i)
+          .filter((t) => t.length >= 3)
+          // drop generic stopwords / filler the user typed
+          .filter((t) =>
+            ![
+              "the","and","for","with","that","this","want","talk","about",
+              "issue","sbq","focus","please","make","sure","ssue","make",
+              "should","would","could","will","into","from","over","under",
+              "their","there","what","when","how","more","most","some","any",
+              "singapore","singaporean",
+            ].includes(t),
+          ),
+      ),
+    );
+    if (focusTokens.length > 0) {
+      const scoreBundle = (b: SsSubIssueBundle): number => {
+        const haystack = [
+          b.subIssue,
+          b.inquiryQuestion,
+          b.assertion,
+          ...b.sources.map((s) => `${s.source_title} ${s.excerpt}`),
+        ]
+          .join(" ")
+          .toLowerCase();
+        let score = 0;
+        if (b.triggers.test(cleanFocus)) score += 5;
+        for (const tok of focusTokens) {
+          if (haystack.includes(tok)) score += 1;
+        }
+        return score;
+      };
+      const scored = SS_SUB_ISSUE_BUNDLES.map((b) => ({ b, s: scoreBundle(b) }))
+        .sort((a, b) => b.s - a.s);
+      const best = scored[0];
+      // Threshold: trigger hit (>=5) OR at least 2 keyword overlaps.
+      if (best && best.s >= 2) {
+        return { bundle: best.b, focusMatched: true };
+      }
+    }
+  }
+
   let h = 0;
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
   const idx = ((h % candidates.length) + candidates.length) % candidates.length;
-  return candidates[idx];
+  return { bundle: candidates[idx], focusMatched: false };
 }
 
 /** Mutually-exclusive topic groups: if the SECTION TOPIC matches one of these
