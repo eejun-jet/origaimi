@@ -2712,15 +2712,14 @@ Deno.serve(async (req) => {
           // If the teacher provided an SS focus, prepend a one-liner that
           // explicitly names it (and flags the fallback case) so the framing
           // is visible to students in the printed paper.
-          const focusSentence = ssFocusRequested
-            ? (ssFocusMatched
-                ? `Teacher focus: ${ssFocusRequested}. `
-                : `Note: this paper falls back to the curated case on "${sectionBundleForSection?.subIssue ?? "this issue"}" because no curated SS case closely matched the requested focus "${ssFocusRequested}". `)
-            : "";
+          // Student-facing background is the curated contextWriteUp ONLY.
+          // The teacher's raw `instructions` is a brief to the generator,
+          // never inlined into the printed paper. Fallback/match notices
+          // are surfaced to teachers via the `notes` field below.
           const baseContext = sectionBundleForSection?.contextWriteUp
             ? sectionBundleForSection.contextWriteUp.replace(/\[(CONTEXT|\/CONTEXT)\]/g, "")
             : "";
-          const contextBody = (focusSentence + baseContext).trim();
+          const contextBody = baseContext.trim();
           source_excerpt = contextBody
             ? `[CONTEXT] ${contextBody} [/CONTEXT]\n\n${joinedSources}`
             : joinedSources;
