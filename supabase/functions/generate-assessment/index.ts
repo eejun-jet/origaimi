@@ -2125,6 +2125,8 @@ Deno.serve(async (req) => {
       const sharedImageSources: GroundedImageSource[] = [];
       const sourcesForSection: (GroundedSource | null)[][] = [];
       let ssSubIssueForSection: SsSubIssueBundle | null = null;
+      let ssFocusMatched = false;
+      let ssFocusRequested: string | null = null;
       let sectionBundleForSection: SbqInquiryBundle | null = null;
       let humanitiesAnchorTopic: SectionTopic | null = null;
 
@@ -2171,14 +2173,28 @@ Deno.serve(async (req) => {
           // the SBQ pool shipped with all sources from one or two domains —
           // teachers complained that source diversity was missing.
           // SS: pick exactly one sub-issue bundle so the 5 sources cohere.
-          ssSubIssueForSection = isSSPaper
+          // Teacher's free-text focus may live on the top-level assessment
+          // `instructions` OR on this section's `instructions`. Either can
+          // steer SS bundle selection (e.g. "HDB and Singaporean identity").
+          const focusText = [
+            typeof instructions === "string" ? instructions : "",
+            typeof section.instructions === "string" ? section.instructions : "",
+          ]
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0 && s !== "Answer all questions in this section.")
+            .join(" \n ");
+          if (isSSPaper && focusText.length > 0) ssFocusRequested = focusText;
+          const ssPick = isSSPaper
             ? pickSsSubIssueBundle(
                 sectionTopic.topic,
                 sectionTopic.learning_outcomes ?? [],
                 section.knowledge_outcomes ?? [],
                 section.id ?? section.letter ?? sectionTopic.topic,
+                focusText || null,
               )
             : null;
+          ssSubIssueForSection = ssPick?.bundle ?? null;
+          ssFocusMatched = ssPick?.focusMatched ?? false;
           // History: pick the most-specific curated bundle so we can surface
           // its inquiryQuestion + assertion to both the LLM and the
           // deterministic builder (mirrors the SS path above).
@@ -2210,10 +2226,17 @@ Deno.serve(async (req) => {
             }
           }
           if (ssSubIssueForSection) {
-            console.log(`[generate] section ${section.letter}: SS sub-issue "${ssSubIssueForSection.subIssue}" → "${ssSubIssueForSection.inquiryQuestion}"`);
+            const matchStr = ssFocusRequested
+              ? (ssFocusMatched ? ` [focus matched: "${ssFocusRequested}"]` : ` [focus fallback; requested: "${ssFocusRequested}"]`)
+              : "";
+            console.log(`[generate] section ${section.letter}: SS sub-issue "${ssSubIssueForSection.subIssue}" → "${ssSubIssueForSection.inquiryQuestion}"${matchStr}`);
+            if (ssFocusRequested && !ssFocusMatched) {
+              console.warn(`[generate] SS focus "${ssFocusRequested}" did not match any curated bundle, using default "${ssSubIssueForSection.subIssue}"`);
+            }
           } else if (historyBundleForSection) {
             console.log(`[generate] section ${section.letter}: History bundle "${historyBundleForSection.subIssue}" → "${historyBundleForSection.inquiryQuestion}"`);
           }
+
           const curatedSeed: typeof curatedAll = [];
           const seenSeedHosts = new Set<string>();
           // Pass 1: take one source per distinct host, in bundle order.
