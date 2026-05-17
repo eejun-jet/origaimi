@@ -2677,10 +2677,28 @@ Deno.serve(async (req) => {
           // render a "Background to this issue" block above the sources.
           // Parsers in src/routes/assessment.$id.tsx and src/lib/export-docx.ts
           // strip this [CONTEXT]…[/CONTEXT] envelope before parsing sources.
-          source_excerpt = sectionBundleForSection?.contextWriteUp
-            ? `[CONTEXT] ${sectionBundleForSection.contextWriteUp.replace(/\[(CONTEXT|\/CONTEXT)\]/g, "")} [/CONTEXT]\n\n${joinedSources}`
+          // If the teacher provided an SS focus, prepend a one-liner that
+          // explicitly names it (and flags the fallback case) so the framing
+          // is visible to students in the printed paper.
+          const focusSentence = ssFocusRequested
+            ? (ssFocusMatched
+                ? `Teacher focus: ${ssFocusRequested}. `
+                : `Note: this paper falls back to the curated case on "${sectionBundleForSection?.subIssue ?? "this issue"}" because no curated SS case closely matched the requested focus "${ssFocusRequested}". `)
+            : "";
+          const baseContext = sectionBundleForSection?.contextWriteUp
+            ? sectionBundleForSection.contextWriteUp.replace(/\[(CONTEXT|\/CONTEXT)\]/g, "")
+            : "";
+          const contextBody = (focusSentence + baseContext).trim();
+          source_excerpt = contextBody
+            ? `[CONTEXT] ${contextBody} [/CONTEXT]\n\n${joinedSources}`
             : joinedSources;
           source_url = sharedSourcePool[0].source_url;
+          // Persist a machine-readable flag on the FIRST sub-question so the
+          // UI can surface a "focus didn't match" banner. Matched runs leave
+          // notes untouched.
+          if (ssFocusRequested && !ssFocusMatched && qi === 0) {
+            notes = `SS_FOCUS_FALLBACK::${ssFocusRequested}::${sectionBundleForSection?.subIssue ?? ""}`;
+          }
           groundedCount++;
         } else if (needsSourcePerQ) {
           if (!expectedSrc) {
