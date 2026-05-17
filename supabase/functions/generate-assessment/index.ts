@@ -594,6 +594,21 @@ const SS_SUB_ISSUE_BUNDLES: SsSubIssueBundle[] = [
   },
   {
     issue: 1,
+    subIssue: "HDB public housing and Singaporean national identity",
+    assertion: "Public housing has done more than any other policy to make Singaporeans feel like one people.",
+    contextWriteUp: "This SBQ examines how far HDB public housing has shaped what it means to be Singaporean. Since the first HDB flats were built in 1960, public housing has been framed not just as shelter but as a deliberate nation-building project: a shared stake in the country, a daily setting for inter-ethnic mixing through the Ethnic Integration Policy, and the most visible symbol of citizenship — over 80% of residents live in HDB flats and around 90% own their homes. At the same time, the rise of million-dollar resale flats, tighter rules separating citizens from PRs in BTO ballots, and debates over void-deck life and 'heartland' identity raise the question of whether HDB still produces a common Singaporean identity or now divides it. Weigh the sources to judge how far public housing has shaped, sustained or strained Singaporean national identity.",
+    inquiryQuestion: "How far has HDB public housing shaped what it means to be Singaporean?",
+    triggers: /(hdb|public housing|national identity|singaporean identity|heartland|void deck|ethnic integration|eip|belonging|citizenship.*housing|housing.*citizenship)/i,
+    sources: [
+      { excerpt: `The Housing & Development Board describes public housing as "the cornerstone of nation building". Since 1960, HDB has built more than one million flats; over 80% of Singapore's resident population now lives in HDB flats, and about 90% own their homes. HDB frames the programme as creating "a stake in the country" for every citizen — through subsidised prices, the Ethnic Integration Policy, void decks and shared neighbourhood amenities — so that being a Singaporean and living in an HDB estate are, in everyday life, closely intertwined.`, source_url: "https://www.hdb.gov.sg/about-us/our-role/public-housing-a-singapore-icon", source_title: "Public Housing — A Singapore Icon", publisher: "Housing & Development Board, Singapore" },
+      { excerpt: `Singapore's Ethnic Integration Policy (EIP), introduced in 1989, sets ethnic quotas in every HDB block and neighbourhood that mirror the national Chinese, Malay and Indian/Other shares. The Ministry of National Development argues that without the EIP, ethnic enclaves would re-form and weaken daily inter-racial contact in lifts, void decks, schools and hawker centres. The policy is presented as evidence that HDB is not just a housing programme but a deliberate instrument for producing a shared Singaporean identity rather than a federation of ethnic communities.`, source_url: "https://www.hdb.gov.sg/residential/buying-a-flat/resale/ethnic-integration-policy-and-spr-quota", source_title: "Ethnic Integration Policy in HDB estates", publisher: "Housing & Development Board, Singapore" },
+      { excerpt: `In a 2020 Channel NewsAsia commentary, sociologist Chua Beng Huat argued that the HDB estate — with its void decks, wet markets, neighbourhood schools and coffee shops — has become "the everyday infrastructure of Singaporean identity". He noted that the 'heartland' figure in political speech, the imagery of National Day Parade neighbourhood celebrations, and even local films set in HDB estates all draw on a shared experience of growing up in public housing. Without that common backdrop, he warned, "Singaporean" would shrink back to an ethnic or class category.`, source_url: "https://www.channelnewsasia.com/commentary/hdb-public-housing-singaporean-identity-heartland-void-deck-2080686", source_title: "HDB estates and the everyday infrastructure of Singaporean identity, 2020", publisher: "Channel NewsAsia" },
+      { excerpt: `In 2023, more than 470 HDB resale flats crossed the S$1 million mark, more than double the 2022 figure. Younger first-time buyers reported being priced out of mature-estate resale and waiting years for Build-To-Order launches in newer towns. Commentators warned that when an HDB flat shifts from a shared "stake in the country" into a marker of who got in early, the policy's identity-binding role weakens. The 2023 introduction of the Plus and Prime classification — with longer minimum occupation and tighter resale rules — was framed by the Government as a corrective to keep public housing "accessible and affordable for all Singaporeans".`, source_url: "https://www.channelnewsasia.com/singapore/hdb-resale-million-dollar-flats-2023-record-4040631", source_title: "Record number of million-dollar HDB resale flats in 2023", publisher: "Channel NewsAsia" },
+      { excerpt: `An Institute of Policy Studies working paper on housing and social capital in Singapore (2019) found that respondents from public-rental and smaller HDB flats were significantly less likely to have close friends from condominium or landed-property backgrounds, and vice versa. The authors argued that "class divisions are now more rigid than racial divisions" in everyday social networks, and that if housing type increasingly tracks class, the daily mixing HDB was designed to produce will weaken — eroding the shared identity that public housing was meant to anchor.`, source_url: "https://lkyspp.nus.edu.sg/ips/publications/details/a-study-on-social-capital-in-singapore", source_title: "IPS study on housing, class and social capital in Singapore, 2019", publisher: "Lee Kuan Yew School of Public Policy, NUS" },
+    ],
+  },
+  {
+    issue: 1,
     subIssue: "civic participation and the limits of dissent in Singapore",
     assertion: "Singapore's model of citizenship gives citizens a real voice but on terms set by the state.",
     contextWriteUp: "This SBQ examines how far citizens in Singapore have a real voice in shaping public policy. The Singapore Pledge frames citizenship as an active commitment, and the Government has run wide consultations such as Forward Singapore involving over 200,000 participants. At the same time, Article 14 of the Constitution and the Public Order Act allow Parliament to restrict speech, assembly and protest in the interest of stability, with public political gatherings confined to Speakers' Corner. International comparisons — from Hong Kong's 2019 extradition-bill protests to OECD findings on trust in government — sharpen the debate. Weigh the sources to judge how far Singapore's model gives citizens genuine influence over policy.",
@@ -701,13 +716,19 @@ function parseSsIssueFromKos(knowledgeOutcomes: string[]): (1 | 2 | 3)[] {
 
 /** Pick exactly ONE sub-issue bundle for an SS SBQ section. Selection is
  *  deterministic per `seed` (typically the section id) so re-runs are
- *  stable, but a hash rotates which sub-issue different sections land on. */
+ *  stable, but a hash rotates which sub-issue different sections land on.
+ *  When `focusText` is provided (teacher's free-text focus from blueprint
+ *  instructions or section instructions), bundles are scored against it and
+ *  the highest-scoring bundle is picked when the score clears a threshold —
+ *  this lets a teacher steer the SBQ towards e.g. "HDB and Singaporean
+ *  identity" instead of getting whichever bundle the seed-hash lands on. */
 function pickSsSubIssueBundle(
   topic: string,
   learningOutcomes: string[],
   knowledgeOutcomes: string[],
   seed: string,
-): SsSubIssueBundle | null {
+  focusText?: string | null,
+): { bundle: SsSubIssueBundle; focusMatched: boolean } | null {
   let candidates: SsSubIssueBundle[] = [];
 
   const issues = parseSsIssueFromKos(knowledgeOutcomes);
@@ -731,10 +752,63 @@ function pickSsSubIssueBundle(
   }
 
   if (candidates.length === 0) return null;
+
+  // Focus-aware scoring: if the teacher provided a focus, search the FULL
+  // bundle list (not just the issue-filtered candidates) so a strong focus
+  // can override a weak/empty KO signal. A hit on the trigger regex weighs
+  // most; keyword overlap with the sub-issue label / inquiry / assertion /
+  // source titles adds support.
+  const cleanFocus = (focusText ?? "").trim();
+  if (cleanFocus.length > 0) {
+    const focusLower = cleanFocus.toLowerCase();
+    const focusTokens = Array.from(
+      new Set(
+        focusLower
+          .split(/[^a-z0-9]+/i)
+          .filter((t) => t.length >= 3)
+          // drop generic stopwords / filler the user typed
+          .filter((t) =>
+            ![
+              "the","and","for","with","that","this","want","talk","about",
+              "issue","sbq","focus","please","make","sure","ssue","make",
+              "should","would","could","will","into","from","over","under",
+              "their","there","what","when","how","more","most","some","any",
+              "singapore","singaporean",
+            ].includes(t),
+          ),
+      ),
+    );
+    if (focusTokens.length > 0) {
+      const scoreBundle = (b: SsSubIssueBundle): number => {
+        const haystack = [
+          b.subIssue,
+          b.inquiryQuestion,
+          b.assertion,
+          ...b.sources.map((s) => `${s.source_title} ${s.excerpt}`),
+        ]
+          .join(" ")
+          .toLowerCase();
+        let score = 0;
+        if (b.triggers.test(cleanFocus)) score += 5;
+        for (const tok of focusTokens) {
+          if (haystack.includes(tok)) score += 1;
+        }
+        return score;
+      };
+      const scored = SS_SUB_ISSUE_BUNDLES.map((b) => ({ b, s: scoreBundle(b) }))
+        .sort((a, b) => b.s - a.s);
+      const best = scored[0];
+      // Threshold: trigger hit (>=5) OR at least 2 keyword overlaps.
+      if (best && best.s >= 2) {
+        return { bundle: best.b, focusMatched: true };
+      }
+    }
+  }
+
   let h = 0;
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
   const idx = ((h % candidates.length) + candidates.length) % candidates.length;
-  return candidates[idx];
+  return { bundle: candidates[idx], focusMatched: false };
 }
 
 /** Mutually-exclusive topic groups: if the SECTION TOPIC matches one of these
@@ -2051,6 +2125,8 @@ Deno.serve(async (req) => {
       const sharedImageSources: GroundedImageSource[] = [];
       const sourcesForSection: (GroundedSource | null)[][] = [];
       let ssSubIssueForSection: SsSubIssueBundle | null = null;
+      let ssFocusMatched = false;
+      let ssFocusRequested: string | null = null;
       let sectionBundleForSection: SbqInquiryBundle | null = null;
       let humanitiesAnchorTopic: SectionTopic | null = null;
 
@@ -2097,14 +2173,28 @@ Deno.serve(async (req) => {
           // the SBQ pool shipped with all sources from one or two domains —
           // teachers complained that source diversity was missing.
           // SS: pick exactly one sub-issue bundle so the 5 sources cohere.
-          ssSubIssueForSection = isSSPaper
+          // Teacher's free-text focus may live on the top-level assessment
+          // `instructions` OR on this section's `instructions`. Either can
+          // steer SS bundle selection (e.g. "HDB and Singaporean identity").
+          const focusText = [
+            typeof instructions === "string" ? instructions : "",
+            typeof section.instructions === "string" ? section.instructions : "",
+          ]
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0 && s !== "Answer all questions in this section.")
+            .join(" \n ");
+          if (isSSPaper && focusText.length > 0) ssFocusRequested = focusText;
+          const ssPick = isSSPaper
             ? pickSsSubIssueBundle(
                 sectionTopic.topic,
                 sectionTopic.learning_outcomes ?? [],
                 section.knowledge_outcomes ?? [],
                 section.id ?? section.letter ?? sectionTopic.topic,
+                focusText || null,
               )
             : null;
+          ssSubIssueForSection = ssPick?.bundle ?? null;
+          ssFocusMatched = ssPick?.focusMatched ?? false;
           // History: pick the most-specific curated bundle so we can surface
           // its inquiryQuestion + assertion to both the LLM and the
           // deterministic builder (mirrors the SS path above).
@@ -2136,10 +2226,17 @@ Deno.serve(async (req) => {
             }
           }
           if (ssSubIssueForSection) {
-            console.log(`[generate] section ${section.letter}: SS sub-issue "${ssSubIssueForSection.subIssue}" → "${ssSubIssueForSection.inquiryQuestion}"`);
+            const matchStr = ssFocusRequested
+              ? (ssFocusMatched ? ` [focus matched: "${ssFocusRequested}"]` : ` [focus fallback; requested: "${ssFocusRequested}"]`)
+              : "";
+            console.log(`[generate] section ${section.letter}: SS sub-issue "${ssSubIssueForSection.subIssue}" → "${ssSubIssueForSection.inquiryQuestion}"${matchStr}`);
+            if (ssFocusRequested && !ssFocusMatched) {
+              console.warn(`[generate] SS focus "${ssFocusRequested}" did not match any curated bundle, using default "${ssSubIssueForSection.subIssue}"`);
+            }
           } else if (historyBundleForSection) {
             console.log(`[generate] section ${section.letter}: History bundle "${historyBundleForSection.subIssue}" → "${historyBundleForSection.inquiryQuestion}"`);
           }
+
           const curatedSeed: typeof curatedAll = [];
           const seenSeedHosts = new Set<string>();
           // Pass 1: take one source per distinct host, in bundle order.
@@ -2580,10 +2677,28 @@ Deno.serve(async (req) => {
           // render a "Background to this issue" block above the sources.
           // Parsers in src/routes/assessment.$id.tsx and src/lib/export-docx.ts
           // strip this [CONTEXT]…[/CONTEXT] envelope before parsing sources.
-          source_excerpt = sectionBundleForSection?.contextWriteUp
-            ? `[CONTEXT] ${sectionBundleForSection.contextWriteUp.replace(/\[(CONTEXT|\/CONTEXT)\]/g, "")} [/CONTEXT]\n\n${joinedSources}`
+          // If the teacher provided an SS focus, prepend a one-liner that
+          // explicitly names it (and flags the fallback case) so the framing
+          // is visible to students in the printed paper.
+          const focusSentence = ssFocusRequested
+            ? (ssFocusMatched
+                ? `Teacher focus: ${ssFocusRequested}. `
+                : `Note: this paper falls back to the curated case on "${sectionBundleForSection?.subIssue ?? "this issue"}" because no curated SS case closely matched the requested focus "${ssFocusRequested}". `)
+            : "";
+          const baseContext = sectionBundleForSection?.contextWriteUp
+            ? sectionBundleForSection.contextWriteUp.replace(/\[(CONTEXT|\/CONTEXT)\]/g, "")
+            : "";
+          const contextBody = (focusSentence + baseContext).trim();
+          source_excerpt = contextBody
+            ? `[CONTEXT] ${contextBody} [/CONTEXT]\n\n${joinedSources}`
             : joinedSources;
           source_url = sharedSourcePool[0].source_url;
+          // Persist a machine-readable flag on the FIRST sub-question so the
+          // UI can surface a "focus didn't match" banner. Matched runs leave
+          // notes untouched.
+          if (ssFocusRequested && !ssFocusMatched && qi === 0) {
+            notes = `SS_FOCUS_FALLBACK::${ssFocusRequested}::${sectionBundleForSection?.subIssue ?? ""}`;
+          }
           groundedCount++;
         } else if (needsSourcePerQ) {
           if (!expectedSrc) {

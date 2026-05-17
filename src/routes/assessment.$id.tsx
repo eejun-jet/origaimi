@@ -1747,7 +1747,17 @@ function QuestionCard({
                 )}
               </div>
             )}
-            {q.notes && q.question_type === "source_based" && !q.source_excerpt && (
+            {q.notes && q.notes.startsWith("SS_FOCUS_FALLBACK::") && (() => {
+              const parts = q.notes.split("::");
+              const requested = parts[1] ?? "";
+              const used = parts[2] ?? "";
+              return (
+                <div className="mb-4 rounded-lg border border-warm bg-warm/20 p-3 text-xs text-warm-foreground">
+                  ⚠ Your requested focus <span className="font-medium">"{requested}"</span> didn't match any curated SS case. Generated the closest available one{used ? <> — <span className="font-medium">{used}</span></> : null}. Try rephrasing the note (e.g. add keywords like "HDB", "racial harmony", "globalisation") or let us know to add a new curated case.
+                </div>
+              );
+            })()}
+            {q.notes && !q.notes.startsWith("SS_FOCUS_FALLBACK::") && q.question_type === "source_based" && !q.source_excerpt && (
               <div className="mb-4 rounded-lg border border-warm bg-warm/20 p-3 text-xs text-warm-foreground">
                 ⚠ {q.notes}
               </div>
