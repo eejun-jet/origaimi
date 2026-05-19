@@ -2354,6 +2354,7 @@ Deno.serve(async (req) => {
               subIssue: ssSubIssueForSection.subIssue,
               inquiryQuestion: ssSubIssueForSection.inquiryQuestion,
               assertion: ssSubIssueForSection.assertion,
+              contextWriteUp: ssSubIssueForSection.contextWriteUp,
             };
           } else {
             const picked = pickHumanitiesBundle(
@@ -2370,6 +2371,7 @@ Deno.serve(async (req) => {
                 subIssue: historyBundleForSection.subIssue,
                 inquiryQuestion: historyBundleForSection.inquiryQuestion,
                 assertion: historyBundleForSection.assertion,
+                contextWriteUp: historyBundleForSection.contextWriteUp,
               };
             }
           }
@@ -2519,7 +2521,12 @@ Deno.serve(async (req) => {
               ? sectionBundleForSection.subIssue
               : sectionTopic.topic;
             const imageLOs = sectionBundleForSection
-              ? [sectionBundleForSection.inquiryQuestion, sectionBundleForSection.assertion, ...(sectionTopic.learning_outcomes ?? [])]
+              ? [
+                  sectionBundleForSection.inquiryQuestion,
+                  sectionBundleForSection.assertion,
+                  sectionBundleForSection.contextWriteUp,
+                  ...(sectionTopic.learning_outcomes ?? []),
+                ]
               : (sectionTopic.learning_outcomes ?? []);
             const imgStart = Date.now();
             try {

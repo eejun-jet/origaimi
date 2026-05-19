@@ -897,19 +897,19 @@ export async function fetchGroundedImageSources(
   const loKw = extractKeywords(learningOutcomes.join(" "), 4);
   if (topicKw.length === 0) return [];
 
-  // Try a small set of angles — pictorial sources include cartoons, posters,
-  // photographs, graphs/charts, maps. We deliberately cap to the 3 highest-
-  // value angles so this fetch never dominates total run time.
+  // Try a small set of angles spanning both History (cartoon/poster) and SS
+  // (photograph/news photo/infographic). Cap to 4 to stay within budget.
   const baseTerms = [...topicKw, ...loKw].slice(0, 8).join(" ");
   const queries = [
-    `${baseTerms} political cartoon`,
-    `${baseTerms} propaganda poster`,
-    `${baseTerms} historical photograph`,
+    `${baseTerms} photograph`,
+    `${baseTerms} news photo`,
+    `${baseTerms} infographic chart`,
+    `${baseTerms} political cartoon poster`,
   ];
 
   const topicVocab = syllabusKeywordsFor(topic, learningOutcomes);
   // Hard wall-clock cap: pictorial fetches must never spend more than ~9s
-  // total across all passes (strict → relaxed → final).
+  // total across all passes (strict → relaxed).
   const deadline = Date.now() + 9000;
   // We track image-host usage SEPARATELY from text-source hosts. A pictorial
   // and a text source from the same publisher (e.g. BBC, Britannica) is
@@ -918,13 +918,12 @@ export async function fetchGroundedImageSources(
   const localImageHosts = new Set<string>();
   const picked: GroundedImageSource[] = [];
   const pickedCategories = new Set<VisualCategory>();
-  // Staged passes: strict (allow-list + positive score), then relaxed
-  // (allow-list, score > -3), then final (drop allow-list, score > -3).
-  // Each subsequent pass only runs if we still haven't picked anything AND
-  // there is wall-clock budget left, so latency stays bounded but we no
-  // longer silently ship a pictorial-less SBQ section just because the
-  // image descriptions had weak keyword overlap.
-  const passes: Array<"strict" | "relaxed" | "final"> = ["strict", "relaxed", "final"];
+  // Two staged passes only: strict (allow-list + positive score) and
+  // relaxed (allow-list, score > -3). We NEVER bypass the humanities
+  // allow-list and we ALWAYS require at least one issue-keyword hit, so
+  // a misaligned picture can't slip in just because the strict pass
+  // returned nothing. Better to ship 0–1 image than an unrelated one.
+  const passes: Array<"strict" | "relaxed"> = ["strict", "relaxed"];
 
   for (const pass of passes) {
     if (picked.length >= count) break;
@@ -946,10 +945,10 @@ export async function fetchGroundedImageSources(
       const { images, results } = response;
       if (!images || images.length === 0) continue;
 
-      // Filter: real image URL; allow-list applied only on strict pass.
+      // Filter: real image URL; allow-list ALWAYS applied (no final pass).
       const candidates = images
         .filter((im) => im.url && IMAGE_URL_RE.test(im.url))
-        .filter((im) => pass === "final" ? true : isAllowed(im.url, ALLOW_DOMAINS_HUMANITIES, true))
+        .filter((im) => isAllowed(im.url, ALLOW_DOMAINS_HUMANITIES, true))
         .filter((im) => !localImageHosts.has(hostnameOf(im.url)));
 
       if (candidates.length === 0) continue;
@@ -964,23 +963,23 @@ export async function fetchGroundedImageSources(
           const desc = (im.description ?? "").toLowerCase();
           const category = classifyVisualCategory(desc);
           let score = 0;
+          let kwHits = 0;
           if (tier === 1) score += 6;
           else if (tier === 2) score += 2;
           for (const kw of topicVocab) {
-            if (kw.length >= 4 && desc.includes(kw)) score += 2;
+            if (kw.length >= 4 && desc.includes(kw)) { score += 2; kwHits++; }
           }
           if (/cartoon|poster|propaganda|photograph|portrait|engraving|painting|graph|chart|map|diagram|figure|table|statistic|infographic/.test(desc)) score += 3;
-          if (/logo|icon|avatar|sprite|banner|advert/.test(desc)) score -= 6;
+          if (/logo|icon|avatar|sprite|banner|advert|stock photo|clip ?art|silhouette|illustration of generic/.test(desc)) score -= 6;
           // Diversity bonus: prefer a category we haven't picked yet.
           if (category !== "other" && !pickedCategories.has(category)) score += 4;
-          return { im, score, host, category };
+          return { im, score, host, category, kwHits };
         })
         .sort((a, b) => b.score - a.score)
-        // Strict pass demands a positive score (clearly relevant). Relaxed/final
-        // passes accept anything not obviously a logo/icon (score > -3) so a
-        // section never ships pictorial-less just because keyword overlap was
-        // weak in the image description.
-        .filter((r) => pass === "strict" ? r.score > 0 : r.score > -3);
+        // ALWAYS require at least one issue-keyword hit so a misaligned
+        // picture can't slip through. Strict pass also demands a positive
+        // total score; relaxed allows score > -3 but still needs a keyword.
+        .filter((r) => r.kwHits > 0 && (pass === "strict" ? r.score > 0 : r.score > -3));
 
       if (ranked.length === 0) continue;
 
