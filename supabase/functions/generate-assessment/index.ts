@@ -2521,7 +2521,12 @@ Deno.serve(async (req) => {
               ? sectionBundleForSection.subIssue
               : sectionTopic.topic;
             const imageLOs = sectionBundleForSection
-              ? [sectionBundleForSection.inquiryQuestion, sectionBundleForSection.assertion, ...(sectionTopic.learning_outcomes ?? [])]
+              ? [
+                  sectionBundleForSection.inquiryQuestion,
+                  sectionBundleForSection.assertion,
+                  sectionBundleForSection.contextWriteUp,
+                  ...(sectionTopic.learning_outcomes ?? []),
+                ]
               : (sectionTopic.learning_outcomes ?? []);
             const imgStart = Date.now();
             try {
