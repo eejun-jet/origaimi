@@ -718,6 +718,38 @@ const SS_SUB_ISSUE_BUNDLES: SsSubIssueBundle[] = [
   },
 ];
 
+/** Variety-of-perspectives rule for Social Studies SBQ source bundles.
+ *  Every bundle's source set MUST cover all four perspective tags
+ *  (gov_official, individual, foreign, expert) AND include at least one
+ *  supportive AND one opposing stance. Mixed counts as neither for the
+ *  stance check. Runs at module load so regressions fail loudly in logs. */
+const SS_REQUIRED_PERSPECTIVES = ["gov_official", "individual", "foreign", "expert"] as const;
+function assertBundlePerspectiveMix(bundle: SsSubIssueBundle): string | null {
+  const persp = new Set<string>();
+  const stances = new Set<string>();
+  for (const s of bundle.sources) {
+    (s.perspective ?? []).forEach((p) => persp.add(p));
+    if (s.stance) stances.add(s.stance);
+  }
+  const missingPersp = SS_REQUIRED_PERSPECTIVES.filter((p) => !persp.has(p));
+  const missingStance: string[] = [];
+  if (!stances.has("supportive")) missingStance.push("supportive");
+  if (!stances.has("opposing")) missingStance.push("opposing");
+  if (missingPersp.length === 0 && missingStance.length === 0) return null;
+  const parts: string[] = [];
+  if (missingPersp.length) parts.push(`missing perspectives: ${missingPersp.join(", ")}`);
+  if (missingStance.length) parts.push(`missing stances: ${missingStance.join(", ")}`);
+  return parts.join("; ");
+}
+for (const b of SS_SUB_ISSUE_BUNDLES) {
+  const issues = assertBundlePerspectiveMix(b);
+  if (issues) {
+    console.error(`[generate] SS bundle "${b.subIssue}" fails perspective mix: ${issues}`);
+  }
+}
+
+
+
 const SS_ISSUE_TRIGGERS: Record<1 | 2 | 3, RegExp> = {
   1: /(citizenship|civic|national identity|governance|good government|rule of law|leadership|exploring citizenship|issue\s*1)/i,
   2: /(diverse society|diversity|multicultural|multiracial|multi[- ]?religious|racial harmony|ethnic|inclusion|prejudice|discrimination|cohesion|issue\s*2)/i,
