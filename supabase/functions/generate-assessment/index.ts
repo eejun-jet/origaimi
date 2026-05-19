@@ -2835,10 +2835,12 @@ Deno.serve(async (req) => {
           const baseContext = sectionBundleForSection?.contextWriteUp
             ? sectionBundleForSection.contextWriteUp.replace(/\[(CONTEXT|\/CONTEXT)\]/g, "")
             : "";
-          const PERSPECTIVE_NOTICE = "The sources below deliberately include official, individual, foreign and expert voices, with both supportive and opposing views, so that you can weigh perspectives against each other.";
-          const contextBody = baseContext.trim()
-            ? `${baseContext.trim()} ${PERSPECTIVE_NOTICE}`
-            : PERSPECTIVE_NOTICE;
+          // Use the bundle's curated writeup verbatim. The writeup itself
+          // explains the issue, the competing perspectives and the wider
+          // context — we no longer append a meta-notice about how the
+          // sources were curated. The variety-of-perspectives rule is still
+          // enforced at module load by assertBundlePerspectiveMix.
+          const contextBody = baseContext.trim();
           source_excerpt = contextBody
             ? `[CONTEXT] ${contextBody} [/CONTEXT]\n\n${joinedSources}`
             : joinedSources;
