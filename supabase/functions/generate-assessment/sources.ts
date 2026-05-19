@@ -897,19 +897,19 @@ export async function fetchGroundedImageSources(
   const loKw = extractKeywords(learningOutcomes.join(" "), 4);
   if (topicKw.length === 0) return [];
 
-  // Try a small set of angles — pictorial sources include cartoons, posters,
-  // photographs, graphs/charts, maps. We deliberately cap to the 3 highest-
-  // value angles so this fetch never dominates total run time.
+  // Try a small set of angles spanning both History (cartoon/poster) and SS
+  // (photograph/news photo/infographic). Cap to 4 to stay within budget.
   const baseTerms = [...topicKw, ...loKw].slice(0, 8).join(" ");
   const queries = [
-    `${baseTerms} political cartoon`,
-    `${baseTerms} propaganda poster`,
-    `${baseTerms} historical photograph`,
+    `${baseTerms} photograph`,
+    `${baseTerms} news photo`,
+    `${baseTerms} infographic chart`,
+    `${baseTerms} political cartoon poster`,
   ];
 
   const topicVocab = syllabusKeywordsFor(topic, learningOutcomes);
   // Hard wall-clock cap: pictorial fetches must never spend more than ~9s
-  // total across all passes (strict → relaxed → final).
+  // total across all passes (strict → relaxed).
   const deadline = Date.now() + 9000;
   // We track image-host usage SEPARATELY from text-source hosts. A pictorial
   // and a text source from the same publisher (e.g. BBC, Britannica) is
@@ -918,13 +918,12 @@ export async function fetchGroundedImageSources(
   const localImageHosts = new Set<string>();
   const picked: GroundedImageSource[] = [];
   const pickedCategories = new Set<VisualCategory>();
-  // Staged passes: strict (allow-list + positive score), then relaxed
-  // (allow-list, score > -3), then final (drop allow-list, score > -3).
-  // Each subsequent pass only runs if we still haven't picked anything AND
-  // there is wall-clock budget left, so latency stays bounded but we no
-  // longer silently ship a pictorial-less SBQ section just because the
-  // image descriptions had weak keyword overlap.
-  const passes: Array<"strict" | "relaxed" | "final"> = ["strict", "relaxed", "final"];
+  // Two staged passes only: strict (allow-list + positive score) and
+  // relaxed (allow-list, score > -3). We NEVER bypass the humanities
+  // allow-list and we ALWAYS require at least one issue-keyword hit, so
+  // a misaligned picture can't slip in just because the strict pass
+  // returned nothing. Better to ship 0–1 image than an unrelated one.
+  const passes: Array<"strict" | "relaxed"> = ["strict", "relaxed"];
 
   for (const pass of passes) {
     if (picked.length >= count) break;
