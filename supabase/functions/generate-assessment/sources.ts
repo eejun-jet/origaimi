@@ -926,6 +926,8 @@ export async function fetchGroundedImageSources(
 
   for (const pass of passes) {
     if (picked.length >= count) break;
+    // Skip relaxed pass when sub-issue vocab is rich — don't loosen alignment.
+    if (pass === "relaxed" && coreVocab.length >= 2) break;
     for (const query of queries) {
       if (picked.length >= count) break;
       if (Date.now() > deadline) break;
