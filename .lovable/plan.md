@@ -1,57 +1,58 @@
-## What went wrong on this SS Test run
+## Goal
 
-You typed:
+Make it a hard rule that every Social Studies SBQ source bundle includes a deliberate **variety of perspectives**, not just whatever 5 to 6 sources happen to be curated for a sub-issue. The rule should be enforceable in code (so future bundles can't quietly drift) and visible to the teacher/student framing.
 
-> "i want a topic on the SBQ case study to be about serving NAtional Service and Singapore identity, and Citizenship roles and responsibilities"
+## Required perspective mix (per bundle, minimum)
 
-Two distinct bugs combined:
+Each SS bundle of 5 to 6 sources must include **at least one of each** of these tags, and the 5 or 6 sources together must contain **both a supportive and an opposing stance** on the bundle's `assertion`:
 
-### Bug 1 — Your raw note was pasted verbatim as the SBQ background
-In `supabase/functions/generate-assessment/index.ts` (~line 2683), when a teacher focus is present we currently prepend `Teacher focus: <full instructions text>.` directly into the `[CONTEXT]…[/CONTEXT]` envelope that students read on the paper. So your sentence — typos, "i want a topic on the SBQ…", and all — ended up as the first line of the case-study background. That's wrong: teacher instructions are a *brief* to the generator, not student-facing text.
+- `gov_official` — Singapore government, ministry, parliamentary reply, statutory board
+- `individual` — named Singaporean voice: citizen interview, op-ed, ground-up account, civil society / NGO (e.g. TWC2)
+- `foreign` — non-Singapore voice: international body (OECD, ILO, UN), foreign press, comparative case (HK, Quebec, etc.)
+- `expert` — academic / think-tank analysis (IPS, LKYSPP, Cambridge, NUS researcher)
+- Stance balance: ≥1 source clearly **supports** the assertion AND ≥1 clearly **opposes / qualifies** it
 
-### Bug 2 — The sources didn't fit, because there is no NS bundle
-The SS focus-matching logic in `pickSsSubIssueBundle()` (~line 725) tokenises your focus and scores it against every curated bundle. With "national identity" and "citizenship" as strong tokens, the scorer locked onto the **HDB / Singaporean national identity** bundle (lines 595–609) because the words *citizenship* and *national identity* appear all over its excerpts. But you actually asked about **National Service** — and there is **no NS curated bundle in `SS_SUB_ISSUE_BUNDLES`** at all. So the focus "matched" a thematically adjacent but materially wrong case (HDB), and Q1–Q5 ended up interrogating million-dollar flats instead of NS.
+A single source can carry one perspective tag plus a stance tag.
 
-Compounding this, the current threshold (`best.s >= 2`) is too loose. Any 2 incidental keyword overlaps marks the run as `focusMatched=true`, so even the "focus didn't match" UI banner never fired.
+## Changes to `supabase/functions/generate-assessment/index.ts`
 
-## Plan
+1. **Extend the SS source type** with two optional-then-required fields:
+  ```ts
+   type SsPerspective = 'gov_official' | 'individual' | 'foreign' | 'expert';
+   type SsStance = 'supportive' | 'opposing' | 'mixed';
+   // on each curated source:
+   perspective: SsPerspective;
+   stance: SsStance;
+  ```
+2. **Audit + tag every source** in `SS_SUB_ISSUE_BUNDLES` (currently ~7 bundles: housing inequality, HDB identity, National Service, civic participation, racial/religious harmony, migrant workers, immigrant integration). For each bundle, label every source's `perspective` and `stance`. Where a bundle is missing a required perspective (most likely missing `foreign` or missing an explicit `opposing` voice), **add or swap one source** so the rule is satisfied. Existing source URLs and excerpts stay where they already meet the rule; we only edit gaps.
+3. **Add a bundle validator** that runs once at module load (and inside `pickSsSubIssueBundle` before returning):
+  ```ts
+   function assertBundlePerspectiveMix(b: SsSubIssueBundle): void
+  ```
+   Throws (loudly logged, returns fallback bundle) if any of the four perspective tags is missing OR if stances don't include both `supportive` and `opposing`. Logs which bundle + which rule failed so future regressions surface in edge logs.
+4. **Surface the rule in the SBQ framing.** In the `[CONTEXT]` envelope appended for SS papers (~line 2683), append one fixed sentence: *"The five sources below deliberately include official, individual, foreign and expert voices, with both supportive and opposing views, so that you can weigh perspectives against each other."* This makes the variety explicit to students without leaking teacher instructions.
+5. **No change to History bundles, no change to AI fallback path, no UI changes.** The teacher-facing fallback banner already exists.
 
-### 1. Add a National Service bundle (`SS_SUB_ISSUE_BUNDLES`, Issue 1)
-New bundle:
-- `subIssue`: "National Service and Singaporean citizenship"
-- `inquiryQuestion`: "How far has National Service shaped what it means to be a Singaporean citizen?"
-- `assertion`: "National Service is the single most important experience binding Singaporean men to their citizenship."
-- `triggers`: `/(national service|\bns\b|nsf|nsmen|conscription|enlistment|mindef|saf|reservist|ict|citizen soldier|pr.{0,15}(ns|service)|exempt.{0,15}(ns|service))/i`
-- `contextWriteUp`: ~120-word paragraph framing NS Act 1967 → 2½-year full-time service → reservist cycle → debates over PR/new-citizen liability, gender, and identity formation. Tied to Issue 1 KO/AO1+AO2.
-- 5 curated sources, each on the SAME tension (NS and citizenship):
-  1. MINDEF "Why we serve" — official rationale + NS Act 1967 history (mindef.gov.sg)
-  2. PM/parliamentary speech reaffirming NS as a "rite of citizenship" (PMO.gov.sg / parliament Hansard excerpt)
-  3. IPS or CNA commentary on NS and male Singaporean identity (channelnewsasia.com or lkyspp)
-  4. Parliamentary reply on PR sons and NS liability — the perceived-fairness dimension (parliament.gov.sg)
-  5. Counter-perspective: academic/CNA piece on women, new citizens and unequal access to the "NS bonding" experience
+## Verification
 
-### 2. Stop printing teacher's raw text into the student-facing background
-Replace the `focusSentence` block (~lines 2683–2691):
-- Remove `Teacher focus: <ssFocusRequested>.` from the `[CONTEXT]` envelope entirely. Students should only ever see the curated `contextWriteUp`.
-- Remove the "Note: this paper falls back to the curated case on …" line from the printed context as well. Teachers should not see meta-text *inside* the student paper either.
-- Both pieces of information move to the existing `notes` field on Q1 (already wired). The UI already renders `SS_FOCUS_FALLBACK::…` as an inline teacher-facing banner on the assessment view — that is the right place for "your focus didn't match".
+1. Re-run `SS Test 4` (National Service): inspect the rendered SBQ — confirm Q1's source block lists 5 sources and that MINDEF, PMO, IPS/CNA, parliamentary reply, and a counter/foreign voice are all present.
+2. Generate an SS paper with focus "racial harmony" → check that the racial-harmony bundle now reaches the validator with a Quebec/foreign source AND at least one critical/individual voice.
+3. Temporarily delete one source from a bundle in code, restart the function, confirm the validator logs the failure and falls back. Revert.
+4. Read the produced `[CONTEXT]` text in the assessment view: confirm the new "deliberately include official, individual, foreign and expert voices" sentence appears, and the teacher's raw instructions are still not present.
 
-### 3. Tighten focus-match threshold so HDB stops absorbing NS prompts
-In `pickSsSubIssueBundle()` (~lines 760–805):
-- Require either (a) the bundle's `triggers` regex matches the cleanFocus directly (`score >= 5` in current scoring), or (b) at least **3** distinct keyword overlaps **and** the top-scoring bundle's lead margin over the runner-up is **≥ 2**. Otherwise treat as fallback.
-- Expand the stopword list to also drop generic SBQ vocabulary that bias scoring toward HDB/civic bundles when the real subject is something else: `topic`, `case`, `study`, `serving`, `roles`, `responsibilities`, `identity`, `citizenship`. (These are too generic — if they're the *only* overlap they shouldn't pick a bundle. With the NS bundle in place, the *specific* tokens "national" + "service" / "ns" will drive selection correctly via the trigger regex.)
-- When fallback is taken, log the top 3 scored bundles + their scores so we can debug future misfires from edge logs.
+## Out of scope
 
-### 4. Verification
-1. Regenerate "SS Test 4" with a note about National Service → SBQ uses the new NS bundle (trigger regex hits `national service`), background reads as a clean NS framing paragraph, no teacher-text bleed.
-2. Generate with "HDB and Singaporean identity" → still hits the HDB bundle (existing trigger still wins).
-3. Generate with "quantum computing" → top score < threshold → fallback to hash, UI banner fires, edge log records the top-3 scored bundles.
-4. Inspect the generated paper view: verify the `[CONTEXT]` block contains ONLY the curated paragraph, and the inline teacher banner (yellow notice) appears only when fallback occurred.
+- No change to History SBQ bundles or their source format.
+- No live AI source synthesis — stays deterministic / curated.
+- No new UI components; the existing teacher-facing fallback banner is unchanged.
 
-### Out of scope
-- No change to History SBQ.
-- No live AI synthesis of bundles. We stay on the deterministic curated path; the fix is (a) cover the missing NS case, (b) stop dumping raw instructions into the student paper, (c) make false-positive matches less likely.
+## Memory
 
-### Files touched
-- `supabase/functions/generate-assessment/index.ts` — add NS bundle, tighten `pickSsSubIssueBundle`, remove focus text from `[CONTEXT]` envelope, keep `notes` flag for UI banner.
-- No client changes required (UI banner is already wired).
+Save a project-memory rule so future bundle additions automatically respect this constraint:
+
+> SS SBQ source bundles MUST include a variety of perspectives: at least one government/official, one individual Singaporean, one foreign/international, one expert/academic, and both supportive and opposing stances on the bundle's assertion.
+
+## Files touched
+
+- `supabase/functions/generate-assessment/index.ts` — type extension, per-source tagging across SS bundles, validator, one extra sentence in SS `[CONTEXT]` envelope.
+- `mem://features/social-studies-source-perspectives` (new) + `mem://index.md` (link added).
