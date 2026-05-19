@@ -2755,7 +2755,10 @@ Deno.serve(async (req) => {
           const baseContext = sectionBundleForSection?.contextWriteUp
             ? sectionBundleForSection.contextWriteUp.replace(/\[(CONTEXT|\/CONTEXT)\]/g, "")
             : "";
-          const contextBody = baseContext.trim();
+          const PERSPECTIVE_NOTICE = "The sources below deliberately include official, individual, foreign and expert voices, with both supportive and opposing views, so that you can weigh perspectives against each other.";
+          const contextBody = baseContext.trim()
+            ? `${baseContext.trim()} ${PERSPECTIVE_NOTICE}`
+            : PERSPECTIVE_NOTICE;
           source_excerpt = contextBody
             ? `[CONTEXT] ${contextBody} [/CONTEXT]\n\n${joinedSources}`
             : joinedSources;
