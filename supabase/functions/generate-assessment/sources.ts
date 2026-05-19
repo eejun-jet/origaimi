@@ -142,6 +142,12 @@ const MAX_WORDS = 240;
 
 export type SubjectKind = "humanities" | "english" | null;
 
+/** Perspective tag for SS SBQ source bundles. A single source can carry
+ *  multiple tags (e.g. an OECD report is both "foreign" and "expert"). */
+export type SsPerspective = "gov_official" | "individual" | "foreign" | "expert";
+/** Stance of a source relative to the bundle's debatable assertion. */
+export type SsStance = "supportive" | "opposing" | "mixed";
+
 export type GroundedSource = {
   excerpt: string;
   source_url: string;
@@ -152,6 +158,10 @@ export type GroundedSource = {
    *  Generated post-fetch by `provenance.ts`; falls back to a deterministic
    *  "From <publisher>: <title>." */
   provenance?: string;
+  /** Used only for curated Social Studies SBQ bundles; enforced by
+   *  assertBundlePerspectiveMix() so every bundle covers a variety of voices. */
+  perspective?: SsPerspective[];
+  stance?: SsStance;
 };
 
 /** A pictorial primary source — cartoon, propaganda poster, photograph, etc.
