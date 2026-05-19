@@ -908,21 +908,20 @@ export async function fetchGroundedImageSources(
   ];
 
   const topicVocab = syllabusKeywordsFor(topic, learningOutcomes);
+  // Narrower anchor vocab derived only from the bundle's subIssue (topic) and
+  // its inquiryQuestion (first LO). Used to require sub-issue-specific terms
+  // in the caption, not just generic shared words.
+  const coreVocab = syllabusKeywordsFor(topic, learningOutcomes.slice(0, 1))
+    .filter((kw) => kw.length >= 5);
   // Hard wall-clock cap: pictorial fetches must never spend more than ~9s
   // total across all passes (strict → relaxed).
   const deadline = Date.now() + 9000;
-  // We track image-host usage SEPARATELY from text-source hosts. A pictorial
-  // and a text source from the same publisher (e.g. BBC, Britannica) is
-  // perfectly fine and should NOT block the image. We still de-dupe images
-  // amongst themselves so a section gets variety.
   const localImageHosts = new Set<string>();
   const picked: GroundedImageSource[] = [];
   const pickedCategories = new Set<VisualCategory>();
-  // Two staged passes only: strict (allow-list + positive score) and
-  // relaxed (allow-list, score > -3). We NEVER bypass the humanities
-  // allow-list and we ALWAYS require at least one issue-keyword hit, so
-  // a misaligned picture can't slip in just because the strict pass
-  // returned nothing. Better to ship 0–1 image than an unrelated one.
+  // Two staged passes: strict (positive score) and relaxed (score > -3).
+  // When the sub-issue has a meaningful vocab we skip relaxed entirely —
+  // better to ship 0 images than a loosely-aligned one.
   const passes: Array<"strict" | "relaxed"> = ["strict", "relaxed"];
 
   for (const pass of passes) {
