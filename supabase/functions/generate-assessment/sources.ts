@@ -960,7 +960,9 @@ export async function fetchGroundedImageSources(
         .map((im) => {
           const host = hostnameOf(im.url);
           const tier = humanitiesTier(host);
-          const desc = (im.description ?? "").toLowerCase();
+          const descRaw = (im.description ?? "").trim();
+          const desc = descRaw.toLowerCase();
+          const descLen = descRaw.length;
           const category = classifyVisualCategory(desc);
           let score = 0;
           let kwHits = 0;
@@ -973,23 +975,35 @@ export async function fetchGroundedImageSources(
           if (/logo|icon|avatar|sprite|banner|advert|stock photo|clip ?art|silhouette|illustration of generic/.test(desc)) score -= 6;
           // Diversity bonus: prefer a category we haven't picked yet.
           if (category !== "other" && !pickedCategories.has(category)) score += 4;
-          return { im, score, host, category, kwHits };
+          return { im, score, host, category, kwHits, descLen };
         })
         .sort((a, b) => b.score - a.score)
-        // ALWAYS require at least one issue-keyword hit so a misaligned
-        // picture can't slip through. Strict pass also demands a positive
-        // total score; relaxed allows score > -3 but still needs a keyword.
-        .filter((r) => r.kwHits > 0 && (pass === "strict" ? r.score > 0 : r.score > -3));
+        // ALWAYS require at least one issue-keyword hit AND a substantive
+        // description (>= 60 chars) so an image with a near-empty caption
+        // can't ship a placeholder under the figure. Strict pass also
+        // demands a positive total score; relaxed allows score > -3.
+        .filter((r) => r.kwHits > 0 && r.descLen >= 60 && (pass === "strict" ? r.score > 0 : r.score > -3));
 
       if (ranked.length === 0) continue;
 
       for (const cand of ranked) {
         if (picked.length >= count) break;
         if (localImageHosts.has(cand.host)) continue;
+        // Build the caption that will actually print and re-verify it
+        // contains at least one issue keyword. This guarantees that what
+        // the student reads under the image is substantive AND on-topic.
+        const printableCaption = (cand.im.description ?? "").trim().slice(0, 220);
+        if (printableCaption.length < 60) continue;
+        const captionLower = printableCaption.toLowerCase();
+        const captionKwHits = topicVocab.filter(
+          (kw) => kw.length >= 4 && captionLower.includes(kw),
+        ).length;
+        if (captionKwHits === 0) continue;
+
         // Find the page that contained the image, for a clean citation.
         const sourcePage = results.find((r) => hostnameOf(r.url) === cand.host)?.url ?? cand.im.url;
         const sourceTitle = results.find((r) => hostnameOf(r.url) === cand.host)?.title
-          ?? cand.im.description?.slice(0, 120)
+          ?? printableCaption.slice(0, 120)
           ?? `${topic} — pictorial primary source`;
 
         localImageHosts.add(cand.host);
@@ -1000,7 +1014,7 @@ export async function fetchGroundedImageSources(
         picked.push({
           kind: "image",
           image_url: cand.im.url,
-          caption: (cand.im.description ?? "").trim().slice(0, 220) || `Pictorial source: ${topic}`,
+          caption: printableCaption,
           source_url: sourcePage,
           source_title: sourceTitle,
           publisher: publisherOf(sourcePage),
