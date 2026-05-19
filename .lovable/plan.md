@@ -1,56 +1,64 @@
 ## Goal
 
-Stop SS Section B SRQ stems from concatenating the syllabus **strand prefix** (e.g. `"Exploring Citizenship and Governance: "`) and the raw KO/LO sentence verbatim into the question. The stem should read as a clean issue phrase, not as the syllabus row label.
+Fix the SS SBQ "Background to the issue" block so it reads as a real 5–7 sentence briefing about the issue, the perspectives on it, and its context/importance — not as a meta-notice about how the sources were curated.
 
-Two real examples from the user:
+Two changes, both in `supabase/functions/generate-assessment/index.ts`.
 
-- ❌ `Explain two reasons why exploring Citizenship and Governance: different attributes can shape one's understanding of citizenship can create challenges for society.`
-- ✅ `Explain two reasons why different attributes shaping one's understanding of citizenship can create challenges for society.`
+## 1. Drop the `PERSPECTIVE_NOTICE` sentence from the runtime envelope
 
-- ❌ `How far do you agree that government action is the most effective way to respond to exploring Citizenship and Governance: different attributes can shape one's understanding of citizenship? Explain your answer.`
-- ✅ `How far do you agree that government action is the most effective way to respond to different attributes shaping one's understanding of citizenship? Explain your answer.`
+Currently (~L2835–2844) the printed `[CONTEXT]` block is:
 
-## Where it comes from
+```
+<bundle.contextWriteUp>  The sources below deliberately include official, individual, foreign and expert voices, with both supportive and opposing views, so that you can weigh perspectives against each other.
+```
 
-`buildDeterministicSsSrqQuestions` (index.ts ~L1274) takes `section.topic_pool[0].topic` and runs it through `deriveTopicNoun` (~L1071). For SS the topic string is often shaped like `"<Strand>: <KO/LO clause>"` (e.g. `"Exploring Citizenship and Governance: different attributes can shape one's understanding of citizenship"`). `deriveTopicNoun` was tuned for History titles (verb-led directives) and does not strip:
+That trailing sentence is the one the user wants gone. Change the builder to use the bundle's `contextWriteUp` verbatim:
 
-1. A leading `"<Strand words>:"` prefix.
-2. Modal/clause forms like `"<X> can <verb> <Y>"` that don't slot grammatically into `"reasons why … can create challenges"` or `"respond to …"`.
+- Delete the `PERSPECTIVE_NOTICE` constant.
+- `contextBody = baseContext.trim()` (no append). If `baseContext` is empty, omit the `[CONTEXT]…[/CONTEXT]` envelope entirely (existing fallback branch already supports that).
 
-The same raw topic is also passed into the LLM SRQ prompt block (~L1762), so the model copies the same ugly phrasing.
+The variety-of-perspectives **rule** stays — `assertBundlePerspectiveMix` at module load still enforces that every SS bundle has all 4 perspectives + both stances. We only stop telling the student about it in the printed paper; the curated writeup now carries the message.
 
-## Changes to `supabase/functions/generate-assessment/index.ts`
+## 2. Rewrite the 9 SS `contextWriteUp` values to 5–7 sentences
 
-1. **Add `deriveSsIssuePhrase(rawTopic, learningOutcomes)`** — SS-specific cleaner used by both the deterministic SRQ builder and the LLM SRQ prompt:
-   - Strip a leading strand prefix when the topic contains `:` and the left side matches a known SS strand stem (`Exploring Citizenship and Governance`, `Living in a Diverse Society`, `Being Part of a Globalised World`, plus a generic 2–6 word title-case fallback ending in `:`). Keep only the right-hand clause.
-   - Lowercase the first word unless it's a proper noun (reuse the existing proper-noun guard).
-   - Rewrite `"<subject> can <verb> <object>"` → `"<subject> <verb>ing <object>"` so the phrase reads as a noun phrase (e.g. `"different attributes can shape one's understanding of citizenship"` → `"different attributes shaping one's understanding of citizenship"`). Handle the common verbs `shape, affect, influence, create, cause, drive, lead, support, undermine, challenge, strengthen, weaken, threaten` — leave the phrase untouched if no rule matches (safer than mangling).
-   - Strip trailing punctuation, collapse whitespace, cap at ~14 words.
-   - Fallback to `deriveTopicNoun` output if the cleaned string ends up empty.
+Every SS bundle in `SS_SUB_ISSUE_BUNDLES` (~L579 onward) gets a refreshed `contextWriteUp` that explicitly hits the three beats the user named:
 
-2. **Use it in `buildDeterministicSsSrqQuestions`** (~L1277): replace `const issue = deriveTopicNoun(...)` with `const issue = deriveSsIssuePhrase(...)`. The two stems at L1293 / L1306 then read cleanly. `topicTag` (used for tagging, not the stem) keeps the original strand label so reporting/coverage is unaffected.
+1. **What the issue is about** — name the issue, define it, scope it.
+2. **What the different perspectives on it are** — government/official framing, individual/citizen lived experience, foreign comparison, expert/academic view; surface supportive + opposing stances.
+3. **Context and importance** — why it matters now (recent policy moves, recent events, why students should care).
 
-3. **Use it in the SS SRQ LLM prompt** (~L1762 `ssStructuredBlock`): pass the cleaned issue phrase into the prompt and add one explicit instruction:
-   > "When NAMING the SS issue in the stem, use the cleaned issue phrase provided below. Do NOT prefix it with the syllabus strand label (e.g. 'Exploring Citizenship and Governance:') and do NOT paste the raw KO/LO sentence verbatim. Rephrase modal clauses ('X can shape Y') as noun phrases ('X shaping Y') so the stem reads grammatically after 'reasons why …' or 'respond to …'."
+Length target: 5–7 sentences, neutral tone, no "the sources below…" meta-language, no "weigh the sources to judge…" sign-off (that framing duplicates what the question stems already do).
 
-   Also surface the cleaned phrase in the prompt as `ISSUE PHRASE TO USE IN STEMS: "<phrase>"`.
+Bundles to rewrite (titles for reference, full prose written in the edit):
 
-4. **No change** to History SRQ/essay phrasing, to SBQ source bundles, to AOs/KOs/LOs, to mark schemes, or to UI.
+1. `housing inequality and Singaporean identity`
+2. `HDB public housing and Singaporean national identity`
+3. `National Service and Singaporean citizenship`
+4. `civic participation and the limits of dissent in Singapore`
+5. `managing race and religion in everyday Singapore`
+6. `migrant workers and belonging in a diverse society`
+7. (and the remaining 3 SS bundles — globalisation/economic, globalisation/security, globalisation/culture)
+
+For each bundle the new writeup will:
+- Open with one sentence stating the issue and its scope.
+- Two to three sentences giving the official/policy frame and the lived-experience / individual frame.
+- One sentence bringing in a foreign comparison or expert view (and naming a clear opposing stance where one exists).
+- One closing sentence on why the issue matters now (recent policy, recent event, demographic pressure, etc.).
+
+## 3. Out of scope
+
+- **History bundles** (`HUMANITIES_SBQ_BUNDLES`) are unchanged — the user complaint and the perspective rule are SS-specific.
+- No change to source fetching, perspective tagging, `assertBundlePerspectiveMix`, SRQ/essay generation, mark schemes, or UI parsing of `[CONTEXT]…[/CONTEXT]`.
+- No DB / schema / route changes.
+- Memory file `mem://features/social-studies-source-perspectives` stays — the underlying rule is unchanged; only the student-facing surface is being removed.
 
 ## Verification
 
-1. Re-run an SS paper whose Section B targets `Exploring Citizenship and Governance > different attributes can shape one's understanding of citizenship`. Confirm both stems match the ✅ examples above.
-2. Re-run an SS paper on `Living in a Diverse Society > responding to differences and tensions in a diverse society` — confirm the strand prefix is dropped and the modal-clause rewrite still produces a readable stem.
-3. Re-run an SS paper on `Being Part of a Globalised World > globalisation creates economic, cultural and security impacts` — confirm both deterministic and LLM paths emit clean stems.
-4. Spot-check a History paper (e.g. Cold War) — `deriveTopicNoun` path is unchanged, History essay stems must read identically to before.
-
-## Out of scope
-
-- No change to History question stems or builders.
-- No change to SBQ phrasing, source bundles, perspective rule, or `[CONTEXT]` envelope.
-- No DB / schema / UI changes.
+1. Generate an SS paper on `housing inequality and Singaporean identity`. The "Background to this issue" block must (a) not contain the deleted sentence, (b) read as 5–7 sentences covering issue / perspectives / importance.
+2. Repeat for at least two more SS sub-issues (one Citizenship, one Globalisation strand) to confirm tone consistency.
+3. Generate a History SBQ paper (e.g. Cold War origins) — the History `contextWriteUp` must render unchanged.
+4. Check edge function logs at module load: `assertBundlePerspectiveMix` must still pass for all 9 SS bundles.
 
 ## Files touched
 
-- `supabase/functions/generate-assessment/index.ts` — add `deriveSsIssuePhrase`, swap it into the deterministic SS SRQ builder, thread it into the SS SRQ LLM prompt block.
-- (No memory update — this is a phrasing fix, not a new product rule.)
+- `supabase/functions/generate-assessment/index.ts` — remove `PERSPECTIVE_NOTICE` append, rewrite 9 SS `contextWriteUp` strings.
