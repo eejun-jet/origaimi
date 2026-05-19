@@ -1,76 +1,107 @@
 ## What's wrong
 
-### Problem 1 — the SS "Background to this issue" writeups read like source digests
+### Problem 1 — total source count drifts below 6
 
-The writeups rendered above the SBQ sources come verbatim from each bundle's `contextWriteUp` in `SS_SUB_ISSUE_BUNDLES` (`supabase/functions/generate-assessment/index.ts` ~L584–L700). Reading the migrant-workers one (L662) makes the pattern obvious — it walks paragraph-by-paragraph through what MOM said, then what the BBC reported, then ILO, then IPS-CNA. That structure mirrors the source list, not the issue:
-
-> "The Government acknowledges… The 2020 COVID-19 outbreaks… NGOs like TWC2 describe… The ILO's global migrant-worker report supports… an IPS-CNA survey found…"
-
-What the user wants instead, for SS Test 8 (migrant workers) and every other SS sub-issue: a 5–7 sentence paragraph that (1) names the central tension the foreign-worker presence creates, (2) lays out the competing views or stances on that tension (without naming sources), and (3) explains the wider context / why it matters. The sources should be the *evidence* a student reaches for after reading the framing — not the spine of the framing itself.
-
-### Problem 2 — pictorial sources still ship with empty / generic captions
-
-`fetchGroundedImageSources` in `sources.ts` (L889–L1019) requires `kwHits > 0` on the image *description* during ranking. That works to keep off-topic images out, but the caption that actually prints is built at L1003:
+In `supabase/functions/generate-assessment/index.ts` (~L2294, L2423):
 
 ```ts
-caption: (cand.im.description ?? "").trim().slice(0, 220) || `Pictorial source: ${topic}`,
+const MAX_TOTAL_SOURCES = 6;
+const MAX_IMAGE_SOURCES = 2;
+...
+const FETCH_TARGET = Math.max(0, MAX_TOTAL_SOURCES - MAX_IMAGE_SOURCES); // = 4
 ```
 
-So if a candidate has a thin description (e.g. 1–2 words that happened to match a keyword), or if the description got stripped, the printed caption becomes either a near-empty phrase or the fallback `"Pictorial source: <topic>"`. That's the user's "the infographic doesn't say anything" complaint — the image was technically aligned but its caption carried zero substance about the issue.
+`FETCH_TARGET` is fixed at 4 *before* we know how many pictorials will pass the tightened filter. After the pictorial step:
+
+- 2 images found → 4 text + 2 images = 6 ✓
+- 1 image found → 4 text + 1 image = 5 ✗
+- 0 images found → 4 text + 0 = 4 ✗ (user's "SS Test 9" complaint)
+
+The trim at L2554 (`textCap = MAX_TOTAL - imagesCount`) only ever *caps*; it never tops the text pool back up after a pictorial miss.
+
+### Problem 2 — pictorial alignment is still too loose
+
+In `sources.ts` `fetchGroundedImageSources` (L959–L1001), filtering requires:
+- `kwHits > 0` against `topicVocab`
+- `descLen >= 60`
+- `captionKwHits > 0` against `topicVocab`
+
+`topicVocab` is `syllabusKeywordsFor(topic, learningOutcomes)`. When `imageTopic = sectionBundleForSection.subIssue` (L2520) and the LOs include `inquiryQuestion + assertion + contextWriteUp`, the vocab balloons to dozens of generic terms ("Singapore", "society", "policy", "worker", "national"). A single generic match passes. There is no requirement that the caption mention a *sub-issue-defining* term (e.g. "dormitory", "migrant", "foreign worker", "S Pass"), and no minimum hit count.
+
+The relaxed pass with `score > -3` further widens the door even after strict found nothing aligned.
 
 ## Plan
 
-### Fix 1 — rewrite all SS contextWriteUp strings to be tension-and-views first
+### Fix 1 — always ship 6 sources (when supply allows)
 
-Edit only `SS_SUB_ISSUE_BUNDLES` in `supabase/functions/generate-assessment/index.ts` (each `contextWriteUp` between ~L584 and ~L700). For every entry, replace the string with a 5–7 sentence writeup that follows this structure:
+Edit `supabase/functions/generate-assessment/index.ts`:
 
-1. **Sentence 1–2 — the tension.** Open by naming the central issue and the tension it creates (e.g. for migrant workers: economic interdependence vs. residential/social separation; the diverse-society promise tested at the dormitory wall).
-2. **Sentence 3–5 — the competing views.** Lay out the main positions WITHOUT naming sources — "the Government's position is…", "advocacy groups argue…", "researchers find…", "many citizens hold…", "comparative international evidence suggests…". Each clause names a stance + what it claims, not who said it. Both supportive and opposing framings appear.
-3. **Sentence 6–7 — context and stakes.** Why the issue matters now (recent events, policy changes, what's at stake for citizenship / cohesion / identity).
+1. **Fetch text to fill the full cap, not the cap-minus-images.** Change `FETCH_TARGET` (L2423) to `MAX_TOTAL_SOURCES` (= 6). Curated seeding (`CURATED_SEED_CAP = 4`) and curated backfill (L2476–L2509) both already use `poolSize` / `FETCH_TARGET`; raising `FETCH_TARGET` lets them top up to 6 from curated bundles when live fetch and pictorials underdeliver.
 
-Anti-patterns to avoid in the rewrite:
-- Do NOT enumerate "MOM said X, BBC reported Y, ILO argued Z" — the sources do that job below.
-- Do NOT cite specific publishers, report names, or single statistics tied to one source. Headline figures that frame the issue (e.g. "about 1.5 million foreign workers") are fine.
-- Do NOT close with a meta line about how the sources were curated — the variety-of-perspectives rule is already enforced separately by `assertBundlePerspectiveMix`.
+2. **Run pictorial fetch BEFORE the final text trim, then trim text to `6 - imagesFound`.** The order already does this (L2514 pictorial, L2553 trim), but trim currently only shortens — add a top-up step: if `sharedSourcePool.length < (MAX_TOTAL_SOURCES - imagesCount)`, re-run the curated backfill pass with the new target. Concretely, factor the existing L2484–L2508 backfill into a small local helper `topUpFromCurated(target: number)` and call it twice: once after live fetch (target = 6) and once after the pictorial result is known (target = 6 - imagesCount).
 
-Apply this rewrite to all SS sub-issues currently in the bundle: housing inequality, public housing and identity, NS, civic participation, migrant workers, foreign immigrants/integration, and any others present in the file. The rewrite is content-only — no schema change, no new fields, no UI change. Existing parsers (`assessment.$id.tsx` L1473, `export-docx.ts` L50) already render whatever the writeup contains as "Background to this issue".
+3. **Update the log line at L2564** to reflect that the *total* should equal `MAX_TOTAL_SOURCES` whenever curated has enough excerpts.
 
-History bundles (L442–L540) are out of scope unless the user explicitly asks — they already read more issue-framed than the SS ones and the complaint was scoped to SS.
+Net behavior:
+- 2 images → 4 text + 2 = 6
+- 1 image → 5 text + 1 = 6
+- 0 images → 6 text + 0 = 6
 
-### Fix 2 — refuse images whose caption is too thin to carry the issue
+If the SS sub-issue bundle has fewer than 6 distinct-host excerpts (some are smaller), we accept same-host repeats in pass 2 of the backfill (already implemented at L2497–L2508) so we still hit 6. The existing `assertBundlePerspectiveMix` validator at module load guards quality.
 
-Two tightenings in `fetchGroundedImageSources` (`supabase/functions/generate-assessment/sources.ts` L889–L1019), no signature change:
+### Fix 2 — refuse pictorials that don't anchor on sub-issue vocabulary
 
-1. **Reject thin descriptions during ranking.** In the `.map(...)` block (~L960), compute a `descLen = desc.trim().length`. In the `.filter(...)` predicate (~L983) require `descLen >= 60` in addition to the existing `kwHits > 0` and pass-specific score check. A 60-char minimum (~10–12 words) is short enough that real infographic/photo captions clear it, long enough that a one-word stub is rejected.
+Edit `supabase/functions/generate-assessment/sources.ts` `fetchGroundedImageSources` (L889–L1024). No signature change.
 
-2. **Recompute `kwHits` against the caption that will actually print, not a stripped lowercase scan.** Right before pushing (~L1000), build the printable caption first:
-
+1. **Introduce a "core vocab" subset.** Right after `const topicVocab = syllabusKeywordsFor(topic, learningOutcomes);` (~L910), build a *narrower* anchor list derived only from the `topic` argument (which is the bundle `subIssue` at the call site) and the first LO entry (which is `inquiryQuestion`):
    ```ts
-   const printableCaption = (cand.im.description ?? "").trim().slice(0, 220);
-   const captionKwHits = topicVocab.filter(kw => kw.length >= 4 && printableCaption.toLowerCase().includes(kw)).length;
-   if (captionKwHits === 0 || printableCaption.length < 60) continue;
+   const coreVocab = syllabusKeywordsFor(topic, learningOutcomes.slice(0, 1))
+     .filter(kw => kw.length >= 5);  // drop short common words
+   ```
+   This isolates the sub-issue-defining terms (e.g. "dormitory", "migrant", "integration") from the wider `contextWriteUp` vocab.
+
+2. **Require BOTH at filter time** (~L985):
+   - `r.kwHits >= 2` (was `> 0`) — at least two topic-vocab matches in the description, not one.
+   - At least one `coreVocab` hit in the description. Track this in the `.map` step:
+     ```ts
+     let coreHits = 0;
+     for (const kw of coreVocab) if (desc.includes(kw)) coreHits++;
+     return { im, score, host, category, kwHits, coreHits, descLen };
+     ```
+     Then in `.filter`: `r.kwHits >= 2 && r.coreHits >= 1 && r.descLen >= 60 && (pass === "strict" ? r.score > 0 : r.score > -3)`.
+
+3. **Re-verify on the printable caption** (~L997–L1001): keep the existing `captionKwHits > 0` check and add the same `coreHits` check on the caption:
+   ```ts
+   const captionCoreHits = coreVocab.filter(kw => captionLower.includes(kw)).length;
+   if (captionKwHits < 2 || captionCoreHits < 1) continue;
    ```
 
-   This guarantees what the student reads under the image contains at least one issue keyword and is substantive. If no candidate passes, ship 0 images — the existing `[pictorial-miss]` log line at `index.ts` L2537 already covers that branch and the section gracefully falls back to 4 text sources.
+4. **Drop the relaxed pass when `coreVocab.length >= 2`.** A bundle with a meaningful sub-issue should never fall back to relaxed scoring — better to ship 0 images than a generic one. At the top of the `for (const pass of passes)` loop:
+   ```ts
+   if (pass === "relaxed" && coreVocab.length >= 2 && picked.length === 0) {
+     // strict found nothing on a well-defined sub-issue → don't loosen, just stop
+     break;
+   }
+   ```
+   For sparse-vocab topics (rare) the relaxed pass still runs as today.
 
-3. **Drop the generic fallback caption.** Replace the `|| \`Pictorial source: ${topic}\`` on the `caption:` line — if `printableCaption` is empty by this point we've already `continue`d, so the fallback is dead code that only ever fired for the thin-description case we now reject. Make `caption: printableCaption` unconditional.
-
-Net effect: an image only ships if its caption stands on its own as a recognisable statement about the issue. The misaligned-infographic case the user saw can no longer pass.
+Net effect: an image only ships if its caption contains at least two issue keywords AND at least one term that's specific to this bundle's sub-issue (not a generic shared word). The "Singapore stock photo" failure mode is closed.
 
 ### Verification
 
-1. Regenerate the same SS Test 8 sub-issue (migrant workers) — confirm the "Background to this issue" block reads as a tension-and-views paragraph rather than a source-by-source digest, and confirm any pictorial source either has a substantive caption that mentions the issue or is absent.
-2. Regenerate one more SS sub-issue (e.g. housing or NS) and confirm the same pattern.
-3. Regenerate a History SBQ (e.g. Cold War origins) to confirm the History writeup still renders and pictorial cartoons/posters still come through (History rewrite is out of scope, behaviour unchanged).
-4. In edge-function logs, look for `[pictorial-miss]` on the SS run to confirm the stricter caption filter only fires when truly nothing qualified.
+1. Regenerate the same "SS Test 9" sub-issue — confirm the SBQ ships 6 sources total whether pictorials qualify or not, and any pictorial that does ship has a caption naming the specific sub-issue vocabulary.
+2. Regenerate one History SBQ (e.g. Cold War origins) — confirm 6 total sources and cartoons/posters still pass (their captions are typically rich).
+3. Edge-function logs:
+   - The `SBQ pool` line should consistently read `… text sources + N image(s) (cap 6 total, 2 pictorial)` with text + N = 6.
+   - `[pictorial-miss]` may appear MORE often after Fix 2 — that's expected. It is no longer a failure path because text now fills the gap.
 
 ### Out of scope
 
-- No change to `MAX_IMAGE_SOURCES` (2), `MAX_TOTAL_SOURCES` (6), perspective-mix rule, mark schemes, SRQ/essay generation, DB schema, UI parsers.
-- No change to History bundles (writeup or sources).
-- No change to the source-fetch query angles (`photograph`, `news photo`, `infographic chart`, `political cartoon poster`) — they already cover the SS genre.
+- `MAX_IMAGE_SOURCES` (2), perspective-mix rule, mark schemes, SRQ/essay, DB schema, UI parsers, SS/History writeups.
+- Query angles in `fetchGroundedImageSources` (already cover both genres).
+- `syllabusKeywordsFor` itself — we derive the narrower `coreVocab` at the call site so existing callers are unaffected.
 
 ### Files touched
 
-- `supabase/functions/generate-assessment/index.ts` — rewrite each SS `contextWriteUp` string in `SS_SUB_ISSUE_BUNDLES` (~L584–L700). No structural edits elsewhere.
-- `supabase/functions/generate-assessment/sources.ts` — tighten `fetchGroundedImageSources` ranking filter + push-time caption check (~L960, L983, L1000–L1005).
+- `supabase/functions/generate-assessment/index.ts` — raise `FETCH_TARGET` to `MAX_TOTAL_SOURCES`; add a post-pictorial curated top-up call; update the summary log line. (~L2423, L2476–L2509, L2549–L2564.)
+- `supabase/functions/generate-assessment/sources.ts` — add `coreVocab`, raise `kwHits` minimum to 2, require `coreHits >= 1` in both filter and caption re-check, skip relaxed pass when `coreVocab` is rich. (~L910, L959–L1001.)

@@ -908,25 +908,26 @@ export async function fetchGroundedImageSources(
   ];
 
   const topicVocab = syllabusKeywordsFor(topic, learningOutcomes);
+  // Narrower anchor vocab derived only from the bundle's subIssue (topic) and
+  // its inquiryQuestion (first LO). Used to require sub-issue-specific terms
+  // in the caption, not just generic shared words.
+  const coreVocab = syllabusKeywordsFor(topic, learningOutcomes.slice(0, 1))
+    .filter((kw) => kw.length >= 5);
   // Hard wall-clock cap: pictorial fetches must never spend more than ~9s
   // total across all passes (strict → relaxed).
   const deadline = Date.now() + 9000;
-  // We track image-host usage SEPARATELY from text-source hosts. A pictorial
-  // and a text source from the same publisher (e.g. BBC, Britannica) is
-  // perfectly fine and should NOT block the image. We still de-dupe images
-  // amongst themselves so a section gets variety.
   const localImageHosts = new Set<string>();
   const picked: GroundedImageSource[] = [];
   const pickedCategories = new Set<VisualCategory>();
-  // Two staged passes only: strict (allow-list + positive score) and
-  // relaxed (allow-list, score > -3). We NEVER bypass the humanities
-  // allow-list and we ALWAYS require at least one issue-keyword hit, so
-  // a misaligned picture can't slip in just because the strict pass
-  // returned nothing. Better to ship 0–1 image than an unrelated one.
+  // Two staged passes: strict (positive score) and relaxed (score > -3).
+  // When the sub-issue has a meaningful vocab we skip relaxed entirely —
+  // better to ship 0 images than a loosely-aligned one.
   const passes: Array<"strict" | "relaxed"> = ["strict", "relaxed"];
 
   for (const pass of passes) {
     if (picked.length >= count) break;
+    // Skip relaxed pass when sub-issue vocab is rich — don't loosen alignment.
+    if (pass === "relaxed" && coreVocab.length >= 2) break;
     for (const query of queries) {
       if (picked.length >= count) break;
       if (Date.now() > deadline) break;
@@ -966,23 +967,31 @@ export async function fetchGroundedImageSources(
           const category = classifyVisualCategory(desc);
           let score = 0;
           let kwHits = 0;
+          let coreHits = 0;
           if (tier === 1) score += 6;
           else if (tier === 2) score += 2;
           for (const kw of topicVocab) {
             if (kw.length >= 4 && desc.includes(kw)) { score += 2; kwHits++; }
           }
+          for (const kw of coreVocab) {
+            if (desc.includes(kw)) { score += 3; coreHits++; }
+          }
           if (/cartoon|poster|propaganda|photograph|portrait|engraving|painting|graph|chart|map|diagram|figure|table|statistic|infographic/.test(desc)) score += 3;
           if (/logo|icon|avatar|sprite|banner|advert|stock photo|clip ?art|silhouette|illustration of generic/.test(desc)) score -= 6;
           // Diversity bonus: prefer a category we haven't picked yet.
           if (category !== "other" && !pickedCategories.has(category)) score += 4;
-          return { im, score, host, category, kwHits, descLen };
+          return { im, score, host, category, kwHits, coreHits, descLen };
         })
         .sort((a, b) => b.score - a.score)
-        // ALWAYS require at least one issue-keyword hit AND a substantive
-        // description (>= 60 chars) so an image with a near-empty caption
-        // can't ship a placeholder under the figure. Strict pass also
-        // demands a positive total score; relaxed allows score > -3.
-        .filter((r) => r.kwHits > 0 && r.descLen >= 60 && (pass === "strict" ? r.score > 0 : r.score > -3));
+        // Require >=2 topic-vocab hits AND >=1 sub-issue-specific (core) hit
+        // AND a substantive description (>=60 chars). Strict pass also demands
+        // positive total score; relaxed allows score > -3. When coreVocab is
+        // empty (sparse topic) we fall back to the old kwHits>0 requirement.
+        .filter((r) =>
+          r.descLen >= 60
+          && (coreVocab.length >= 2 ? (r.kwHits >= 2 && r.coreHits >= 1) : r.kwHits > 0)
+          && (pass === "strict" ? r.score > 0 : r.score > -3)
+        );
 
       if (ranked.length === 0) continue;
 
@@ -998,7 +1007,12 @@ export async function fetchGroundedImageSources(
         const captionKwHits = topicVocab.filter(
           (kw) => kw.length >= 4 && captionLower.includes(kw),
         ).length;
-        if (captionKwHits === 0) continue;
+        const captionCoreHits = coreVocab.filter((kw) => captionLower.includes(kw)).length;
+        if (coreVocab.length >= 2) {
+          if (captionKwHits < 2 || captionCoreHits < 1) continue;
+        } else {
+          if (captionKwHits === 0) continue;
+        }
 
         // Find the page that contained the image, for a clean citation.
         const sourcePage = results.find((r) => hostnameOf(r.url) === cand.host)?.url ?? cand.im.url;
