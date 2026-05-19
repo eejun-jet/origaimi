@@ -2420,7 +2420,7 @@ Deno.serve(async (req) => {
           // Per-pool budget: at most ONE Tier-2 (historian) source, shared
           // across parallel fetches.
           const tierBudget: TierBudget = { tier2Used: 0, maxTier2: 1 };
-          const FETCH_TARGET = Math.max(0, MAX_TOTAL_SOURCES - MAX_IMAGE_SOURCES);
+          const FETCH_TARGET = MAX_TOTAL_SOURCES;
           const PER_FETCH_TIMEOUT_MS = 8000;
           const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T | null> =>
             new Promise((resolve) => {
