@@ -2371,6 +2371,7 @@ Deno.serve(async (req) => {
                 subIssue: historyBundleForSection.subIssue,
                 inquiryQuestion: historyBundleForSection.inquiryQuestion,
                 assertion: historyBundleForSection.assertion,
+                contextWriteUp: historyBundleForSection.contextWriteUp,
               };
             }
           }
