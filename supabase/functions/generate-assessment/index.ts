@@ -709,14 +709,46 @@ const SS_SUB_ISSUE_BUNDLES: SsSubIssueBundle[] = [
     inquiryQuestion: "How far is globalisation reshaping what counts as Singaporean culture?",
     triggers: /(culture|identity|heritage|singlish|language|hybrid|k-pop|hollywood|streaming|media)/i,
     sources: [
-      { excerpt: `The Speak Good English Movement, launched by the Government in 2000, encouraged Singaporeans to "speak good English so as to be understood by all English speakers". Officials argued widespread use of Singlish would undermine Singapore's economic competitiveness in a globalised world. Linguists and writers responded that Singlish — a creole drawing on English, Malay, Hokkien, Cantonese and Tamil — was itself a marker of Singaporean identity, and the campaign treated a home-grown hybrid form as a problem to be managed rather than a culture to be valued.`, source_url: "https://www.nlb.gov.sg/main/article-detail?cmsuuid=fbc8d650-a07a-4dab-be83-19d4b7d3a52a", source_title: "The Speak Good English Movement", publisher: "National Library Board, Singapore" },
-      { excerpt: `Netflix reported that as of 2023, more than 60% of its global subscribers had watched at least one Korean-language title in the past year, and "Squid Game" alone reached 142 million households in its first month. Industry analysts described a global shift in popular culture in which non-English content from East Asia routinely topped charts in Southeast Asia, Europe and the Americas. Surveys in Singapore found K-drama and K-pop were the most-followed entertainment genres among 15–24 year-olds, ahead of locally produced television.`, source_url: "https://about.netflix.com/en/news/2023-engagement-report", source_title: "Netflix global engagement report, 2023", publisher: "Netflix Inc." },
-      { excerpt: `The Singapore Cultural Statistics 2023 report from the Ministry of Culture, Community and Youth noted that visits to local heritage institutions and arts performances had recovered to pre-pandemic levels, with the Singapore Heritage Festival drawing over 600,000 participants. The report argued that programmes like the SG Culture Pass and SingapoRediscover vouchers were "deliberate counterweights to globalised media", explicitly designed to deepen citizens' attachment to local stories. Critics asked whether subsidised attendance translates into lasting cultural identification or just one-off visits.`, source_url: "https://www.mccy.gov.sg/about-us/news-and-resources/statistics", source_title: "Singapore Cultural Statistics, 2023", publisher: "Ministry of Culture, Community and Youth" },
-      { excerpt: `In a 2018 paper, sociologist Daniel Goh argued Singaporean culture is best understood as "consciously hybrid": it absorbs East Asian, South Asian, Malay-Indonesian and Anglo-American influences and reworks them into distinctive forms — hawker centres, HDB-block neighbourhoods, Chinese New Year-Hari Raya overlap, code-switched speech. Globalisation, in his account, is therefore the soil in which Singaporean identity grows rather than a force eroding it; the real risk is the loss of the local institutions (kopitiams, void decks, neighbourhood schools) that do the hybridising.`, source_url: "https://academic.oup.com/jaa/article-abstract/26/2/153/4959061", source_title: "Daniel Goh on Singaporean cultural hybridity, 2018", publisher: "Journal of Asian Studies (Oxford Academic)" },
-      { excerpt: `UNESCO's 2022 "Re|Shaping Policies for Creativity" report tracked the global spread of streaming platforms and warned that without active local-content policy, smaller markets risked becoming consumers rather than producers of culture. The report cited Singapore alongside Norway and South Korea as examples of states actively investing in local production funds, language quotas in broadcasting, and heritage programming, and concluded that "cultural identity in the streaming era is a deliberate political and budgetary choice, not a natural inheritance".`, source_url: "https://unesdoc.unesco.org/ark:/48223/pf0000380474", source_title: "UNESCO Re|Shaping Policies for Creativity, 2022", publisher: "UNESCO" },
+      { excerpt: `The Speak Good English Movement, launched by the Government in 2000, encouraged Singaporeans to "speak good English so as to be understood by all English speakers". Officials argued widespread use of Singlish would undermine Singapore's economic competitiveness in a globalised world. Linguists and writers responded that Singlish — a creole drawing on English, Malay, Hokkien, Cantonese and Tamil — was itself a marker of Singaporean identity, and the campaign treated a home-grown hybrid form as a problem to be managed rather than a culture to be valued.`, source_url: "https://www.nlb.gov.sg/main/article-detail?cmsuuid=fbc8d650-a07a-4dab-be83-19d4b7d3a52a", source_title: "The Speak Good English Movement", publisher: "National Library Board, Singapore", perspective: ["gov_official"], stance: "supportive" },
+      { excerpt: `Netflix reported that as of 2023, more than 60% of its global subscribers had watched at least one Korean-language title in the past year, and "Squid Game" alone reached 142 million households in its first month. Industry analysts described a global shift in popular culture in which non-English content from East Asia routinely topped charts in Southeast Asia, Europe and the Americas. Surveys in Singapore found K-drama and K-pop were the most-followed entertainment genres among 15–24 year-olds, ahead of locally produced television.`, source_url: "https://about.netflix.com/en/news/2023-engagement-report", source_title: "Netflix global engagement report, 2023", publisher: "Netflix Inc.", perspective: ["foreign"], stance: "supportive" },
+      { excerpt: `The Singapore Cultural Statistics 2023 report from the Ministry of Culture, Community and Youth noted that visits to local heritage institutions and arts performances had recovered to pre-pandemic levels, with the Singapore Heritage Festival drawing over 600,000 participants. The report argued that programmes like the SG Culture Pass and SingapoRediscover vouchers were "deliberate counterweights to globalised media", explicitly designed to deepen citizens' attachment to local stories. Critics asked whether subsidised attendance translates into lasting cultural identification or just one-off visits.`, source_url: "https://www.mccy.gov.sg/about-us/news-and-resources/statistics", source_title: "Singapore Cultural Statistics, 2023", publisher: "Ministry of Culture, Community and Youth", perspective: ["gov_official"], stance: "opposing" },
+      { excerpt: `In a 2018 paper, sociologist Daniel Goh argued Singaporean culture is best understood as "consciously hybrid": it absorbs East Asian, South Asian, Malay-Indonesian and Anglo-American influences and reworks them into distinctive forms — hawker centres, HDB-block neighbourhoods, Chinese New Year-Hari Raya overlap, code-switched speech. Globalisation, in his account, is therefore the soil in which Singaporean identity grows rather than a force eroding it; the real risk is the loss of the local institutions (kopitiams, void decks, neighbourhood schools) that do the hybridising.`, source_url: "https://academic.oup.com/jaa/article-abstract/26/2/153/4959061", source_title: "Daniel Goh on Singaporean cultural hybridity, 2018", publisher: "Journal of Asian Studies (Oxford Academic)", perspective: ["individual", "expert"], stance: "opposing" },
+      { excerpt: `UNESCO's 2022 "Re|Shaping Policies for Creativity" report tracked the global spread of streaming platforms and warned that without active local-content policy, smaller markets risked becoming consumers rather than producers of culture. The report cited Singapore alongside Norway and South Korea as examples of states actively investing in local production funds, language quotas in broadcasting, and heritage programming, and concluded that "cultural identity in the streaming era is a deliberate political and budgetary choice, not a natural inheritance".`, source_url: "https://unesdoc.unesco.org/ark:/48223/pf0000380474", source_title: "UNESCO Re|Shaping Policies for Creativity, 2022", publisher: "UNESCO", perspective: ["foreign", "expert"], stance: "mixed" },
     ],
   },
 ];
+
+/** Variety-of-perspectives rule for Social Studies SBQ source bundles.
+ *  Every bundle's source set MUST cover all four perspective tags
+ *  (gov_official, individual, foreign, expert) AND include at least one
+ *  supportive AND one opposing stance. Mixed counts as neither for the
+ *  stance check. Runs at module load so regressions fail loudly in logs. */
+const SS_REQUIRED_PERSPECTIVES = ["gov_official", "individual", "foreign", "expert"] as const;
+function assertBundlePerspectiveMix(bundle: SsSubIssueBundle): string | null {
+  const persp = new Set<string>();
+  const stances = new Set<string>();
+  for (const s of bundle.sources) {
+    (s.perspective ?? []).forEach((p) => persp.add(p));
+    if (s.stance) stances.add(s.stance);
+  }
+  const missingPersp = SS_REQUIRED_PERSPECTIVES.filter((p) => !persp.has(p));
+  const missingStance: string[] = [];
+  if (!stances.has("supportive")) missingStance.push("supportive");
+  if (!stances.has("opposing")) missingStance.push("opposing");
+  if (missingPersp.length === 0 && missingStance.length === 0) return null;
+  const parts: string[] = [];
+  if (missingPersp.length) parts.push(`missing perspectives: ${missingPersp.join(", ")}`);
+  if (missingStance.length) parts.push(`missing stances: ${missingStance.join(", ")}`);
+  return parts.join("; ");
+}
+for (const b of SS_SUB_ISSUE_BUNDLES) {
+  const issues = assertBundlePerspectiveMix(b);
+  if (issues) {
+    console.error(`[generate] SS bundle "${b.subIssue}" fails perspective mix: ${issues}`);
+  }
+}
+
+
 
 const SS_ISSUE_TRIGGERS: Record<1 | 2 | 3, RegExp> = {
   1: /(citizenship|civic|national identity|governance|good government|rule of law|leadership|exploring citizenship|issue\s*1)/i,
@@ -2723,7 +2755,10 @@ Deno.serve(async (req) => {
           const baseContext = sectionBundleForSection?.contextWriteUp
             ? sectionBundleForSection.contextWriteUp.replace(/\[(CONTEXT|\/CONTEXT)\]/g, "")
             : "";
-          const contextBody = baseContext.trim();
+          const PERSPECTIVE_NOTICE = "The sources below deliberately include official, individual, foreign and expert voices, with both supportive and opposing views, so that you can weigh perspectives against each other.";
+          const contextBody = baseContext.trim()
+            ? `${baseContext.trim()} ${PERSPECTIVE_NOTICE}`
+            : PERSPECTIVE_NOTICE;
           source_excerpt = contextBody
             ? `[CONTEXT] ${contextBody} [/CONTEXT]\n\n${joinedSources}`
             : joinedSources;
