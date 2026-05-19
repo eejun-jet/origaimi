@@ -967,23 +967,31 @@ export async function fetchGroundedImageSources(
           const category = classifyVisualCategory(desc);
           let score = 0;
           let kwHits = 0;
+          let coreHits = 0;
           if (tier === 1) score += 6;
           else if (tier === 2) score += 2;
           for (const kw of topicVocab) {
             if (kw.length >= 4 && desc.includes(kw)) { score += 2; kwHits++; }
           }
+          for (const kw of coreVocab) {
+            if (desc.includes(kw)) { score += 3; coreHits++; }
+          }
           if (/cartoon|poster|propaganda|photograph|portrait|engraving|painting|graph|chart|map|diagram|figure|table|statistic|infographic/.test(desc)) score += 3;
           if (/logo|icon|avatar|sprite|banner|advert|stock photo|clip ?art|silhouette|illustration of generic/.test(desc)) score -= 6;
           // Diversity bonus: prefer a category we haven't picked yet.
           if (category !== "other" && !pickedCategories.has(category)) score += 4;
-          return { im, score, host, category, kwHits, descLen };
+          return { im, score, host, category, kwHits, coreHits, descLen };
         })
         .sort((a, b) => b.score - a.score)
-        // ALWAYS require at least one issue-keyword hit AND a substantive
-        // description (>= 60 chars) so an image with a near-empty caption
-        // can't ship a placeholder under the figure. Strict pass also
-        // demands a positive total score; relaxed allows score > -3.
-        .filter((r) => r.kwHits > 0 && r.descLen >= 60 && (pass === "strict" ? r.score > 0 : r.score > -3));
+        // Require >=2 topic-vocab hits AND >=1 sub-issue-specific (core) hit
+        // AND a substantive description (>=60 chars). Strict pass also demands
+        // positive total score; relaxed allows score > -3. When coreVocab is
+        // empty (sparse topic) we fall back to the old kwHits>0 requirement.
+        .filter((r) =>
+          r.descLen >= 60
+          && (coreVocab.length >= 2 ? (r.kwHits >= 2 && r.coreHits >= 1) : r.kwHits > 0)
+          && (pass === "strict" ? r.score > 0 : r.score > -3)
+        );
 
       if (ranked.length === 0) continue;
 
