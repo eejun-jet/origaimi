@@ -2509,11 +2509,11 @@ Deno.serve(async (req) => {
             console.warn(`[generate] section ${section.letter}: text pool ${sharedSourcePool.length}/${FETCH_TARGET} after curated backfill; continuing without live rescue`);
           }
 
-          // Pictorial primary source: at most ONE, on a tight time budget.
-          // For SS sub-issue bundles we scope the image search to the
-          // bundle's sub-issue string + curated LOs so the picture
-          // illuminates the same concrete tension as the text sources,
-          // rather than a generic topic-keyword image.
+          // Pictorial primary sources: aim for up to MAX_IMAGE_SOURCES (2),
+          // on a tight time budget. For SS sub-issue bundles we scope the
+          // image search to the bundle's sub-issue string + curated LOs so
+          // the pictures illuminate the same concrete tension as the text
+          // sources, rather than generic topic-keyword images.
           {
             const imageTopic = sectionBundleForSection
               ? sectionBundleForSection.subIssue
