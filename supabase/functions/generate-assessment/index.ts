@@ -1828,11 +1828,22 @@ HARD REQUIREMENTS:
   - Do NOT shorten the answer to a bullet outline. Write full prose paragraphs.
 ` : "";
 
+  const ssIssuePhrase = isSSStructured
+    ? deriveSsIssuePhrase(
+        section.topic_pool[0]?.topic ?? section.learning_outcomes?.[0] ?? "the issue",
+        section.topic_pool[0]?.learning_outcomes ?? section.learning_outcomes ?? [],
+      )
+    : "";
   const ssStructuredBlock = isSSStructured ? `
 
 SOCIAL STUDIES SECTION B — STRUCTURED RESPONSE QUESTIONS (SRQ) FORMAT (mandatory for every question in this section):
 
 This section MUST contain EXACTLY 2 questions. The first is worth 7 marks (part a), the second is worth 8 marks (part b). Do NOT write a single multi-part question — write TWO separate question objects.
+
+ISSUE PHRASE TO USE IN STEMS: "${ssIssuePhrase}"
+  - Use this cleaned phrase (or a close paraphrase of it) when NAMING the SS issue in BOTH stems.
+  - DO NOT prefix it with the syllabus strand label (e.g. "Exploring Citizenship and Governance:", "Living in a Diverse Society:", "Being Part of a Globalised World:").
+  - DO NOT paste the raw KO/LO sentence verbatim. If the source clause uses a modal form like "X can shape Y", rephrase it as a noun phrase ("X shaping Y") so the stem reads grammatically after "reasons why …" or "respond to …".
 
 QUESTION 1 (7 marks — "Explain" type):
   - Stem MUST start with "Explain two reasons why …", "Explain two challenges of …", "Explain two ways …" or similar SS command-word opener that asks for TWO explained points.
