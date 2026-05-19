@@ -1007,7 +1007,12 @@ export async function fetchGroundedImageSources(
         const captionKwHits = topicVocab.filter(
           (kw) => kw.length >= 4 && captionLower.includes(kw),
         ).length;
-        if (captionKwHits === 0) continue;
+        const captionCoreHits = coreVocab.filter((kw) => captionLower.includes(kw)).length;
+        if (coreVocab.length >= 2) {
+          if (captionKwHits < 2 || captionCoreHits < 1) continue;
+        } else {
+          if (captionKwHits === 0) continue;
+        }
 
         // Find the page that contained the image, for a clean citation.
         const sourcePage = results.find((r) => hostnameOf(r.url) === cand.host)?.url ?? cand.im.url;
