@@ -1110,6 +1110,75 @@ function deriveTopicNoun(rawTopic: string, learningOutcomes: string[] = []): str
   return s || "this issue";
 }
 
+/** SS-specific cleaner for Section B SRQ stems. The raw `topic_pool[0].topic`
+ *  for Social Studies often arrives as "<Strand>: <KO/LO clause>"
+ *  (e.g. "Exploring Citizenship and Governance: different attributes can
+ *  shape one's understanding of citizenship"). Pasting that verbatim into
+ *  "Explain two reasons why … can create challenges for society." or
+ *  "How far do you agree that government action is the most effective way to
+ *  respond to …?" produces ugly, ungrammatical stems. This helper:
+ *    1. Strips a leading strand-label prefix (anything before the first ":"
+ *       that looks like an SS strand title).
+ *    2. Rewrites modal "<subj> can <verb> <obj>" clauses into noun-phrase
+ *       form "<subj> <verb>ing <obj>" so the result slots grammatically
+ *       into the SRQ stems.
+ *    3. Falls back to deriveTopicNoun output if cleaning empties the string.
+ */
+const SS_STRAND_PREFIXES = [
+  /^exploring citizenship and governance$/i,
+  /^living in a diverse society$/i,
+  /^being part of a globalised world$/i,
+  /^being part of a globalized world$/i,
+];
+const SS_MODAL_VERB_RE = /^(.+?)\s+can\s+(shape|affect|influence|create|cause|drive|lead|support|undermine|challenge|strengthen|weaken|threaten|change|reshape|reinforce|disrupt|promote|hinder|harm|help|improve|widen|narrow)\s+(.+)$/i;
+function gerundOf(verb: string): string {
+  const v = verb.toLowerCase();
+  if (/[^aeiou]e$/.test(v)) return v.slice(0, -1) + "ing"; // shape -> shaping
+  if (/[^aeiouy][aeiou][^aeiouwxy]$/.test(v) && v.length <= 5) return v + v.slice(-1) + "ing"; // drop->dropping
+  return v + "ing";
+}
+function deriveSsIssuePhrase(rawTopic: string, learningOutcomes: string[] = []): string {
+  let s = stripCodePrefix(rawTopic).replace(/\*+$/, "").trim();
+
+  // 1) Strip a leading "<Strand>: " prefix if it matches a known SS strand,
+  //    or a short Title-Case left side ending in ":".
+  if (s.includes(":")) {
+    const [left, ...rest] = s.split(":");
+    const right = rest.join(":").trim();
+    const leftTrim = left.trim();
+    const isKnownStrand = SS_STRAND_PREFIXES.some((re) => re.test(leftTrim));
+    const looksLikeStrandTitle =
+      leftTrim.split(/\s+/).length <= 6 &&
+      /^[A-Z]/.test(leftTrim) &&
+      !/[.?!]$/.test(leftTrim);
+    if (right && (isKnownStrand || looksLikeStrandTitle)) {
+      s = right;
+    }
+  }
+
+  // 2) Rewrite "<subject> can <verb> <object>" -> "<subject> <verb>ing <object>"
+  const modal = s.match(SS_MODAL_VERB_RE);
+  if (modal) {
+    const subj = modal[1].trim();
+    const verb = modal[2];
+    const obj = modal[3].trim();
+    s = `${subj} ${gerundOf(verb)} ${obj}`;
+  }
+
+  // Lowercase the first word unless it looks like a proper noun.
+  const looksProper = /^(Nazi|Soviet|USSR|USA|Britain|British|German|Germany|Singapore|Malaysia|Cold War|World War|League of Nations|Berlin|European|American|Russian|China|Chinese|Japan|Japanese|Vietnam)\b/.test(s);
+  if (!looksProper && s.length > 0 && /^[A-Z][a-z]/.test(s)) {
+    s = s.charAt(0).toLowerCase() + s.slice(1);
+  }
+
+  s = s.replace(/\s+/g, " ").replace(/[.!?]+\s*$/, "").trim();
+  const words = s.split(/\s+/).filter(Boolean);
+  if (words.length > 14) s = words.slice(0, 14).join(" ");
+
+  if (!s) return deriveTopicNoun(rawTopic, learningOutcomes);
+  return s;
+}
+
 /** Build the opening Key Inquiry Question for an SBQ section. The phrasing is
  *  chosen deterministically based on which SBQ skills appear in the section so
  *  the inquiry meshes with the assertion / hypothesis sub-part below it. */
