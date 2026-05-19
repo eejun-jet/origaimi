@@ -2279,20 +2279,20 @@ Deno.serve(async (req) => {
       let humanitiesAnchorTopic: SectionTopic | null = null;
 
       if (isHumanitiesSBQ) {
-        // SEAB History SBQ papers cap at ~6 sources total. We reserve up to 1
-        // slot for a pictorial primary source and up to 5 slots for documentary
-        // text sources. Hard ceiling of 6.
+        // SEAB History / SS SBQ Section A: 6 sources total, with up to 2
+        // pictorial primary sources alongside up to 4 documentary text
+        // sources. Hard ceiling of 6.
         //
-        // PERF: this whole block is the dominant cost of History generation.
+        // PERF: this whole block is the dominant cost of humanities generation.
         // We previously did:
         //   curated seed → live text fetch → rescue text fetch → image fetch
         //                → AI provenance call
         // which routinely tripped the function's CPU limit. We now:
         //   curated seed (up to 4) → live text fetch ONLY if curated under-
-        //   delivered → no rescue → 1 quick image fetch → deterministic
+        //   delivered → no rescue → up to 2 quick image fetches → deterministic
         //   provenance (no AI).
         const MAX_TOTAL_SOURCES = 6;
-        const MAX_IMAGE_SOURCES = 1;
+        const MAX_IMAGE_SOURCES = 2;
         const maxMinSources = effectiveSkillDefs.reduce((m, s) => Math.max(m, s.minSources), 0);
         const poolSize = Math.min(MAX_TOTAL_SOURCES, Math.max(4, maxMinSources));
         const sectionTopic = selectHumanitiesAnchorTopic(section);
@@ -2509,11 +2509,11 @@ Deno.serve(async (req) => {
             console.warn(`[generate] section ${section.letter}: text pool ${sharedSourcePool.length}/${FETCH_TARGET} after curated backfill; continuing without live rescue`);
           }
 
-          // Pictorial primary source: at most ONE, on a tight time budget.
-          // For SS sub-issue bundles we scope the image search to the
-          // bundle's sub-issue string + curated LOs so the picture
-          // illuminates the same concrete tension as the text sources,
-          // rather than a generic topic-keyword image.
+          // Pictorial primary sources: aim for up to MAX_IMAGE_SOURCES (2),
+          // on a tight time budget. For SS sub-issue bundles we scope the
+          // image search to the bundle's sub-issue string + curated LOs so
+          // the pictures illuminate the same concrete tension as the text
+          // sources, rather than generic topic-keyword images.
           {
             const imageTopic = sectionBundleForSection
               ? sectionBundleForSection.subIssue
