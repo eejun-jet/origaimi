@@ -1343,7 +1343,7 @@ function buildDeterministicSbqQuestions(
 function buildDeterministicSsSrqQuestions(section: Section): any[] {
   const rawTopic = section.topic_pool[0]?.topic ?? section.learning_outcomes?.[0] ?? "the issue";
   const sectionLOs = section.learning_outcomes?.length ? section.learning_outcomes : (section.topic_pool[0]?.learning_outcomes ?? []);
-  const issue = deriveTopicNoun(rawTopic, sectionLOs);
+  const issue = deriveSsIssuePhrase(rawTopic, sectionLOs);
   const topicTag = stripCodePrefix(rawTopic).replace(/\*+$/, "").trim() || issue;
   const commonTags = {
     question_type: "long",
