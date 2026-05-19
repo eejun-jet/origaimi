@@ -2561,7 +2561,11 @@ Deno.serve(async (req) => {
         const finalHosts = new Set(
           sharedSourcePool.map((s) => { try { return new URL(s.source_url).hostname.toLowerCase(); } catch { return ""; } }).filter(Boolean),
         );
-        console.log(`[generate] section ${section.letter} SBQ pool: ${sharedSourcePool.length} text sources across ${finalHosts.size} distinct host(s) + ${sharedImageSources.length} image(s) (cap ${MAX_TOTAL_SOURCES} total, ${MAX_IMAGE_SOURCES} pictorial)`);
+        const totalShipped = sharedSourcePool.length + sharedImageSources.length;
+        console.log(`[generate] section ${section.letter} SBQ pool: ${sharedSourcePool.length} text + ${sharedImageSources.length} image = ${totalShipped}/${MAX_TOTAL_SOURCES} across ${finalHosts.size} distinct text host(s)`);
+        if (totalShipped < MAX_TOTAL_SOURCES) {
+          console.warn(`[generate] section ${section.letter}: under-target — shipped ${totalShipped}/${MAX_TOTAL_SOURCES} sources (curated bundle exhausted)`);
+        }
         if (subjectKind === "humanities" && sharedSourcePool.length >= 3 && finalHosts.size < 3) {
           console.warn(`[generate] section ${section.letter}: LOW source diversity — ${sharedSourcePool.length} excerpts but only ${finalHosts.size} distinct host(s): ${[...finalHosts].join(", ")}`);
         }
