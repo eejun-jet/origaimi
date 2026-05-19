@@ -2354,6 +2354,7 @@ Deno.serve(async (req) => {
               subIssue: ssSubIssueForSection.subIssue,
               inquiryQuestion: ssSubIssueForSection.inquiryQuestion,
               assertion: ssSubIssueForSection.assertion,
+              contextWriteUp: ssSubIssueForSection.contextWriteUp,
             };
           } else {
             const picked = pickHumanitiesBundle(
